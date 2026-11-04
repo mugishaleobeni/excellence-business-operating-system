@@ -1,0 +1,23 @@
+User-agent: *
+Allow: /
+Allow: /features
+Allow: /business-models
+Allow: /business-models/make-and-sell
+Allow: /business-models/buy-and-sell
+Allow: /business-models/services
+Allow: /business-models/agriculture
+Allow: /business-models/food-and-hospitality
+Allow: /business-models/hybrid
+Allow: /business-tools
+Allow: /pricing
+Allow: /about
+Allow: /resources
+
+Disallow: /dashboard
+Disallow: /super-admin
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+
+Sitemap: https://exbos.pylarix.com/sitemap.xml
+
