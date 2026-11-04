@@ -52,9 +52,9 @@ export default function PaymentMethodDonutChart({
         </span>
       </div>
 
-      <div className="flex flex-col md:flex-row items-center justify-around gap-6 pt-2">
+      <div className="flex flex-col items-center gap-5 pt-1">
         {/* SVG Donut */}
-        <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
+        <div className="relative w-40 h-40 shrink-0 flex items-center justify-center">
           <svg className="w-full h-full -rotate-90 transform" viewBox={`0 0 ${size} ${size}`}>
             {/* Background Ring */}
             <circle
@@ -90,10 +90,10 @@ export default function PaymentMethodDonutChart({
           </svg>
 
           {/* Central Label */}
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-4">
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none px-3">
             {hoveredIdx !== null && segments[hoveredIdx] ? (
               <>
-                <span className="text-[10px] font-bold uppercase text-slate-300 truncate max-w-[100px]">
+                <span className="text-[10px] font-bold uppercase text-slate-300 truncate max-w-[90px]">
                   {segments[hoveredIdx].label}
                 </span>
                 <span className="font-orbitron text-sm font-extrabold text-white">
@@ -108,7 +108,7 @@ export default function PaymentMethodDonutChart({
                 <span className="text-[10px] uppercase font-bold text-slate-400">
                   Total
                 </span>
-                <span className="font-orbitron text-xs sm:text-sm font-extrabold text-white truncate max-w-[120px]">
+                <span className="font-orbitron text-xs sm:text-sm font-extrabold text-white truncate max-w-[110px]">
                   {formatRWF(total, hideFinancials)}
                 </span>
               </>
@@ -116,14 +116,14 @@ export default function PaymentMethodDonutChart({
           </div>
         </div>
 
-        {/* Breakdown Table */}
-        <div className="flex-1 w-full max-w-sm">
+        {/* Breakdown Table (Fully Responsive) */}
+        <div className="w-full overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-[10px] font-orbitron uppercase">
+              <tr className="border-b border-white/10 text-slate-400 text-[10px] font-orbitron uppercase tracking-wider">
                 <th className="py-1.5 px-2 text-left">Payment Method</th>
-                <th className="py-1.5 px-2 text-right">Received (RWF)</th>
-                <th className="py-1.5 px-2 text-right">Share</th>
+                <th className="py-1.5 px-2 text-right whitespace-nowrap">Received (RWF)</th>
+                <th className="py-1.5 px-2 text-right whitespace-nowrap">Share</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -141,12 +141,12 @@ export default function PaymentMethodDonutChart({
                       className="w-2.5 h-2.5 rounded-full shrink-0"
                       style={{ backgroundColor: s.color }}
                     />
-                    <span className="text-white font-medium">{s.label}</span>
+                    <span className="text-white font-medium whitespace-nowrap">{s.label}</span>
                   </td>
-                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-200">
+                  <td className="py-2 px-2 text-right font-mono font-bold text-slate-200 whitespace-nowrap">
                     {formatRWF(s.value, hideFinancials)}
                   </td>
-                  <td className="py-2 px-2 text-right font-mono text-slate-400">
+                  <td className="py-2 px-2 text-right font-mono text-slate-400 whitespace-nowrap">
                     {s.percent}%
                   </td>
                 </tr>
@@ -155,7 +155,7 @@ export default function PaymentMethodDonutChart({
             <tfoot>
               <tr className="border-t border-white/15 font-bold">
                 <td className="py-2 px-2 text-white font-orbitron">Total</td>
-                <td className="py-2 px-2 text-right font-mono text-emerald-400 font-extrabold">
+                <td className="py-2 px-2 text-right font-mono text-emerald-400 font-extrabold whitespace-nowrap">
                   {formatRWF(total, hideFinancials)}
                 </td>
                 <td className="py-2 px-2 text-right font-mono text-slate-300">100%</td>

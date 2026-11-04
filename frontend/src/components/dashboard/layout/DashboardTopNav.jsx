@@ -26,29 +26,33 @@ export default function DashboardTopNav({
 }) {
   return (
     <header className={`exbos-sticky-workspace-header ${workspaceScrolled ? 'is-scrolled' : ''}`}>
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <button
-              type="button"
-              onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-              className="lg:hidden p-1.5 rounded-lg bg-white/10 text-white cursor-pointer border border-white/20"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-            <span className="text-white/70 hover:text-white transition-colors">EXCELLENCE BOS</span>
-            <span className="text-white/30">/</span>
-            <span className="text-[#218DFF] font-semibold">{currentArch.name}</span>
-            <span className="text-white/30">/</span>
-            <span className="text-[#9EDCFF]">{activeModule === 'Documents' ? 'Documents & Sharing' : activeModule}</span>
-          </div>
-          <h1 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
-            {activePage}
-          </h1>
+      {/* Top Meta Bar: Breadcrumbs (Left) + Quick Controls: Craft Badge, Bell, Sign Out (Right) */}
+      <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-xs pb-2 border-b border-white/10">
+        {/* Left: Breadcrumbs Trail with Whitespace Protection */}
+        <div className="flex items-center gap-1.5 min-w-0 text-slate-300">
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
+            className="lg:hidden p-1 rounded-lg bg-white/10 text-white cursor-pointer border border-white/20 mr-1 shrink-0"
+            title="Toggle Menu"
+          >
+            <Menu className="w-3.5 h-3.5" />
+          </button>
+          <span className="whitespace-nowrap font-bold text-white/90 tracking-wide text-xs">
+            EXCELLENCE BOS
+          </span>
+          <span className="text-white/30 shrink-0">/</span>
+          <span className="whitespace-nowrap text-[#218DFF] font-semibold">
+            {currentArch.name}
+          </span>
+          <span className="text-white/30 shrink-0">/</span>
+          <span className="whitespace-nowrap text-[#9EDCFF] font-medium truncate">
+            {activeModule === 'Documents' ? 'Documents & Sharing' : activeModule}
+          </span>
         </div>
 
-        {/* Header Tools Bar */}
-        <div className="flex flex-wrap items-center gap-3">
+        {/* Right: Craft Badge + Notifications + Sign Out */}
+        <div className="flex items-center gap-2.5 shrink-0 ml-auto">
           {/* Active Manufacturing Trade Badge (Make & Sell) */}
           {currentArch?.id === 'make-and-sell' && (
             <ActiveTradeBadge
@@ -57,34 +61,12 @@ export default function DashboardTopNav({
             />
           )}
 
-          {/* Global Search with Increased Size & Ctrl+S Shortcut Badge */}
-          <div className="relative group">
-            <Search className="w-4 h-4 text-slate-300 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[#218DFF] transition-colors" />
-            <input
-              ref={searchInputRef}
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search records, items, workflows..."
-              className="pl-10 pr-20 py-2.5 rounded-2xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none w-56 sm:w-80 md:w-96 transition-all shadow-inner"
-            />
-            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
-              <kbd className="px-1.5 py-0.5 rounded-md bg-white/15 border border-white/25 text-[10px] font-mono font-bold text-[#9EDCFF] shadow-sm">
-                Ctrl
-              </kbd>
-              <span className="text-white/40 text-[10px]">+</span>
-              <kbd className="px-1.5 py-0.5 rounded-md bg-white/15 border border-white/25 text-[10px] font-mono font-bold text-[#9EDCFF] shadow-sm">
-                S
-              </kbd>
-            </div>
-          </div>
-
-          {/* Notifications Bell (Dynamic Business & Platform Alerts) */}
+          {/* Notifications Bell */}
           <div ref={notifRef} className="relative">
             <button
               type="button"
               onClick={() => setNotifOpen(!notifOpen)}
-              className="p-2 rounded-xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:bg-white/20 cursor-pointer relative"
+              className="p-1.5 sm:p-2 rounded-xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:bg-white/20 cursor-pointer relative"
               title="Business & Platform Alerts"
             >
               <Bell className="w-4 h-4" />
@@ -187,7 +169,7 @@ export default function DashboardTopNav({
             )}
           </div>
 
-          {/* Sign Out / Exit to Login (Always visible) */}
+          {/* Sign Out / Exit to Login */}
           <button
             type="button"
             onClick={() => {
@@ -195,11 +177,40 @@ export default function DashboardTopNav({
               navigate('/login')
             }}
             title={user ? `Sign Out (${user.name || user.email})` : 'Sign Out / Switch User'}
-            className="p-2 rounded-xl bg-white/10 border border-white/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 cursor-pointer flex items-center gap-1.5 transition-all shadow-sm"
+            className="px-2.5 py-1.5 sm:py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 cursor-pointer flex items-center gap-1.5 transition-all shadow-sm"
           >
-            <LogOut className="w-4 h-4" />
-            <span className="hidden md:inline text-xs font-semibold">Sign Out</span>
+            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
+            <span className="text-xs font-semibold">Sign Out</span>
           </button>
+        </div>
+      </div>
+
+      {/* Main Action Bar: Page Title (Left) + Search Bar (Right) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+        <h1 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
+          {activePage}
+        </h1>
+
+        {/* Global Search Bar */}
+        <div className="relative group w-full sm:w-72 md:w-84 shrink-0">
+          <Search className="w-4 h-4 text-slate-300 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[#218DFF] transition-colors" />
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search records, items, workflows..."
+            className="w-full pl-10 pr-20 py-2 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none transition-all shadow-inner"
+          />
+          <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
+            <kbd className="px-1.5 py-0.5 rounded-md bg-white/15 border border-white/25 text-[10px] font-mono font-bold text-[#9EDCFF] shadow-sm">
+              Ctrl
+            </kbd>
+            <span className="text-white/40 text-[10px]">+</span>
+            <kbd className="px-1.5 py-0.5 rounded-md bg-white/15 border border-white/25 text-[10px] font-mono font-bold text-[#9EDCFF] shadow-sm">
+              S
+            </kbd>
+          </div>
         </div>
       </div>
 
