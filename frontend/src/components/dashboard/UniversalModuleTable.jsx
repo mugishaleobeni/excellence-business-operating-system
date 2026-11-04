@@ -12,6 +12,7 @@ import {
   MoreVertical,
   Truck
 } from 'lucide-react'
+import DeleteConfirmModal from '../common/DeleteConfirmModal'
 
 /**
  * Universal Responsive Table Component
@@ -39,6 +40,7 @@ export default function UniversalModuleTable({
   const [sortAsc, setSortAsc] = useState(false)
   const [page, setPage] = useState(1)
   const [openActionRowId, setOpenActionRowId] = useState(null)
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState(null)
   const actionsRef = useRef(null)
   const pageSize = 8
 
@@ -453,11 +455,7 @@ export default function UniversalModuleTable({
                       {onDeleteRow && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(`Delete "${row.title || row.name || row.id || 'this record'}"?`)) {
-                              onDeleteRow(row)
-                            }
-                          }}
+                          onClick={() => setDeleteConfirmRow(row)}
                           title="Delete"
                           className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all cursor-pointer shadow-sm group"
                         >
@@ -598,9 +596,7 @@ export default function UniversalModuleTable({
                               style={{ animationDelay: '120ms' }}
                               onClick={() => {
                                 setOpenActionRowId(null)
-                                if (window.confirm(`Delete record "${row.title || 'this item'}"?`)) {
-                                  onDeleteRow(row)
-                                }
+                                setDeleteConfirmRow(row)
                               }}
                               className="spring-dropdown-item !bg-transparent hover:!bg-rose-500/20 w-full text-left px-3 py-2 rounded-xl text-xs font-semibold !text-rose-400 hover:!text-rose-200 flex items-center gap-2.5 cursor-pointer transition-all border-t border-white/10 mt-1 pt-1.5"
                             >
@@ -648,6 +644,20 @@ export default function UniversalModuleTable({
           </div>
         </div>
       )}
+
+      {/* In-App Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteConfirmRow}
+        onClose={() => setDeleteConfirmRow(null)}
+        onConfirm={() => {
+          if (onDeleteRow && deleteConfirmRow) {
+            onDeleteRow(deleteConfirmRow)
+          }
+          setDeleteConfirmRow(null)
+        }}
+        itemName={deleteConfirmRow?.title || deleteConfirmRow?.name || deleteConfirmRow?.id || 'this record'}
+        title="Delete Record"
+      />
     </div>
   )
 }

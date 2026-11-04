@@ -5,6 +5,7 @@ import ProductionOrders from './ProductionOrders'
 import RecipeManager from './RecipeManager'
 import ProductionCalculator from './ProductionCalculator'
 import ProductionCosts from './ProductionCosts'
+import DeleteConfirmModal from '../../common/DeleteConfirmModal'
 import {
   DEFAULT_RAW_MATERIALS,
   DEFAULT_FINISHED_PRODUCTS,
@@ -80,6 +81,7 @@ export default function ProductionManager({
 
   // Toast feedback state
   const [toast, setToast] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
   const showToast = (toastObj) => {
     setToast(toastObj)
     setTimeout(() => setToast(null), 4000)
@@ -210,14 +212,20 @@ export default function ProductionManager({
 
   // Handle Delete Order
   const handleDeleteOrder = (orderId) => {
-    if (window.confirm(`Delete order ${orderId}?`)) {
-      setOrders((prev) => prev.filter((o) => o.id !== orderId))
-      showToast({
-        type: 'info',
-        title: 'Order Deleted',
-        message: `Order ${orderId} has been removed.`
-      })
-    }
+    setDeleteConfirm({
+      title: 'Delete Production Order',
+      itemName: `Order ${orderId}`,
+      description: `Are you sure you want to delete order ${orderId}? This action cannot be undone.`,
+      confirmText: 'Delete Order',
+      onConfirm: () => {
+        setOrders((prev) => prev.filter((o) => o.id !== orderId))
+        showToast({
+          type: 'info',
+          title: 'Order Deleted',
+          message: `Order ${orderId} has been removed.`
+        })
+      }
+    })
   }
 
   // Handle Save Recipe
@@ -235,14 +243,22 @@ export default function ProductionManager({
 
   // Handle Delete Recipe
   const handleDeleteRecipe = (recipeId) => {
-    if (window.confirm('Delete this recipe?')) {
-      setRecipes((prev) => prev.filter((r) => r.id !== recipeId))
-      showToast({
-        type: 'info',
-        title: 'Recipe Deleted',
-        message: 'Recipe formula removed from BOM registry.'
-      })
-    }
+    const rec = recipes.find((r) => r.id === recipeId)
+    const recName = rec?.name || rec?.productName || recipeId
+    setDeleteConfirm({
+      title: 'Delete Recipe Formula',
+      itemName: recName,
+      description: `Are you sure you want to delete this recipe formula? This will remove the bill of materials from your registry.`,
+      confirmText: 'Delete Recipe',
+      onConfirm: () => {
+        setRecipes((prev) => prev.filter((r) => r.id !== recipeId))
+        showToast({
+          type: 'info',
+          title: 'Recipe Deleted',
+          message: 'Recipe formula removed from BOM registry.'
+        })
+      }
+    })
   }
 
   // Handle Create Purchase Draft from Calculator (Part 8 & 15)
@@ -391,6 +407,22 @@ export default function ProductionManager({
       )}
 
       {renderCurrentView()}
+
+      {/* In-App Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        title={deleteConfirm?.title || 'Delete Record'}
+        itemName={deleteConfirm?.itemName}
+        description={deleteConfirm?.description}
+        confirmText={deleteConfirm?.confirmText || 'Delete'}
+        onConfirm={() => {
+          if (deleteConfirm?.onConfirm) {
+            deleteConfirm.onConfirm()
+          }
+          setDeleteConfirm(null)
+        }}
+      />
     </div>
   )
 }

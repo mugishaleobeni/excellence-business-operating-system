@@ -27,6 +27,7 @@ import { formatRWF } from '../../../../utils/currencyWords'
 import ExportDrawer from '../ExportDrawer'
 import PriceCalculatorPanel from '../PriceCalculatorPanel'
 import CustomSelect from '../../../common/CustomSelect'
+import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 import { printBusinessDocument } from '../../../../utils/printDocument'
 import { useExbos } from '../../../../context/ExbosContext'
 
@@ -152,6 +153,7 @@ export default function StockWorkspace({
   const [showMoreOptions, setShowMoreOptions] = useState(false)
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
+  const [deleteConfirmData, setDeleteConfirmData] = useState(null)
 
   // In-line Price Calculator modal for a finished product
   const [calcProduct, setCalcProduct] = useState(null)
@@ -374,19 +376,26 @@ export default function StockWorkspace({
   }
 
   const handleDeleteCategory = (catId, catName) => {
-    if (!window.confirm(`Are you sure you want to remove category "${catName}"?`)) return
-    const updated = normalizedCategories.filter((c) => c.id !== catId && c.name !== catName)
-    setInternalCategories(updated)
-    if (onUpdateCategories) {
-      onUpdateCategories(updated)
-    }
-    if (addToast) {
-      addToast({
-        type: 'info',
-        title: 'Category Removed',
-        message: `Category "${catName}" removed from stock categories.`
-      })
-    }
+    setDeleteConfirmData({
+      title: 'Remove Category',
+      itemName: catName,
+      description: `Are you sure you want to remove category "${catName}"? Items assigned to this category will become Uncategorized.`,
+      confirmText: 'Remove Category',
+      onConfirm: () => {
+        const updated = normalizedCategories.filter((c) => c.id !== catId && c.name !== catName)
+        setInternalCategories(updated)
+        if (onUpdateCategories) {
+          onUpdateCategories(updated)
+        }
+        if (addToast) {
+          addToast({
+            type: 'info',
+            title: 'Category Removed',
+            message: `Category "${catName}" removed from stock categories.`
+          })
+        }
+      }
+    })
   }
 
   const handleEditCategory = (cat) => {
@@ -518,13 +527,29 @@ export default function StockWorkspace({
 
   // Delete Item
   const handleDeleteItem = (item, type) => {
-    if (!window.confirm(`Are you sure you want to remove "${item.name || item.title}"?`)) return
-    if (type === 'product' && onUpdateFinishedGoods) {
-      onUpdateFinishedGoods(finishedGoods.filter((p) => p.id !== item.id))
-    } else if (type === 'material' && onUpdateRawMaterials) {
-      onUpdateRawMaterials(rawMaterials.filter((m) => m.id !== item.id))
-    }
-    setDetailItem(null)
+    if (!item) return
+    const name = item.name || item.title || item.id || 'item'
+    setDeleteConfirmData({
+      title: type === 'product' ? 'Delete Finished Good' : 'Delete Raw Material',
+      itemName: name,
+      description: `Are you sure you want to permanently delete "${name}"? This item will be removed from your active stock records.`,
+      confirmText: 'Delete Item',
+      onConfirm: () => {
+        if (type === 'product' && onUpdateFinishedGoods) {
+          onUpdateFinishedGoods(finishedGoods.filter((p) => p.id !== item.id))
+        } else if (type === 'material' && onUpdateRawMaterials) {
+          onUpdateRawMaterials(rawMaterials.filter((m) => m.id !== item.id))
+        }
+        setDetailItem(null)
+        if (addToast) {
+          addToast({
+            type: 'info',
+            title: 'Item Removed',
+            message: `"${name}" removed from stock.`
+          })
+        }
+      }
+    })
   }
 
   return (
@@ -1987,6 +2012,22 @@ export default function StockWorkspace({
               ]
         }
         businessName={activeBizName}
+      />
+
+      {/* In-App Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteConfirmData}
+        onClose={() => setDeleteConfirmData(null)}
+        title={deleteConfirmData?.title || 'Delete Record'}
+        itemName={deleteConfirmData?.itemName}
+        description={deleteConfirmData?.description}
+        confirmText={deleteConfirmData?.confirmText || 'Delete Record'}
+        onConfirm={() => {
+          if (deleteConfirmData?.onConfirm) {
+            deleteConfirmData.onConfirm()
+          }
+          setDeleteConfirmData(null)
+        }}
       />
     </div>
   )

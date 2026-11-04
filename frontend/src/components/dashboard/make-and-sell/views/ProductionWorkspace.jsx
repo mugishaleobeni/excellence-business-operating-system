@@ -28,6 +28,7 @@ import { formatRWF } from '../../../../utils/currencyWords'
 import ExportDrawer from '../ExportDrawer'
 import PriceCalculatorPanel from '../PriceCalculatorPanel'
 import CustomSelect from '../../../common/CustomSelect'
+import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 import { calculateMaterialShortages } from '../services/productionCalculations'
 import { useExbos } from '../../../../context/ExbosContext'
 
@@ -58,6 +59,7 @@ export default function ProductionWorkspace({
   const [completeBatchModalOpen, setCompleteBatchModalOpen] = useState(false)
   const [selectedBatchToComplete, setSelectedBatchToComplete] = useState(null)
   const [showRecipeCalculator, setShowRecipeCalculator] = useState(false)
+  const [abortConfirmBatch, setAbortConfirmBatch] = useState(null)
 
   // New Batch Form State
   const [batchRecipeId, setBatchRecipeId] = useState(recipes[0]?.id || '')
@@ -283,7 +285,12 @@ export default function ProductionWorkspace({
 
   // --- Abort Batch (return unused materials) ---
   const handleAbortBatch = (batch) => {
-    if (!window.confirm(`Abort batch ${batch.batchCode}? Unused materials will be returned to Raw Materials stock.`)) return
+    setAbortConfirmBatch(batch)
+  }
+
+  const handleConfirmAbort = () => {
+    if (!abortConfirmBatch) return
+    const batch = abortConfirmBatch
 
     if (onUpdateRawMaterials && batch.ingredientsUsed) {
       const restored = rawMaterials.map((mat) => {
@@ -307,6 +314,7 @@ export default function ProductionWorkspace({
         message: `Batch ${batch.batchCode} aborted. Raw materials returned to stock.`
       })
     }
+    setAbortConfirmBatch(null)
   }
 
   // --- Save New Recipe ---
@@ -1013,6 +1021,17 @@ export default function ProductionWorkspace({
           { key: 'Supervisor', label: 'Supervisor' }
         ]}
         businessName={activeBizName}
+      />
+
+      {/* In-App Abort Batch Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!abortConfirmBatch}
+        onClose={() => setAbortConfirmBatch(null)}
+        title="Abort Production Batch"
+        itemName={abortConfirmBatch ? `Batch ${abortConfirmBatch.batchCode} · ${abortConfirmBatch.productName}` : ''}
+        description="Are you sure you want to abort this production batch? Any unused materials allocated will be safely returned to Raw Materials stock."
+        confirmText="Abort Batch"
+        onConfirm={handleConfirmAbort}
       />
     </div>
   )

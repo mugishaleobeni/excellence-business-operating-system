@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { formatRWF } from "../../../utils/currencyWords";
 import { renderBarcodeSvg } from "../../../utils/barcodeUtils";
+import DeleteConfirmModal from "../../common/DeleteConfirmModal";
 
 function getStockExpiryMeta(expiryDate) {
   if (!expiryDate) {
@@ -84,6 +85,7 @@ function StockLinesView({
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [supplierFilter, setSupplierFilter] = useState('all')
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null)
 
   const processedLines = useMemo(() => {
     return (inventory || []).map((item) => {
@@ -485,11 +487,7 @@ function StockLinesView({
                         </button>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(`Delete stock line "${item.title}"?`)) {
-                              onDeleteStockLine(item)
-                            }
-                          }}
+                          onClick={() => setDeleteConfirmItem(item)}
                           title="Delete Stock Line"
                           className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all cursor-pointer shadow-sm group"
                         >
@@ -504,6 +502,22 @@ function StockLinesView({
           </div>
         )}
       </div>
+
+      {/* In-App Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteConfirmItem}
+        onClose={() => setDeleteConfirmItem(null)}
+        title="Delete Stock Line"
+        itemName={deleteConfirmItem?.title || deleteConfirmItem?.batchCode || 'Stock Line'}
+        description={`Are you sure you want to permanently delete this stock line? This will remove the inventory lot from your records.`}
+        confirmText="Delete Stock Line"
+        onConfirm={() => {
+          if (deleteConfirmItem && onDeleteStockLine) {
+            onDeleteStockLine(deleteConfirmItem)
+          }
+          setDeleteConfirmItem(null)
+        }}
+      />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } 
 import LanguageDropdown from '../common/LanguageDropdown'
 import UniversalModuleTable from './UniversalModuleTable'
 import AnimalRegistryWorkspace from './animal/AnimalRegistryWorkspace'
+import DeleteConfirmModal from '../common/DeleteConfirmModal'
 import {
   Plus,
   Trash2,
@@ -453,6 +454,7 @@ export default function InteractiveModulePanel({
   const [modalOpen, setModalOpen] = useState(false)
   const [detailRow, setDetailRow] = useState(null)
   const [editRow, setEditRow] = useState(null)
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null)
 
   // Form fields
   const [title, setTitle] = useState('')
@@ -1895,17 +1897,11 @@ export default function InteractiveModulePanel({
                 <button
                   type="button"
                   onClick={() => {
-                    const idToDelete = detailRow.id
-                    const titleToDelete = detailRow.title || detailRow.name || 'Record'
-                    if (window.confirm(`Delete "${titleToDelete}"? This action cannot be undone.`)) {
-                      setDetailRow(null)
-                      deleteDemoRecord(activeArchId, bucketKey, idToDelete)
-                      addToast && addToast({
-                        type: 'info',
-                        title: 'Record Deleted',
-                        message: `Deleted "${titleToDelete}".`
-                      })
-                    }
+                    setDeleteConfirmItem({
+                      id: detailRow.id,
+                      title: detailRow.title || detailRow.name || 'Record',
+                      bucketKey
+                    })
                   }}
                   className="px-3.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/40 text-xs font-semibold text-rose-300 flex items-center gap-1.5 cursor-pointer transition-all"
                 >
@@ -2179,6 +2175,26 @@ export default function InteractiveModulePanel({
             title: "Payment Disbursed",
             message: `Paid ${formatRWF(actualPayment)} to ${purchaseItem.supplierName || purchaseItem.supplier}.`
           })
+        }}
+      />
+
+      {/* Custom Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={!!deleteConfirmItem}
+        onClose={() => setDeleteConfirmItem(null)}
+        itemName={deleteConfirmItem?.title}
+        title="Delete Record"
+        onConfirm={() => {
+          if (!deleteConfirmItem) return
+          const { id, title, bucketKey } = deleteConfirmItem
+          setDetailRow(null)
+          deleteDemoRecord(activeArchId, bucketKey, id)
+          addToast && addToast({
+            type: 'info',
+            title: 'Record Deleted',
+            message: `Deleted "${title}".`
+          })
+          setDeleteConfirmItem(null)
         }}
       />
     </div>
