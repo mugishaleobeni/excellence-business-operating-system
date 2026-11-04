@@ -120,7 +120,7 @@ export default function ProductionWorkspace({
     let list = [...batches]
     if (activeSubPage === 'In Progress') {
       list = list.filter((b) => b.status === 'In Progress')
-    } else if (activeSubPage === 'Completed Batches') {
+    } else if (activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') {
       list = list.filter((b) => b.status === 'Completed')
     }
     if (searchQuery.trim()) {
@@ -354,16 +354,16 @@ export default function ProductionWorkspace({
             </span>
           </div>
           <h2 className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            {activeSubPage === 'Batches' && 'Production Batches'}
+            {(activeSubPage === 'Batches' || activeSubPage === 'Runs') && 'Production Runs'}
             {activeSubPage === 'Recipes & Formulas' && 'Recipes & Formulas'}
-            {activeSubPage === 'In Progress' && 'Active In-Progress Batches'}
-            {activeSubPage === 'Completed Batches' && 'Completed Batches & Yield Audit'}
+            {activeSubPage === 'In Progress' && 'Active In-Progress Runs'}
+            {(activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') && 'Completed Runs & Yield Audit'}
           </h2>
           <p className="text-xs sm:text-sm text-slate-300 mt-0.5">
-            {activeSubPage === 'Batches' && 'Plan and trigger production runs with automatic raw material stock validation.'}
+            {(activeSubPage === 'Batches' || activeSubPage === 'Runs') && 'Plan and trigger production runs with automatic raw material stock validation.'}
             {activeSubPage === 'Recipes & Formulas' && 'Formulate bill of materials, overhead allowances, and derive live unit costs.'}
-            {activeSubPage === 'In Progress' && 'Monitor running batches, reserved ingredients, elapsed time, and completion.'}
-            {activeSubPage === 'Completed Batches' && 'Review actual yields, scrap loss, and cost variances against original plans.'}
+            {activeSubPage === 'In Progress' && 'Monitor running production jobs, reserved ingredients, elapsed time, and completion.'}
+            {(activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') && 'Review actual yields, scrap loss, and cost variances against original plans.'}
           </p>
         </div>
 
@@ -376,7 +376,7 @@ export default function ProductionWorkspace({
             Export
           </button>
 
-          {activeSubPage === 'Batches' && (
+          {(activeSubPage === 'Batches' || activeSubPage === 'Runs') && (
             <button
               type="button"
               onClick={() => {
@@ -387,7 +387,7 @@ export default function ProductionWorkspace({
               className="btn-sapphire-clean px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
             >
               <Plus className="w-4 h-4 text-[#9EDCFF]" />
-              <span>+ New Batch</span>
+              <span>+ New Run</span>
             </button>
           )}
 
@@ -579,14 +579,14 @@ export default function ProductionWorkspace({
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="border-b border-white/10 bg-white/5 text-[11px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
-                  <th className="p-3.5 pl-5">Batch Code &amp; Product</th>
+                  <th className="p-3.5 pl-5">Run Code &amp; Product</th>
                   <th className="p-3.5">Status</th>
                   <th className="p-3.5 text-right">Planned Qty</th>
-                  {activeSubPage === 'Completed Batches' && <th className="p-3.5 text-right">Actual Made</th>}
-                  {activeSubPage === 'Completed Batches' && <th className="p-3.5 text-right">Scrap Loss</th>}
+                  {(activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') && <th className="p-3.5 text-right">Actual Made</th>}
+                  {(activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') && <th className="p-3.5 text-right">Scrap Loss</th>}
                   {!isCashier && !hideFinancials && (
                     <th className="p-3.5 text-right">
-                      {activeSubPage === 'Completed Batches' ? 'Actual Cost / Unit' : 'Planned Cost'}
+                      {(activeSubPage === 'Completed Batches' || activeSubPage === 'Completed Runs') ? 'Actual Cost / Unit' : 'Planned Cost'}
                     </th>
                   )}
                   <th className="p-3.5">Date / Schedule</th>
@@ -598,7 +598,7 @@ export default function ProductionWorkspace({
                 {filteredBatches.length === 0 ? (
                   <tr>
                     <td colSpan={9} className="p-8 text-center text-slate-400">
-                      No batches found matching criteria. Click "+ New Batch" to schedule a production run.
+                      No production runs found matching criteria. Click "+ New Run" to schedule a production job.
                     </td>
                   </tr>
                 ) : (

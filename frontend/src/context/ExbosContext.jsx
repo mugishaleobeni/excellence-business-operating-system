@@ -5,6 +5,7 @@ import {
   DEFAULT_PLATINUM_PROGRAM,
   FINANCIAL_TOOLS
 } from '../data/architectures'
+import { TRADE_PRESETS } from '../components/dashboard/make-and-sell/data/tradePresets'
 
 const ExbosContext = createContext(null)
 
@@ -385,6 +386,21 @@ export function ExbosProvider({ children }) {
     localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
   }, [transactions])
 
+  // Active Trade / Craft for Make & Sell Architecture
+  const [makeSellTrade, setMakeSellTrade] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_make_sell_trade') || 'tailoring'
+    } catch {
+      return 'tailoring'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_make_sell_trade', makeSellTrade)
+    } catch {}
+  }, [makeSellTrade])
+
   const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_demo_workspaces')
@@ -619,6 +635,40 @@ export function ExbosProvider({ children }) {
       localStorage.removeItem('exbos_transactions')
     } catch {}
     fetch('/api/storage/reset', { method: 'POST' }).catch(() => {})
+  }
+
+  const applyMakeSellTrade = (tradeKey) => {
+    const preset = TRADE_PRESETS[tradeKey]
+    if (!preset || preset.isSupportContact) return
+    setMakeSellTrade(tradeKey)
+    try {
+      localStorage.setItem('exbos_make_sell_trade', tradeKey)
+    } catch {}
+
+    setDemoWorkspaces((prev) => {
+      const base = prev['make-and-sell'] || {}
+      return {
+        ...prev,
+        'make-and-sell': {
+          ...base,
+          businessName: preset.businessName || base.businessName,
+          category: preset.category || base.category,
+          tradeId: tradeKey,
+          metrics: {
+            ...(base.metrics || {}),
+            attentionHeadline: preset.attentionHeadline || 'Ready for entries · All systems live'
+          },
+          records: {
+            ...(base.records || {}),
+            RawMaterials: [...(preset.rawMaterials || [])],
+            Inventory: [...(preset.finishedGoods || [])],
+            Production: [...(preset.productionBatches || [])],
+            Recipes: [...(preset.recipes || [])],
+            Categories: [...(preset.categories || [])]
+          }
+        }
+      }
+    })
   }
 
   const login = (userData) => {
@@ -885,7 +935,10 @@ export function ExbosProvider({ children }) {
         updateDemoRecord,
         deleteDemoRecord,
         updateUserProfile,
-        resetDemoData
+        resetDemoData,
+        makeSellTrade,
+        setMakeSellTrade,
+        applyMakeSellTrade
       }}
     >
       {children}

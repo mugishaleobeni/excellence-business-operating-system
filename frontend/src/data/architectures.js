@@ -37,7 +37,7 @@ export const SIX_ARCHITECTURES = [
     navigation: {
       Overview: ['Dashboard', 'Where Is My Money', 'Production Alerts'],
       Stock: ['Finished Goods', 'Raw Materials', 'Low Stock', 'Categories'],
-      Production: ['Batches', 'Recipes & Formulas', 'In Progress', 'Completed Batches'],
+      Production: ['Runs', 'Recipes & Formulas', 'In Progress', 'Completed Runs'],
       Sales: ['All Sales', 'Sales Trends'],
       Purchases: ['All Purchases', 'Unpaid Purchases', 'Purchase Returns'],
       Customers: ['Customer Directory', 'Outstanding Balances'],

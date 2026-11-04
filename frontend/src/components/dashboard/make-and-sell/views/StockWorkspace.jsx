@@ -160,6 +160,7 @@ export default function StockWorkspace({
   const [prodName, setProdName] = useState('')
   const [prodCategory, setProdCategory] = useState(categoryNames[0] || 'Bread')
   const [prodUnit, setProdUnit] = useState('pcs')
+  const [prodCostPerUnit, setProdCostPerUnit] = useState('')
   const [prodSellingPrice, setProdSellingPrice] = useState('')
   const [prodShelfLifeDays, setProdShelfLifeDays] = useState(4)
   const [prodBestBeforeDate, setProdBestBeforeDate] = useState(() =>
@@ -401,6 +402,7 @@ export default function StockWorkspace({
     setProdName('')
     setProdCategory(categoryNames[0] || 'Bread')
     setProdUnit('pcs')
+    setProdCostPerUnit('')
     setProdSellingPrice('')
     setProdShelfLifeDays(4)
     setProdReorderLevel(20)
@@ -440,12 +442,12 @@ export default function StockWorkspace({
       category: prodCategory,
       unit: prodUnit,
       sellingPriceRWF: Number(prodSellingPrice) || 0,
+      costPerUnitRWF: prodCostPerUnit !== '' ? Number(prodCostPerUnit) : (editItem?.costPerUnitRWF || Math.round((Number(prodSellingPrice) || 0) * 0.6)),
       shelfLifeDays: Number(prodShelfLifeDays) || 4,
       minimumStockLevel: Number(prodReorderLevel) || 20,
       currentStock: editItem ? editItem.currentStock : Number(prodOpeningStock) || 0,
       batchCode: prodBatchCode,
-      bestBeforeDate: new Date(Date.now() + (Number(prodShelfLifeDays) || 4) * 86400000).toISOString().slice(0, 10),
-      costPerUnitRWF: editItem ? editItem.costPerUnitRWF : Math.round((Number(prodSellingPrice) || 0) * 0.6)
+      bestBeforeDate: new Date(Date.now() + (Number(prodShelfLifeDays) || 4) * 86400000).toISOString().slice(0, 10)
     }
 
     if (onUpdateFinishedGoods) {
@@ -818,7 +820,7 @@ export default function StockWorkspace({
                   <th className="p-3.5">Category</th>
                   <th className="p-3.5 text-right">Available Stock</th>
                   <th className="p-3.5 text-right">Selling Price</th>
-                  {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Cost / Unit</th>}
+                  {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Cost &amp; Profit / Unit</th>}
                   <th className="p-3.5">Best-Before Date</th>
                   <th className="p-3.5 text-center">Price Engine</th>
                   <th className="p-3.5 pr-5 text-right">Actions</th>
@@ -864,8 +866,21 @@ export default function StockWorkspace({
                           {formatRWF(item.sellingPriceRWF || item.sellingPrice || 0)}
                         </td>
                         {!isCashier && !hideFinancials && (
-                          <td className="p-3.5 text-right font-mono text-slate-400">
-                            {formatRWF(item.costPerUnitRWF || item.unitCost || 0)}
+                          <td className="p-3.5 text-right font-mono">
+                            <div className="text-slate-400 text-xs">
+                              {formatRWF(item.costPerUnitRWF || item.unitCost || 0)}
+                            </div>
+                            {(() => {
+                              const cost = Number(item.costPerUnitRWF || item.unitCost || 0)
+                              const price = Number(item.sellingPriceRWF || item.sellingPrice || 0)
+                              const profit = price - cost
+                              const margin = price > 0 ? Math.round((profit / price) * 100) : 0
+                              return (
+                                <div className={`text-[10px] font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                  {profit >= 0 ? '+' : ''}{formatRWF(profit)} ({margin}%)
+                                </div>
+                              )
+                            })()}
                           </td>
                         )}
                         <td className="p-3.5">
@@ -923,6 +938,7 @@ export default function StockWorkspace({
                                 setProdName(item.name || item.title)
                                 setProdCategory(item.category || categoryNames[0] || 'Bread')
                                 setProdUnit(item.unit || 'pcs')
+                                setProdCostPerUnit(item.costPerUnitRWF || item.unitCost || '')
                                 setProdSellingPrice(item.sellingPriceRWF || item.sellingPrice || '')
                                 setProdShelfLifeDays(item.shelfLifeDays || 4)
                                 setProdBestBeforeDate(
@@ -1309,16 +1325,54 @@ export default function StockWorkspace({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Selling Price (RWF) *</label>
-                    <input
-                      type="number"
-                      value={prodSellingPrice}
-                      onChange={(e) => setProdSellingPrice(e.target.value)}
-                      placeholder="e.g. 1500"
-                      className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
-                    />
+                  {/* Cost, Selling Price & Direct Profit Comparison */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">
+                        Raw Material / Unit Cost (RWF)
+                      </label>
+                      <input
+                        type="number"
+                        value={prodCostPerUnit}
+                        onChange={(e) => setProdCostPerUnit(e.target.value)}
+                        placeholder="e.g. 81400"
+                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">
+                        Selling Price (RWF) <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        value={prodSellingPrice}
+                        onChange={(e) => setProdSellingPrice(e.target.value)}
+                        placeholder="e.g. 145000"
+                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
                   </div>
+
+                  {/* Instant Direct Profit & Margin Calculator Card */}
+                  {Number(prodSellingPrice) > 0 && (
+                    <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-400/25 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[11px]">Direct Profit / Unit:</span>
+                        <span className={`font-mono font-bold text-sm ${
+                          Number(prodSellingPrice) - Number(prodCostPerUnit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}>
+                          {Number(prodSellingPrice) - Number(prodCostPerUnit || 0) >= 0 ? '+' : ''}
+                          {formatRWF(Number(prodSellingPrice) - Number(prodCostPerUnit || 0))}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-slate-400 block text-[11px]">Gross Margin:</span>
+                        <span className="font-mono font-bold text-sm text-sky-300">
+                          {Math.round(((Number(prodSellingPrice) - Number(prodCostPerUnit || 0)) / Number(prodSellingPrice)) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1784,6 +1838,7 @@ export default function StockWorkspace({
                     setProdName(it.name || it.title)
                     setProdCategory(it.category || categoryNames[0] || 'Bread')
                     setProdUnit(it.unit || 'pcs')
+                    setProdCostPerUnit(it.costPerUnitRWF || it.unitCost || '')
                     setProdSellingPrice(it.sellingPriceRWF || '')
                     setProdShelfLifeDays(it.shelfLifeDays || 4)
                     setProdBestBeforeDate(

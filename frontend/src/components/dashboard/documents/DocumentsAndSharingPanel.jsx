@@ -12,6 +12,7 @@ import PurchaseOrdersView from './PurchaseOrdersView'
 import StatementsView from './StatementsView'
 import SentHistoryView from './SentHistoryView'
 import DocumentTemplatesView from './DocumentTemplatesView'
+import ShareAndExportView from './ShareAndExportView'
 
 // Modals
 import CreateDocumentModal from './CreateDocumentModal'
@@ -319,6 +320,8 @@ export default function DocumentsAndSharingPanel({
   // Normalize subpage
   const normalizedPage = useMemo(() => {
     const p = (activePage || '').toLowerCase()
+    if (p.includes('share') || p.includes('export')) return 'Share & Export'
+    if (p.includes('recent')) return 'Sent History'
     if (p.includes('invoice')) return 'Invoices'
     if (p.includes('receipt')) return 'Receipts'
     if (p.includes('quotation')) return 'Quotations'
@@ -421,6 +424,16 @@ export default function DocumentsAndSharingPanel({
           documents={documents}
           onOpenPreviewModal={openPreview}
           onOpenSendModal={openSend}
+          onDownloadDoc={handleDownloadDoc}
+        />
+      )}
+
+      {normalizedPage === 'Share & Export' && (
+        <ShareAndExportView
+          documents={documents}
+          sentHistory={sentHistory}
+          onOpenSendModal={openSend}
+          onOpenPreviewModal={openPreview}
           onDownloadDoc={handleDownloadDoc}
         />
       )}

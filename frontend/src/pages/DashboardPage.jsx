@@ -16,6 +16,7 @@ import RailNavigation from "../components/dashboard/layout/RailNavigation"
 import ContextualSidebar from "../components/dashboard/layout/ContextualSidebar"
 import DashboardTopNav from "../components/dashboard/layout/DashboardTopNav"
 import WidgetCustomizerModal from "../components/dashboard/layout/WidgetCustomizerModal"
+import TradeSelectionModal from "../components/dashboard/make-and-sell/modals/TradeSelectionModal"
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -123,7 +124,7 @@ const MODULE_SHORT_LABELS = {
 const DASHBOARD_QUICK_ACTIONS = {
   'make-and-sell': [
     { label: 'New Sale', module: 'Sales', page: 'All Sales' },
-    { label: 'New Batch', module: 'Production', page: 'Batches' },
+    { label: 'New Run', module: 'Production', page: 'Runs' },
     { label: 'New Purchase', module: 'Purchases', page: 'All Purchases' }
   ],
   'buy-and-sell': [
@@ -168,8 +169,13 @@ export default function DashboardPage() {
     transactions,
     demoWorkspaces,
     addDemoRecord,
-    addTransaction
+    addTransaction,
+    makeSellTrade,
+    applyMakeSellTrade
   } = useExbos()
+
+  // First-time trade onboarding modal for Make & Sell
+  const [firstTimeTradeModalOpen, setFirstTimeTradeModalOpen] = useState(false)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -273,6 +279,21 @@ export default function DashboardPage() {
       setActivePage(urlPage)
     }
   }, [searchParams])
+
+  // Trigger trade onboarding prompt when entering Make & Sell without an established trade
+  useEffect(() => {
+    if (activeArchId === 'make-and-sell') {
+      try {
+        const chosen = localStorage.getItem('exbos_make_sell_trade_chosen')
+        if (!chosen) {
+          setFirstTimeTradeModalOpen(true)
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [activeArchId])
+
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sidebarCompact, setSidebarCompact] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -1243,6 +1264,8 @@ export default function DashboardPage() {
             logout={logout}
             navigate={navigate}
             scrollProgress={scrollProgress}
+            makeSellTrade={makeSellTrade}
+            applyMakeSellTrade={applyMakeSellTrade}
           />
 
           {/* SCROLLABLE INNER WORKSPACE BODY WITH ANIMATED CARDS */}
@@ -2268,6 +2291,26 @@ export default function DashboardPage() {
           </div>
         </main>
       </div>
+
+      {/* First-Time Trade Selection Prompt for Make & Sell */}
+      <TradeSelectionModal
+        isOpen={firstTimeTradeModalOpen && activeArchId === 'make-and-sell'}
+        onClose={() => {
+          try {
+            localStorage.setItem('exbos_make_sell_trade_chosen', '1')
+          } catch {}
+          setFirstTimeTradeModalOpen(false)
+        }}
+        currentTradeId={makeSellTrade}
+        onSelectTrade={(newTradeId) => {
+          applyMakeSellTrade(newTradeId)
+          try {
+            localStorage.setItem('exbos_make_sell_trade_chosen', '1')
+          } catch {}
+          setFirstTimeTradeModalOpen(false)
+        }}
+        isFirstTimePrompt={true}
+      />
     </div>
   )
 }

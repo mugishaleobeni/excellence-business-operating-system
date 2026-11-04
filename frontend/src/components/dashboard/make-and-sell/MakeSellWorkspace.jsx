@@ -8,6 +8,7 @@ import CustomersWorkspace from './views/CustomersWorkspace'
 import SuppliersWorkspace from './views/SuppliersWorkspace'
 import ExpensesWorkspace from './views/ExpensesWorkspace'
 import ProductionAlertsView from './views/ProductionAlertsView'
+import { TRADE_PRESETS } from './data/tradePresets'
 import {
   DEFAULT_RAW_MATERIALS,
   DEFAULT_FINISHED_PRODUCTS,
@@ -28,11 +29,14 @@ export default function MakeSellWorkspace({
     updateDemoRecord,
     deleteDemoRecord,
     updateDemoWorkspace,
-    addToast
+    addToast,
+    makeSellTrade,
+    applyMakeSellTrade
   } = useExbos()
 
   const workspace = demoWorkspaces?.['make-and-sell'] || {}
   const recordsMap = workspace.records || {}
+  const currentTrade = TRADE_PRESETS[makeSellTrade] || TRADE_PRESETS.tailoring
 
   // Cashier Role Protection
   const isCashier = user?.role === 'Cashier'
@@ -41,147 +45,40 @@ export default function MakeSellWorkspace({
   const [rawMaterials, setRawMaterials] = useState(() => {
     const saved = recordsMap['RawMaterials']
     if (saved && saved.length > 0) return saved
-    return [
-      {
-        id: 'MAT-FLOUR',
-        name: 'Azania Premium Wheat Flour',
-        category: 'Flour & Grains',
-        unit: 'kg',
-        currentStock: 50,
-        minimumStockLevel: 25,
-        purchasePriceRWF: 1200,
-        supplier: 'Bakhresa Grain Milling Ltd',
-        batchCode: 'LOT-401',
-        hasExpiry: true,
-        expiryDate: new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10)
-      },
-      {
-        id: 'MAT-SUGAR',
-        name: 'White Granulated Sugar',
-        category: 'Sweeteners',
-        unit: 'kg',
-        currentStock: 10,
-        minimumStockLevel: 5,
-        purchasePriceRWF: 1800,
-        supplier: 'Kabuye Sugar Works Ltd',
-        batchCode: 'LOT-402',
-        hasExpiry: true,
-        expiryDate: new Date(Date.now() + 180 * 86400000).toISOString().slice(0, 10)
-      },
-      ...DEFAULT_RAW_MATERIALS.slice(2)
-    ]
+    return currentTrade.rawMaterials || []
   })
 
   // --- FINISHED GOODS (Stock › 01 Finished Goods) ---
   const [finishedGoods, setFinishedGoods] = useState(() => {
     const saved = recordsMap['Inventory']
     if (saved && saved.length > 0) return saved
-    return [
-      {
-        id: 'PROD-BREAD',
-        name: 'Standard Sandwich Loaf (800g)',
-        title: 'Standard Sandwich Loaf (800g)',
-        category: 'Bread',
-        unit: 'loaves',
-        currentStock: 145,
-        stock: 145,
-        minimumStockLevel: 30,
-        sellingPriceRWF: 300,
-        sellingPrice: 300,
-        costPerUnitRWF: 184.62,
-        shelfLifeDays: 4,
-        batchCode: 'B-001',
-        bestBeforeDate: new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10)
-      },
-      {
-        id: 'PROD-BRIOCHE',
-        name: 'Artisan Brioche Burger Buns (Pack of 4)',
-        title: 'Artisan Brioche Burger Buns (Pack of 4)',
-        category: 'Bread',
-        unit: 'packs',
-        currentStock: 40,
-        stock: 40,
-        minimumStockLevel: 15,
-        sellingPriceRWF: 2500,
-        sellingPrice: 2500,
-        costPerUnitRWF: 1520,
-        shelfLifeDays: 3,
-        batchCode: 'B-002',
-        bestBeforeDate: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10)
-      },
-      ...DEFAULT_FINISHED_PRODUCTS.slice(2)
-    ]
+    return currentTrade.finishedGoods || []
   })
 
   // --- RECIPES ---
   const [recipes, setRecipes] = useState(() => {
-    return [
-      {
-        id: 'REC-BREAD-200',
-        name: 'Standard Loaf (Batch of 200)',
-        productId: 'PROD-BREAD',
-        productName: 'Standard Sandwich Loaf (800g)',
-        yieldQuantity: 200,
-        unit: 'loaves',
-        wastageAllowancePct: 2.5,
-        targetMarginPct: 40,
-        costPerUnitRWF: 180,
-        ingredients: [
-          { materialId: 'MAT-FLOUR', materialName: 'Azania Premium Wheat Flour', quantity: 20, unit: 'kg', unitCost: 1200 },
-          { materialId: 'MAT-SUGAR', materialName: 'White Granulated Sugar', quantity: 3, unit: 'kg', unitCost: 1800 }
-        ],
-        otherCosts: [
-          { id: 'cost-1', name: 'Gas & Bakery Labour', amount: 6600 }
-        ]
-      },
-      ...DEFAULT_RECIPES
-    ]
+    const saved = recordsMap['Recipes']
+    if (saved && saved.length > 0) return saved
+    return currentTrade.recipes || []
   })
 
-  // --- PRODUCTION BATCHES ---
+  // --- PRODUCTION BATCHES / RUNS ---
   const [batches, setBatches] = useState(() => {
     const saved = recordsMap['Production']
     if (saved && saved.length > 0) return saved
-    return [
-      {
-        id: 'BATCH-408',
-        batchCode: 'B-408',
-        recipeId: 'REC-BREAD-200',
-        productId: 'PROD-BREAD',
-        productName: 'Standard Sandwich Loaf (800g)',
-        plannedQuantity: 200,
-        actualQuantity: 195,
-        wasteQuantity: 5,
-        unit: 'loaves',
-        status: 'Completed',
-        plannedDate: new Date().toISOString().slice(0, 10),
-        completionDate: new Date().toISOString().slice(0, 10),
-        responsibleEmployee: 'Jean-Pierre Mugisha',
-        plannedCostPerUnitRWF: 180,
-        actualCostPerUnitRWF: 184.62,
-        isOverPlan: false
-      },
-      {
-        id: 'BATCH-409',
-        batchCode: 'B-409',
-        recipeId: 'REC-BREAD-200',
-        productId: 'PROD-BREAD',
-        productName: 'Standard Sandwich Loaf (800g)',
-        plannedQuantity: 200,
-        unit: 'loaves',
-        status: 'In Progress',
-        plannedDate: new Date().toISOString().slice(0, 10),
-        startTime: new Date().toISOString(),
-        targetCompletion: new Date(Date.now() + 2 * 3600000).toISOString(),
-        responsibleEmployee: 'Jean-Pierre Mugisha',
-        plannedUnitCostRWF: 180,
-        ingredientsUsed: [
-          { materialId: 'MAT-FLOUR', name: 'Azania Premium Wheat Flour', quantity: 20, unit: 'kg' },
-          { materialId: 'MAT-SUGAR', name: 'White Granulated Sugar', quantity: 3, unit: 'kg' }
-        ]
-      }
-    ]
+    return currentTrade.productionBatches || []
   })
+
+  // Auto-update states when the selected trade changes
+  useEffect(() => {
+    const preset = TRADE_PRESETS[makeSellTrade]
+    if (preset && !preset.isSupportContact) {
+      if (recordsMap['RawMaterials']) setRawMaterials(recordsMap['RawMaterials'])
+      if (recordsMap['Inventory']) setFinishedGoods(recordsMap['Inventory'])
+      if (recordsMap['Production']) setBatches(recordsMap['Production'])
+      if (recordsMap['Recipes']) setRecipes(recordsMap['Recipes'])
+    }
+  }, [makeSellTrade, recordsMap])
 
   // --- SALES (Finished Goods Only) ---
   const [sales, setSales] = useState(() => {

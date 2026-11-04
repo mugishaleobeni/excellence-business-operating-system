@@ -1,5 +1,6 @@
 import React from 'react'
 import { Menu, Search, Bell, X, ArrowUpRight, CheckCircle2, LogOut } from 'lucide-react'
+import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
 
 export default function DashboardTopNav({
   workspaceScrolled,
@@ -19,7 +20,9 @@ export default function DashboardTopNav({
   user,
   logout,
   navigate,
-  scrollProgress = 0
+  scrollProgress = 0,
+  makeSellTrade,
+  applyMakeSellTrade
 }) {
   return (
     <header className={`exbos-sticky-workspace-header ${workspaceScrolled ? 'is-scrolled' : ''}`}>
@@ -46,6 +49,14 @@ export default function DashboardTopNav({
 
         {/* Header Tools Bar */}
         <div className="flex flex-wrap items-center gap-3">
+          {/* Active Manufacturing Trade Badge (Make & Sell) */}
+          {currentArch?.id === 'make-and-sell' && (
+            <ActiveTradeBadge
+              activeTradeId={makeSellTrade}
+              onSelectTrade={applyMakeSellTrade}
+            />
+          )}
+
           {/* Global Search with Increased Size & Ctrl+S Shortcut Badge */}
           <div className="relative group">
             <Search className="w-4 h-4 text-slate-300 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-[#218DFF] transition-colors" />
