@@ -176,20 +176,19 @@ export default function DashboardTopNav({
             )}
           </div>
 
-          {/* Sign Out / Switch User */}
-          {user && (
-            <button
-              type="button"
-              onClick={() => {
-                logout()
-                navigate('/login')
-              }}
-              title="Sign Out"
-              className="p-2 rounded-xl bg-white/10 border border-white/20 text-rose-400 hover:bg-rose-500/20 cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
+          {/* Sign Out / Exit to Login (Always visible) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (logout) logout()
+              navigate('/login')
+            }}
+            title={user ? `Sign Out (${user.name || user.email})` : 'Sign Out / Switch User'}
+            className="p-2 rounded-xl bg-white/10 border border-white/20 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 cursor-pointer flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden md:inline text-xs font-semibold">Sign Out</span>
+          </button>
         </div>
       </div>
 

@@ -1197,6 +1197,10 @@ export default function DashboardPage() {
           theme={theme}
           sidebarCollapsed={sidebarCollapsed}
           setSidebarCollapsed={setSidebarCollapsed}
+          onLogout={() => {
+            if (logout) logout()
+            navigate('/login')
+          }}
         />
 
         {/* PANEL B: SECONDARY NAVIGATION SIDEBAR */}

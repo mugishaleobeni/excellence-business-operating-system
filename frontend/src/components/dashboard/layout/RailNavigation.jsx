@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, FileText, Sun, Moon, PanelLeftOpen, PanelLeftClose } from 'lucide-react'
+import { LayoutDashboard, FileText, Sun, Moon, PanelLeftOpen, PanelLeftClose, LogOut } from 'lucide-react'
 
 export default function RailNavigation({
   exbosLogo,
@@ -13,7 +13,8 @@ export default function RailNavigation({
   toggleTheme,
   theme,
   sidebarCollapsed,
-  setSidebarCollapsed
+  setSidebarCollapsed,
+  onLogout
 }) {
   return (
     <nav
@@ -102,6 +103,16 @@ export default function RailNavigation({
             <PanelLeftClose className="w-4 h-4" />
           )}
         </button>
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign Out / Exit"
+            className="w-11 h-11 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-white flex items-center justify-center cursor-pointer border border-rose-500/30 transition-all shadow-sm"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </nav>
   )
