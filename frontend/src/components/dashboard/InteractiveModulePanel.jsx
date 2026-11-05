@@ -69,6 +69,7 @@ import CategoryModal from "./modals/CategoryModal"
 import PayPurchaseModal from "./modals/PayPurchaseModal"
 import ModuleKpiCards, { ModuleKpiCards as NamedModuleKpiCards } from "./cards/ModuleKpiCards"
 import MakeSellWorkspace from "./make-and-sell/MakeSellWorkspace"
+import ServicesWorkspace from "./services/ServicesWorkspace"
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
@@ -334,7 +335,7 @@ export default function InteractiveModulePanel({
       (p) =>
         p.title?.toLowerCase().includes(term) ||
         p.sku?.toLowerCase().includes(term) ||
-        p.category?.toLowerCase().includes(term)
+        String(p.category?.name || p.category || '').toLowerCase().includes(term)
     )
   }, [recordedProducts, saleProductSearch])
 
@@ -420,7 +421,7 @@ export default function InteractiveModulePanel({
       (p) =>
         p.title?.toLowerCase().includes(term) ||
         p.sku?.toLowerCase().includes(term) ||
-        p.category?.toLowerCase().includes(term)
+        String(p.category?.name || p.category || '').toLowerCase().includes(term)
     )
   }, [recordedProducts, purchaseProductSearch])
 
@@ -534,20 +535,35 @@ export default function InteractiveModulePanel({
 
   // Merge any product category so every category is represented in catalog
   const allCategories = useMemo(() => {
-    const list = [...categoriesList]
-    const existingNames = new Set(list.map((c) => c.name.toLowerCase()))
-
-    rawModuleRecords.forEach((prod) => {
-      if (prod.category && !existingNames.has(prod.category.toLowerCase())) {
-        existingNames.add(prod.category.toLowerCase())
-        list.push({
-          id: `cat-auto-${prod.category.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-          name: prod.category,
-          date: prod.date || '2026-11-01',
-          status: 'Active'
+    const list = Array.isArray(categoriesList) ? [...categoriesList] : []
+    const existingNames = new Set(
+      list
+        .map((c) => {
+          const cName = typeof c === 'string' ? c : (c?.name || c?.title || '')
+          return String(cName).toLowerCase()
         })
-      }
-    })
+        .filter(Boolean)
+    )
+
+    if (Array.isArray(rawModuleRecords)) {
+      rawModuleRecords.forEach((prod) => {
+        if (!prod || !prod.category) return
+        const catStr = typeof prod.category === 'string'
+          ? prod.category
+          : (prod.category?.name || prod.category?.label || prod.category?.title || String(prod.category))
+        const catLower = String(catStr).toLowerCase()
+
+        if (catStr && !existingNames.has(catLower)) {
+          existingNames.add(catLower)
+          list.push({
+            id: `cat-auto-${catLower.replace(/[^a-z0-9]/g, '-') || Date.now()}`,
+            name: catStr,
+            date: prod.date || '2026-11-01',
+            status: 'Active'
+          })
+        }
+      })
+    }
 
     return list
   }, [categoriesList, rawModuleRecords])
@@ -649,7 +665,7 @@ export default function InteractiveModulePanel({
 
     if (editingCategory) {
       const updated = categoriesList.map((c) =>
-        c.id === editingCategory.id || c.name.toLowerCase() === editingCategory.name.toLowerCase()
+        c.id === editingCategory.id || String(c?.name || '').toLowerCase() === String(editingCategory?.name || '').toLowerCase()
           ? {
               ...c,
               name: trimmed,
@@ -665,7 +681,7 @@ export default function InteractiveModulePanel({
         message: `Category "${trimmed}" has been updated.`
       })
     } else {
-      if (allCategories.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      if (allCategories.some((c) => String(c?.name || '').toLowerCase() === trimmed.toLowerCase())) {
         addToast && addToast({
           type: 'error',
           title: 'Duplicate Category',
@@ -703,7 +719,7 @@ export default function InteractiveModulePanel({
       return
     }
 
-    const filtered = categoriesList.filter((c) => c.id !== cat.id && c.name.toLowerCase() !== cat.name.toLowerCase())
+    const filtered = categoriesList.filter((c) => c.id !== cat.id && String(c?.name || '').toLowerCase() !== String(cat?.name || '').toLowerCase())
     saveCategoriesList(filtered)
     addToast && addToast({
       type: 'info',
@@ -722,7 +738,7 @@ export default function InteractiveModulePanel({
   const categoryRows = useMemo(() => {
     return allCategories.map((cat) => {
       const count = rawModuleRecords.filter(
-        (p) => p.category?.toLowerCase() === cat.name?.toLowerCase()
+        (p) => String(p?.category?.name || p?.category || '').toLowerCase() === String(cat?.name || '').toLowerCase()
       ).length
       return {
         id: cat.id,
@@ -1377,6 +1393,23 @@ export default function InteractiveModulePanel({
   ) {
     return (
       <MakeSellWorkspace
+        activeModule={activeModule}
+        activePage={activePage}
+        onSwitchPage={onSwitchPage}
+      />
+    )
+  }
+
+  // 3. Service-Based Business Architecture: Dedicated Service Catalogue, Jobs Pipeline & Staff Commissions Workspaces
+  if (
+    activeArchId === 'services' &&
+    (activeModule === 'Services' ||
+     activeModule === 'Jobs & Bookings' ||
+     (activeModule === 'Settings' && activePage === 'Staff & Commissions') ||
+     (activeModule === 'Overview' && activePage === 'Upcoming Bookings'))
+  ) {
+    return (
+      <ServicesWorkspace
         activeModule={activeModule}
         activePage={activePage}
         onSwitchPage={onSwitchPage}

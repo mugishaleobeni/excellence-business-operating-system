@@ -111,9 +111,9 @@ export default function SaleModal({
     const q = saleProductSearch.toLowerCase();
     return list.filter(
       (p) =>
-        (p.title && p.title.toLowerCase().includes(q)) ||
-        (p.sku && p.sku.toLowerCase().includes(q)) ||
-        (p.category && p.category.toLowerCase().includes(q))
+        (p.title && String(p.title).toLowerCase().includes(q)) ||
+        (p.sku && String(p.sku).toLowerCase().includes(q)) ||
+        (p.category && String(p.category?.name || p.category).toLowerCase().includes(q))
     );
   }, [recordedProducts, saleProductSearch]);
 

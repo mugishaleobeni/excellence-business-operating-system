@@ -1,6 +1,7 @@
 import React from 'react'
 import { Menu, Search, Bell, X, ArrowUpRight, CheckCircle2, LogOut } from 'lucide-react'
 import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
+import ActiveServiceTradeBadge from '../services/components/ActiveServiceTradeBadge'
 
 export default function DashboardTopNav({
   workspaceScrolled,
@@ -22,7 +23,9 @@ export default function DashboardTopNav({
   navigate,
   scrollProgress = 0,
   makeSellTrade,
-  applyMakeSellTrade
+  applyMakeSellTrade,
+  serviceTrade,
+  applyServiceTrade
 }) {
   return (
     <header className={`exbos-sticky-workspace-header ${workspaceScrolled ? 'is-scrolled' : ''}`}>
@@ -58,6 +61,14 @@ export default function DashboardTopNav({
             <ActiveTradeBadge
               activeTradeId={makeSellTrade}
               onSelectTrade={applyMakeSellTrade}
+            />
+          )}
+
+          {/* Active Service Trade Badge (Services Architecture) */}
+          {currentArch?.id === 'services' && (
+            <ActiveServiceTradeBadge
+              activeTradeId={serviceTrade}
+              onSelectTrade={applyServiceTrade}
             />
           )}
 

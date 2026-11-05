@@ -44,8 +44,8 @@ export default function CashMovementReportView({
     return transactions.map((t) => {
       const isInternal =
         t.isInternalTransfer ||
-        (t.title && t.title.toLowerCase().includes('transfer')) ||
-        (t.category && t.category.toLowerCase().includes('transfer'))
+        (t.title && String(t.title).toLowerCase().includes('transfer')) ||
+        (t.category && String(t.category?.name || t.category).toLowerCase().includes('transfer'))
       const amount = Number(t.amountRWF || 0)
       const isMoneyIn = t.type === 'in'
       const isMoneyOut = t.type === 'out'

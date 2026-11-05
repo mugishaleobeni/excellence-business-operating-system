@@ -28,7 +28,9 @@ export default function DashboardPage() {
     demoWorkspaces = {},
     addDemoRecord,
     makeSellTrade,
-    applyMakeSellTrade
+    applyMakeSellTrade,
+    serviceTrade,
+    applyServiceTrade
   } = useExbos()
 
   const {
@@ -332,6 +334,8 @@ export default function DashboardPage() {
             scrollProgress={scrollProgress}
             makeSellTrade={makeSellTrade}
             applyMakeSellTrade={applyMakeSellTrade}
+            serviceTrade={serviceTrade}
+            applyServiceTrade={applyServiceTrade}
           />
 
           {/* SCROLLABLE INNER WORKSPACE BODY */}

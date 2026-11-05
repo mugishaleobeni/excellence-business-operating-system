@@ -14,9 +14,9 @@ export default function RecentActivityTable({
     if (!searchQuery.trim()) return true
     const q = searchQuery.toLowerCase()
     return (
-      (tx.title && tx.title.toLowerCase().includes(q)) ||
-      (tx.category && tx.category.toLowerCase().includes(q)) ||
-      (tx.account && tx.account.toLowerCase().includes(q))
+      (tx.title && String(tx.title).toLowerCase().includes(q)) ||
+      (tx.category && String(tx.category?.name || tx.category).toLowerCase().includes(q)) ||
+      (tx.account && String(tx.account).toLowerCase().includes(q))
     )
   })
 

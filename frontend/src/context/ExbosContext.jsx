@@ -6,6 +6,7 @@ import {
   FINANCIAL_TOOLS
 } from '../data/architectures'
 import { TRADE_PRESETS } from '../components/dashboard/make-and-sell/data/tradePresets'
+import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePresets'
 
 const ExbosContext = createContext(null)
 
@@ -44,7 +45,14 @@ export const createCleanWorkspaces = () => {
         Production: [],
         Customers: [],
         Suppliers: [],
-        Expenses: []
+        Expenses: [],
+        Services: [],
+        Consumables: [],
+        Staff: [],
+        Jobs: [],
+        Categories: [],
+        RawMaterials: [],
+        Recipes: []
       }
     }
   })
@@ -89,7 +97,14 @@ export function sanitizeUserWorkspaces(data) {
           Production: [],
           Customers: [],
           Suppliers: [],
-          Expenses: []
+          Expenses: [],
+          Services: [],
+          Consumables: [],
+          Staff: [],
+          Jobs: [],
+          Categories: [],
+          RawMaterials: [],
+          Recipes: []
         }
       }
 
@@ -401,6 +416,21 @@ export function ExbosProvider({ children }) {
     } catch {}
   }, [makeSellTrade])
 
+  // Active Trade / Preset for Service-Based Architecture
+  const [serviceTrade, setServiceTrade] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_services_trade') || 'salon'
+    } catch {
+      return 'salon'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_services_trade', serviceTrade)
+    } catch {}
+  }, [serviceTrade])
+
   const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_demo_workspaces')
@@ -664,6 +694,40 @@ export function ExbosProvider({ children }) {
             Inventory: [...(preset.finishedGoods || [])],
             Production: [...(preset.productionBatches || [])],
             Recipes: [...(preset.recipes || [])],
+            Categories: [...(preset.categories || [])]
+          }
+        }
+      }
+    })
+  }
+
+  const applyServiceTrade = (tradeKey) => {
+    const preset = SERVICE_PRESETS[tradeKey]
+    if (!preset || preset.isSupportContact) return
+    setServiceTrade(tradeKey)
+    try {
+      localStorage.setItem('exbos_services_trade', tradeKey)
+    } catch {}
+
+    setDemoWorkspaces((prev) => {
+      const base = prev['services'] || {}
+      return {
+        ...prev,
+        services: {
+          ...base,
+          businessName: preset.businessName || base.businessName,
+          category: preset.category || base.category,
+          tradeId: tradeKey,
+          metrics: {
+            ...(base.metrics || {}),
+            attentionHeadline: preset.attentionHeadline || 'Ready for bookings · All systems live'
+          },
+          records: {
+            ...(base.records || {}),
+            Services: [...(preset.services || [])],
+            Consumables: [...(preset.consumables || [])],
+            Staff: [...(preset.staff || [])],
+            Jobs: [...(preset.jobs || [])],
             Categories: [...(preset.categories || [])]
           }
         }
@@ -938,7 +1002,10 @@ export function ExbosProvider({ children }) {
         resetDemoData,
         makeSellTrade,
         setMakeSellTrade,
-        applyMakeSellTrade
+        applyMakeSellTrade,
+        serviceTrade,
+        setServiceTrade,
+        applyServiceTrade
       }}
     >
       {children}
