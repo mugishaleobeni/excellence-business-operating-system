@@ -243,6 +243,7 @@ export default function ServicesWorkspace({
           onDeleteJob={handleDeleteJob}
           onDeductConsumables={handleDeductConsumables}
           activeSubPage={activePage}
+          setActiveSubPage={(page) => onSwitchPage('Jobs & Bookings', page)}
           clientAssetLabel={currentPreset.clientAssetLabel}
         />
       ) : (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Calendar,
   Clock,
@@ -30,11 +30,30 @@ export default function JobsAndBookingsWorkspace({
   onDeleteJob = () => {},
   onDeductConsumables = () => {},
   activeSubPage = 'All Jobs',
+  setActiveSubPage = () => {},
   clientAssetLabel = 'Client Asset / Notes'
 }) {
-  const [viewMode, setViewMode] = useState(
-    activeSubPage === 'Bookings & Calendar' ? 'calendar' : 'pipeline'
-  )
+  const viewMode = useMemo(() => {
+    return activeSubPage === 'Bookings & Calendar' ? 'calendar' : 'pipeline'
+  }, [activeSubPage])
+
+  const handleViewModeChange = (mode) => {
+    if (mode === 'calendar') setActiveSubPage('Bookings & Calendar')
+    else setActiveSubPage('All Jobs')
+  }
+
+  const headerMeta = useMemo(() => {
+    if (activeSubPage === 'Bookings & Calendar') {
+      return { title: 'Appointments & Calendar Slots', subtitle: 'Hourly schedule, technician availability & client bookings' }
+    }
+    if (activeSubPage === 'In Progress') {
+      return { title: 'Active Jobs In Progress', subtitle: 'Work orders currently on stations and service bays' }
+    }
+    if (activeSubPage === 'Completed & Invoiced') {
+      return { title: 'Completed & Invoiced Jobs', subtitle: 'Completed customer work orders with settled balances' }
+    }
+    return { title: 'Jobs, Work Orders & Bookings', subtitle: 'Intake pipeline, technician assignment, client deposits & completion invoicing' }
+  }, [activeSubPage])
   const [searchQuery, setSearchQuery] = useState('')
   const [staffFilter, setStaffFilter] = useState('All')
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -50,6 +69,12 @@ export default function JobsAndBookingsWorkspace({
     { id: 'Ready', title: 'Ready for Collection', color: 'cyan', border: 'border-cyan-500/30', headerBg: 'bg-cyan-500/10 text-cyan-300' },
     { id: 'Completed', title: 'Completed & Invoiced', color: 'emerald', border: 'border-emerald-500/30', headerBg: 'bg-emerald-500/10 text-emerald-300' }
   ]
+
+  const displayColumns = useMemo(() => {
+    if (activeSubPage === 'In Progress') return PIPELINE_COLUMNS.filter((c) => c.id === 'In Progress')
+    if (activeSubPage === 'Completed & Invoiced') return PIPELINE_COLUMNS.filter((c) => c.id === 'Completed')
+    return PIPELINE_COLUMNS
+  }, [activeSubPage])
 
   // Filter jobs
   const filteredJobs = jobs.filter((j) => {
@@ -109,10 +134,10 @@ export default function JobsAndBookingsWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
         <div>
           <h2 className="font-orbitron text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>Jobs, Work Orders &amp; Bookings</span>
+            <span>{headerMeta.title}</span>
           </h2>
           <p className="text-xs text-slate-300">
-            Intake pipeline, technician assignment, client deposits &amp; completion invoicing
+            {headerMeta.subtitle}
           </p>
         </div>
 
@@ -121,7 +146,7 @@ export default function JobsAndBookingsWorkspace({
           <div className="flex items-center gap-1 p-1 rounded-2xl bg-white/5 border border-white/10 text-xs font-medium">
             <button
               type="button"
-              onClick={() => setViewMode('pipeline')}
+              onClick={() => handleViewModeChange('pipeline')}
               className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
                 viewMode === 'pipeline'
                   ? 'bg-sky-500 text-white shadow-md'
@@ -133,7 +158,7 @@ export default function JobsAndBookingsWorkspace({
             </button>
             <button
               type="button"
-              onClick={() => setViewMode('calendar')}
+              onClick={() => handleViewModeChange('calendar')}
               className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
                 viewMode === 'calendar'
                   ? 'bg-sky-500 text-white shadow-md'
@@ -198,8 +223,10 @@ export default function JobsAndBookingsWorkspace({
 
       {/* VIEW 1: KANBAN PIPELINE BOARD */}
       {viewMode === 'pipeline' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-          {PIPELINE_COLUMNS.map((col) => {
+        <div className={`grid gap-4 items-start ${
+          displayColumns.length === 1 ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+        }`}>
+          {displayColumns.map((col) => {
             const colJobs = filteredJobs.filter((j) => j.status === col.id)
             const colTotalRWF = colJobs.reduce((sum, j) => sum + (Number(j.priceRWF) || 0), 0)
 

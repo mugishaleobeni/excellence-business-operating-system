@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Sparkles,
   Package,
@@ -32,13 +32,27 @@ export default function ServiceCatalogueWorkspace({
   activeSubPage = 'Service Catalogue',
   setActiveSubPage = () => {}
 }) {
-  const [activeTab, setActiveTab] = useState(
-    activeSubPage === 'Consumables & Supplies'
-      ? 'consumables'
-      : activeSubPage === 'Service Categories'
-      ? 'categories'
-      : 'services'
-  )
+  const activeTab = useMemo(() => {
+    if (activeSubPage === 'Consumables & Supplies' || activeSubPage === 'Consumables') return 'consumables'
+    if (activeSubPage === 'Service Categories' || activeSubPage === 'Categories') return 'categories'
+    return 'services'
+  }, [activeSubPage])
+
+  const handleTabClick = (tabKey) => {
+    if (tabKey === 'consumables') setActiveSubPage('Consumables & Supplies')
+    else if (tabKey === 'categories') setActiveSubPage('Service Categories')
+    else setActiveSubPage('Service Catalogue')
+  }
+
+  const headerMeta = useMemo(() => {
+    if (activeTab === 'consumables') {
+      return { title: 'Consumables & Spare Supplies', subtitle: 'Monitor stock levels, purchase prices, and automatic supplies deduction per job' }
+    }
+    if (activeTab === 'categories') {
+      return { title: 'Service Categories & Stations', subtitle: 'Group catalogue offerings and supplies into operational categories' }
+    }
+    return { title: 'Service Catalogue & Menu Offerings', subtitle: 'Define client prices, service duration, staff commission & linked supplies' }
+  }, [activeTab])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
@@ -96,10 +110,10 @@ export default function ServiceCatalogueWorkspace({
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10">
         <div>
           <h2 className="font-orbitron text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <span>Service Catalogue &amp; Consumables</span>
+            <span>{headerMeta.title}</span>
           </h2>
           <p className="text-xs text-slate-300">
-            Define menu offerings, supply usage per job, and live profit margins
+            {headerMeta.subtitle}
           </p>
         </div>
 
@@ -107,7 +121,7 @@ export default function ServiceCatalogueWorkspace({
         <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/5 border border-white/10 text-xs font-medium">
           <button
             type="button"
-            onClick={() => setActiveTab('services')}
+            onClick={() => handleTabClick('services')}
             className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'services'
                 ? 'bg-sky-500 text-white shadow-md'
@@ -120,7 +134,7 @@ export default function ServiceCatalogueWorkspace({
 
           <button
             type="button"
-            onClick={() => setActiveTab('consumables')}
+            onClick={() => handleTabClick('consumables')}
             className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'consumables'
                 ? 'bg-sky-500 text-white shadow-md'
@@ -133,7 +147,7 @@ export default function ServiceCatalogueWorkspace({
 
           <button
             type="button"
-            onClick={() => setActiveTab('categories')}
+            onClick={() => handleTabClick('categories')}
             className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 ${
               activeTab === 'categories'
                 ? 'bg-sky-500 text-white shadow-md'
@@ -263,20 +277,10 @@ export default function ServiceCatalogueWorkspace({
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => { setEditingService(srv); setServiceModalOpen(true); }}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white"
-                                title="Edit Service"
-                              >
+                              <button type="button" onClick={() => { setEditingService(srv); setServiceModalOpen(true); }} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white" title="Edit Service">
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteModalState({ isOpen: true, itemType: 'service', item: srv })}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-rose-400"
-                                title="Delete Service"
-                              >
+                              <button type="button" onClick={() => setDeleteModalState({ isOpen: true, itemType: 'service', item: srv })} className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-rose-400" title="Delete Service">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -377,20 +381,10 @@ export default function ServiceCatalogueWorkspace({
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => { setEditingConsumable(con); setConsumableModalOpen(true); }}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white"
-                                title="Edit Consumable"
-                              >
+                              <button type="button" onClick={() => { setEditingConsumable(con); setConsumableModalOpen(true); }} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white" title="Edit Consumable">
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteModalState({ isOpen: true, itemType: 'consumable', item: con })}
-                                className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-rose-400"
-                                title="Delete Consumable"
-                              >
+                              <button type="button" onClick={() => setDeleteModalState({ isOpen: true, itemType: 'consumable', item: con })} className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-rose-400" title="Delete Consumable">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
