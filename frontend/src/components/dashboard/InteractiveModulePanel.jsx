@@ -70,6 +70,7 @@ import PayPurchaseModal from "./modals/PayPurchaseModal"
 import ModuleKpiCards, { ModuleKpiCards as NamedModuleKpiCards } from "./cards/ModuleKpiCards"
 import MakeSellWorkspace from "./make-and-sell/MakeSellWorkspace"
 import ServicesWorkspace from "./services/ServicesWorkspace"
+import AgricultureWorkspace from "./agriculture/AgricultureWorkspace"
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
@@ -1410,6 +1411,29 @@ export default function InteractiveModulePanel({
   ) {
     return (
       <ServicesWorkspace
+        activeModule={activeModule}
+        activePage={activePage}
+        onSwitchPage={onSwitchPage}
+      />
+    )
+  }
+
+  // 4. Agriculture & Livestock Architecture: Dedicated Livestock, Feeds, Breeding & Production Workspaces
+  if (
+    activeArchId === 'agriculture' &&
+    (activeModule === 'Livestock' ||
+     activeModule === 'Crops & Fields' ||
+     activeModule === 'Farm Inventory' ||
+     activePage === 'Survival Runway & AI Advice' ||
+     activePage === 'Animal Register' ||
+     activePage === 'Feed Management' ||
+     activePage === 'Breeding & Births' ||
+     activePage === 'Health & Vet Care' ||
+     activePage === 'Daily Production' ||
+     activePage === 'Trade vs Breed Profit')
+  ) {
+    return (
+      <AgricultureWorkspace
         activeModule={activeModule}
         activePage={activePage}
         onSwitchPage={onSwitchPage}

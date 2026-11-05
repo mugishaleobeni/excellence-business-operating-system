@@ -30,7 +30,9 @@ export default function DashboardPage() {
     makeSellTrade,
     applyMakeSellTrade,
     serviceTrade,
-    applyServiceTrade
+    applyServiceTrade,
+    agricultureTrade,
+    applyAgricultureTrade
   } = useExbos()
 
   const {
@@ -336,6 +338,8 @@ export default function DashboardPage() {
             applyMakeSellTrade={applyMakeSellTrade}
             serviceTrade={serviceTrade}
             applyServiceTrade={applyServiceTrade}
+            agricultureTrade={agricultureTrade}
+            applyAgricultureTrade={applyAgricultureTrade}
           />
 
           {/* SCROLLABLE INNER WORKSPACE BODY */}

@@ -2,6 +2,7 @@ import React from 'react'
 import { Menu, Search, Bell, X, ArrowUpRight, CheckCircle2, LogOut } from 'lucide-react'
 import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
 import ActiveServiceTradeBadge from '../services/components/ActiveServiceTradeBadge'
+import ActiveAgricultureTradeBadge from '../agriculture/components/ActiveAgricultureTradeBadge'
 
 export default function DashboardTopNav({
   workspaceScrolled,
@@ -25,7 +26,9 @@ export default function DashboardTopNav({
   makeSellTrade,
   applyMakeSellTrade,
   serviceTrade,
-  applyServiceTrade
+  applyServiceTrade,
+  agricultureTrade,
+  applyAgricultureTrade
 }) {
   return (
     <header className={`exbos-sticky-workspace-header ${workspaceScrolled ? 'is-scrolled' : ''}`}>
@@ -69,6 +72,14 @@ export default function DashboardTopNav({
             <ActiveServiceTradeBadge
               activeTradeId={serviceTrade}
               onSelectTrade={applyServiceTrade}
+            />
+          )}
+
+          {/* Active Agriculture Trade Badge (Agriculture & Livestock Architecture) */}
+          {currentArch?.id === 'agriculture' && (
+            <ActiveAgricultureTradeBadge
+              activeTradeId={agricultureTrade}
+              onSelectTrade={applyAgricultureTrade}
             />
           )}
 

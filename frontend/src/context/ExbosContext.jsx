@@ -7,6 +7,7 @@ import {
 } from '../data/architectures'
 import { TRADE_PRESETS } from '../components/dashboard/make-and-sell/data/tradePresets'
 import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePresets'
+import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
 
 const ExbosContext = createContext(null)
 
@@ -52,7 +53,12 @@ export const createCleanWorkspaces = () => {
         Jobs: [],
         Categories: [],
         RawMaterials: [],
-        Recipes: []
+        Recipes: [],
+        Animals: [],
+        Batches: [],
+        Feeds: [],
+        Gestations: [],
+        HealthRecords: []
       }
     }
   })
@@ -104,7 +110,12 @@ export function sanitizeUserWorkspaces(data) {
           Jobs: [],
           Categories: [],
           RawMaterials: [],
-          Recipes: []
+          Recipes: [],
+          Animals: [],
+          Batches: [],
+          Feeds: [],
+          Gestations: [],
+          HealthRecords: []
         }
       }
 
@@ -431,6 +442,21 @@ export function ExbosProvider({ children }) {
     } catch {}
   }, [serviceTrade])
 
+  // Active Trade / Preset for Agriculture & Livestock Architecture
+  const [agricultureTrade, setAgricultureTrade] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_agriculture_trade') || 'pigs'
+    } catch {
+      return 'pigs'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_agriculture_trade', agricultureTrade)
+    } catch {}
+  }, [agricultureTrade])
+
   const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_demo_workspaces')
@@ -735,6 +761,41 @@ export function ExbosProvider({ children }) {
     })
   }
 
+  const applyAgricultureTrade = (tradeKey) => {
+    const preset = AGRICULTURE_PRESETS[tradeKey]
+    if (!preset || preset.isSupportContact) return
+    setAgricultureTrade(tradeKey)
+    try {
+      localStorage.setItem('exbos_agriculture_trade', tradeKey)
+    } catch {}
+
+    setDemoWorkspaces((prev) => {
+      const base = prev['agriculture'] || {}
+      return {
+        ...prev,
+        agriculture: {
+          ...base,
+          businessName: preset.businessName || base.businessName,
+          category: preset.category || base.category,
+          tradeId: tradeKey,
+          metrics: {
+            ...(base.metrics || {}),
+            attentionHeadline: preset.attentionHeadline || 'Ready for farm records · All systems live'
+          },
+          records: {
+            ...(base.records || {}),
+            Animals: [...(preset.animals || [])],
+            Batches: [...(preset.batches || [])],
+            Feeds: [...(preset.feeds || [])],
+            Gestations: [...(preset.gestations || [])],
+            HealthRecords: [...(preset.healthRecords || [])],
+            Production: [...(preset.production || [])]
+          }
+        }
+      }
+    })
+  }
+
   const login = (userData) => {
     const archId = userData.architectureId || 'buy-and-sell'
     const cleanMap = createCleanWorkspaces()
@@ -1005,7 +1066,10 @@ export function ExbosProvider({ children }) {
         applyMakeSellTrade,
         serviceTrade,
         setServiceTrade,
-        applyServiceTrade
+        applyServiceTrade,
+        agricultureTrade,
+        setAgricultureTrade,
+        applyAgricultureTrade
       }}
     >
       {children}

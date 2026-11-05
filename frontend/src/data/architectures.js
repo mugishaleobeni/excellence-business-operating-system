@@ -165,7 +165,7 @@ export const SIX_ARCHITECTURES = [
       'Farms fail when owners expand livestock before securing 6 months of feed and operating reserves. ExBOS forecasts feed run-out dates, separates breeding from trading profit, and tells you if your farm can survive 6 months without sales.',
     navigation: {
       Overview: ['Dashboard', 'Where Is My Money', 'Survival Runway & AI Advice'],
-      Livestock: ['Animal Register', 'Feed Management', 'Breeding & Births', 'Health & Vet Care', 'Trade vs Breed Profit'],
+      Livestock: ['Animal Register', 'Feed Management', 'Breeding & Births', 'Health & Vet Care', 'Daily Production', 'Trade vs Breed Profit'],
       'Crops & Fields': ['Field Plots', 'Crop Cycles', 'Harvest Records'],
       'Farm Inventory': ['Farm Inputs', 'Harvested Stock', 'Low Stock Alerts'],
       Sales: ['Farm Sales', 'Sales Trends'],
