@@ -223,8 +223,8 @@ export default function JobsAndBookingsWorkspace({
 
       {/* VIEW 1: KANBAN PIPELINE BOARD */}
       {viewMode === 'pipeline' && (
-        <div className={`grid gap-4 items-start ${
-          displayColumns.length === 1 ? 'grid-cols-1 max-w-xl' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+        <div className={`flex gap-4 items-start overflow-x-auto pb-4 custom-scrollbar ${
+          displayColumns.length === 1 ? 'max-w-xl' : 'w-full'
         }`}>
           {displayColumns.map((col) => {
             const colJobs = filteredJobs.filter((j) => j.status === col.id)
@@ -233,7 +233,7 @@ export default function JobsAndBookingsWorkspace({
             return (
               <div
                 key={col.id}
-                className="rounded-2xl border border-white/10 bg-[#071330]/60 p-3 flex flex-col min-h-[500px] shadow-lg backdrop-blur-sm"
+                className="flex-1 min-w-[270px] sm:min-w-[290px] max-w-[360px] shrink-0 rounded-2xl border border-white/10 bg-[#071330]/60 p-3.5 flex flex-col min-h-[500px] shadow-lg backdrop-blur-sm"
               >
                 {/* Column Header */}
                 <div className={`p-2.5 rounded-xl ${col.headerBg} border border-white/10 flex items-center justify-between mb-3`}>
@@ -275,7 +275,7 @@ export default function JobsAndBookingsWorkspace({
                           <div className="font-semibold text-sm text-white truncate">
                             {job.customerName}
                           </div>
-                          <div className="text-xs text-sky-200/90 font-medium truncate mt-0.5">
+                          <div className="text-xs text-sky-200/90 font-medium line-clamp-1 mt-0.5">
                             {job.serviceName}
                           </div>
                         </div>
@@ -288,34 +288,36 @@ export default function JobsAndBookingsWorkspace({
                         )}
 
                         {/* Staff & Payment Info */}
-                        <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[11px]">
-                          <div className="text-slate-400 truncate max-w-[120px]">
+                        <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2 text-[11px]">
+                          <div className="text-slate-400 min-w-0 flex-1 truncate">
                             <span className="text-slate-500">Tech:</span> {job.staffName}
                           </div>
-                          <div className="font-mono font-bold text-white text-right">
+                          <div className="font-mono font-bold text-white shrink-0 text-right">
                             {(Number(job.priceRWF) || 0).toLocaleString()} RWF
                           </div>
                         </div>
 
                         {/* Balance due badge */}
-                        <div className="flex items-center justify-between text-[10px] pt-1">
-                          {Number(job.balanceDueRWF || 0) > 0 ? (
-                            <span className="text-amber-300 font-medium">
-                              Due: {(Number(job.balanceDueRWF) || 0).toLocaleString()} RWF
-                            </span>
-                          ) : (
-                            <span className="text-emerald-300 font-semibold flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>Paid in Full</span>
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between gap-2 text-[10px] pt-1">
+                          <div className="min-w-0 truncate">
+                            {Number(job.balanceDueRWF || 0) > 0 ? (
+                              <span className="text-amber-300 font-medium truncate block">
+                                Due: {(Number(job.balanceDueRWF) || 0).toLocaleString()} RWF
+                              </span>
+                            ) : (
+                              <span className="text-emerald-300 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>Paid in Full</span>
+                              </span>
+                            )}
+                          </div>
 
                           {/* Action Buttons */}
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               type="button"
                               onClick={() => { setEditingJob(job); setBookingModalOpen(true); }}
-                              className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10"
+                              className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
                               title="Edit"
                             >
                               <Edit2 className="w-3 h-3" />
@@ -323,7 +325,7 @@ export default function JobsAndBookingsWorkspace({
                             <button
                               type="button"
                               onClick={() => setDeleteModalState({ isOpen: true, job })}
-                              className="p-1 rounded text-rose-400 hover:bg-rose-500/20"
+                              className="p-1 rounded text-rose-400 hover:bg-rose-500/20 transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-3 h-3" />

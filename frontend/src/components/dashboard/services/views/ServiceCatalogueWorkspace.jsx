@@ -200,8 +200,8 @@ export default function ServiceCatalogueWorkspace({
 
           {/* Services Table */}
           <div className="rounded-2xl border border-white/10 bg-[#071330]/80 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[760px]">
                 <thead className="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-sky-300 uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Service Offering</th>
@@ -322,8 +322,8 @@ export default function ServiceCatalogueWorkspace({
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-[#071330]/80 overflow-hidden shadow-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left text-xs text-slate-300 min-w-[760px]">
                 <thead className="bg-white/5 border-b border-white/10 text-[11px] font-semibold text-sky-300 uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Supply Material</th>
