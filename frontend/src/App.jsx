@@ -20,7 +20,7 @@ import {
 export default function App() {
   return (
     <ExbosProvider>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Public Marketing & SEO Routes (Section 4 SEO Page Architecture) */}
           <Route path="/" element={<LandingPage />} />
