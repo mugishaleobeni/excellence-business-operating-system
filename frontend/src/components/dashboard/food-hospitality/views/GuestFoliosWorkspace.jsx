@@ -76,9 +76,9 @@ export default function GuestFoliosWorkspace() {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-amber-950/60 via-[#1a1206]/80 to-yellow-950/60 border border-amber-400/30 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-white/[0.03] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30">
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
             Pillar 07 · Consolidated Guest Invoicing
           </span>
           <h1 className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">

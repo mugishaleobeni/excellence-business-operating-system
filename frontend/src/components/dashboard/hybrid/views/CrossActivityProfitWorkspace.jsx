@@ -91,18 +91,18 @@ export default function CrossActivityProfitWorkspace() {
   return (
     <div className="space-y-5">
       {/* Workspace Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800 p-4 rounded-xl backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
         <div>
           <h2 className="text-base font-bold text-white flex items-center gap-2">
             <PieChart className="w-5 h-5 text-indigo-400" />
             Cross-Activity Profitability Matrix
           </h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-400 mt-0.5">
             Compare gross revenue, direct costs, and margins between physical goods and service labor.
           </p>
         </div>
         {!matrixData.hasLiveSales && (
-          <div className="flex items-center gap-1.5 text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 px-3 py-1.5 rounded-lg">
+          <div className="flex items-center gap-1.5 text-xs text-indigo-300 bg-indigo-500/15 px-3 py-1.5 rounded-xl">
             <Info className="w-4 h-4 text-indigo-400" />
             <span>Showing Preset Baseline Matrix</span>
           </div>
@@ -111,7 +111,7 @@ export default function CrossActivityProfitWorkspace() {
 
       {/* Top 3 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3.5">
+        <div className="bg-white/[0.03] rounded-2xl p-4">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
             <span>Combined Enterprise Revenue</span>
             <DollarSign className="w-4 h-4 text-indigo-400" />
@@ -122,7 +122,7 @@ export default function CrossActivityProfitWorkspace() {
           <div className="text-[11px] text-slate-400 mt-1">Multi-stream aggregate</div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3.5">
+        <div className="bg-white/[0.03] rounded-2xl p-4">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
             <span>Enterprise Gross Profit</span>
             <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -133,7 +133,7 @@ export default function CrossActivityProfitWorkspace() {
           <div className="text-[11px] text-emerald-300/80 mt-1">Total value creation</div>
         </div>
 
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-3.5">
+        <div className="bg-white/[0.03] rounded-2xl p-4">
           <div className="flex items-center justify-between text-slate-400 text-xs mb-1">
             <span>Blended Enterprise Margin</span>
             <ArrowUpRight className="w-4 h-4 text-purple-400" />
@@ -145,12 +145,12 @@ export default function CrossActivityProfitWorkspace() {
 
       {/* Cross-Activity Revenue Distribution Bar */}
       {matrixData.totalRev > 0 && (
-        <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="bg-white/[0.03] rounded-2xl p-4 space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-semibold text-white">Revenue Contribution Share</span>
             <span className="text-slate-400">100% of Total Revenue</span>
           </div>
-          <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden flex">
+          <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden flex">
             {matrixData.streams.map((s) => {
               const pct = (s.revenue / matrixData.totalRev) * 100
               if (pct === 0) return null
@@ -188,8 +188,8 @@ export default function CrossActivityProfitWorkspace() {
       )}
 
       {/* Comparative Matrix Table */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-        <div className="p-3.5 border-b border-slate-800">
+      <div className="bg-white/[0.02] rounded-2xl overflow-hidden shadow-xl">
+        <div className="p-3.5 border-b border-white/5">
           <div className="text-xs font-semibold text-white">
             Activity Stream Profit Breakdown
           </div>
@@ -197,7 +197,7 @@ export default function CrossActivityProfitWorkspace() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-white/[0.04] text-slate-400 border-b border-white/5 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-4 py-3">Activity Stream</th>
                 <th className="px-4 py-3 text-right">Revenue (RWF)</th>
@@ -207,7 +207,7 @@ export default function CrossActivityProfitWorkspace() {
                 <th className="px-4 py-3 text-center">Business Role</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
+            <tbody className="divide-y divide-white/5">
               {matrixData.streams.map((s) => {
                 const Icon = s.icon
                 const isZero = s.revenue === 0
@@ -295,7 +295,7 @@ export default function CrossActivityProfitWorkspace() {
                 )
               })}
             </tbody>
-            <tfoot className="bg-slate-900/90 font-bold text-white border-t border-slate-700">
+            <tfoot className="bg-white/[0.04] font-bold text-white border-t border-white/10">
               <tr>
                 <td className="px-4 py-3">Total Consolidated</td>
                 <td className="px-4 py-3 text-right">
@@ -320,7 +320,7 @@ export default function CrossActivityProfitWorkspace() {
       </div>
 
       {/* Strategic Synergy Callout */}
-      <div className="bg-gradient-to-r from-purple-950/30 via-slate-900 to-indigo-950/30 border border-purple-900/40 rounded-xl p-4 flex items-start gap-3">
+      <div className="bg-white/[0.03] rounded-2xl p-4 flex items-start gap-3">
         <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
         <div className="text-xs space-y-1">
           <div className="font-semibold text-white">Hybrid Cross-Subsidization Advantage</div>

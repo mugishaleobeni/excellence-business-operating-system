@@ -49,8 +49,8 @@ export default function ActivityToggleSettings({
   onToggleActivity = () => {}
 }) {
   return (
-    <div className="p-5 sm:p-6 rounded-3xl border border-white/10 bg-[#061019]/80 space-y-4 shadow-xl">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+    <div className="p-5 sm:p-6 rounded-3xl bg-[#061019]/80 space-y-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
         <div>
           <span className="text-[10px] font-mono text-cyan-300 uppercase tracking-wider block">
             Pillar 01 · Modular Business Architecture
@@ -72,17 +72,17 @@ export default function ActivityToggleSettings({
           return (
             <div
               key={act.key}
-              className={`p-4 rounded-2xl border transition-all flex items-start justify-between gap-3 ${
+              className={`p-4 rounded-2xl transition-all flex items-start justify-between gap-3 ${
                 isEnabled
-                  ? 'bg-cyan-950/20 border-cyan-400/50 shadow-md'
-                  : 'bg-white/[0.02] border-white/10 opacity-70'
+                  ? 'bg-cyan-950/30 shadow-md'
+                  : 'bg-white/[0.02] opacity-70'
               }`}
             >
               <div className="flex items-start gap-3">
                 <div
                   className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
                     isEnabled
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/30'
+                      ? 'bg-cyan-500/20 text-cyan-300'
                       : 'bg-white/10 text-slate-400'
                   }`}
                 >
@@ -106,10 +106,10 @@ export default function ActivityToggleSettings({
               <button
                 type="button"
                 onClick={() => onToggleActivity(act.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                   isEnabled
-                    ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-sm'
-                    : 'bg-white/5 text-slate-300 border-white/10 hover:bg-white/10'
+                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
                 }`}
               >
                 {isEnabled ? 'Enabled' : 'Disabled'}

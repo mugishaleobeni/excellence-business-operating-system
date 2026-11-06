@@ -14,14 +14,25 @@ import {
 import { useExbos } from '../../../../context/ExbosContext'
 import CheckInGuestModal from '../modals/CheckInGuestModal'
 
-export default function RoomsLodgingWorkspace() {
+export default function RoomsLodgingWorkspace({ activePage = 'Rooms Register' }) {
   const { demoWorkspaces, addDemoRecord, updateDemoRecord, addTransaction } = useExbos()
   const archData = demoWorkspaces['food-and-hospitality'] || {}
   const roomsList = archData.records?.Rooms || []
   const foliosList = archData.records?.GuestFolios || []
 
+  const isReservationsView = activePage === 'Reservations & Check-In'
+
   const [modalOpen, setModalOpen] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState(() => (isReservationsView ? 'Reserved' : 'All'))
+
+  // Keep filter in sync if activePage switches
+  React.useEffect(() => {
+    if (isReservationsView) {
+      setStatusFilter('Reserved')
+    } else {
+      setStatusFilter('All')
+    }
+  }, [isReservationsView])
 
   const totalRooms = roomsList.length
   const occupiedCount = roomsList.filter((r) => r.status === 'Occupied').length
@@ -93,16 +104,18 @@ export default function RoomsLodgingWorkspace() {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-sky-950/60 via-[#071622]/80 to-blue-950/60 border border-sky-400/30 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-white/[0.03] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30">
-            Pillar 05 · Accommodation &amp; Housekeeping
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300">
+            {isReservationsView ? 'Reservations & Check-In' : 'Pillar 05 · Accommodation & Housekeeping'}
           </span>
           <h1 className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">
-            Guest Rooms Directory &amp; Occupancy
+            {isReservationsView ? 'Reservations, Arrivals & Check-In' : 'Guest Rooms Directory & Occupancy'}
           </h1>
           <p className="text-xs text-slate-300 mt-0.5">
-            {occupiedCount} Occupied · {availableCount} Clean &amp; Ready · {cleaningCount} Cleaning Turnaround
+            {isReservationsView
+              ? `${reservedCount} Reserved · ${occupiedCount} Currently Staying · Direct check-in & key issuance`
+              : `${occupiedCount} Occupied · ${availableCount} Clean & Ready · ${cleaningCount} Cleaning Turnaround`}
           </p>
         </div>
 

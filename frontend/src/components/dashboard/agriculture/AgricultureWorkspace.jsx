@@ -9,6 +9,8 @@ import FarmHealthWorkspace from './views/FarmHealthWorkspace'
 import FarmProductionWorkspace from './views/FarmProductionWorkspace'
 import TrueProfitWorkspace from './views/TrueProfitWorkspace'
 import OptionalSurvivalWorkspace from './views/OptionalSurvivalWorkspace'
+import SalesTrendsView from '../views/SalesTrendsView'
+import { formatRWF } from '../../../utils/currencyWords'
 
 export default function AgricultureWorkspace({
   activeModule = 'Livestock',
@@ -59,12 +61,14 @@ export default function AgricultureWorkspace({
     activePage === 'Harvest Records' ||
     activePage === 'Daily Collection' ||
     activeModule === 'Farm Inventory'
+  const isSalesTrendsView = activePage === 'Sales Trends'
   const isProfitView =
     activePage === 'Trade vs Breed Profit' ||
     activePage === 'Farm Sales' ||
     activePage === 'Farm Sales & Profit' ||
+    activePage === 'Livestock Sales & Profit' ||
     activePage === 'Livestock Sales' ||
-    activeModule === 'Sales'
+    (activeModule === 'Sales' && !isSalesTrendsView)
   const isSurvivalView =
     activePage === 'Survival Runway & AI Advice' ||
     activePage === 'Survival Period Settings' ||
@@ -91,6 +95,12 @@ export default function AgricultureWorkspace({
         <FarmHealthWorkspace />
       ) : isProductionView ? (
         <FarmProductionWorkspace />
+      ) : isSalesTrendsView ? (
+        <SalesTrendsView
+          records={records['Sales'] || []}
+          hideFinancials={hideFinancials}
+          formatRWF={formatRWF}
+        />
       ) : isProfitView ? (
         <TrueProfitWorkspace />
       ) : isSurvivalView ? (

@@ -1524,12 +1524,15 @@ export default function InteractiveModulePanel({
     activeArchId === 'hybrid' &&
     (activeModule === 'Products & Stock' ||
      activeModule === 'Services & Jobs' ||
+     activeModule === 'Sales' ||
      activePage === 'Activity Summary' ||
      activePage === 'All Products' ||
      activePage === 'Track Stock (On/Off)' ||
      activePage === 'Low Stock Alerts' ||
      activePage === 'Service Catalogue' ||
-     activePage === 'Job Schedule')
+     activePage === 'Job Schedule' ||
+     activePage === 'All Sales' ||
+     activePage === 'Sales Trends')
   ) {
     return (
       <HybridWorkspace

@@ -32,9 +32,9 @@ export default function HybridWorkspace({
 
   // Determine initial tab from sidebar navigation
   const getTabFromProps = (mod, pg) => {
-    if (mod === 'Services & Jobs' || pg === 'Service Catalogue') return 'services'
-    if (mod === 'Sales' || pg === 'All Sales') return 'sales'
-    if (pg === 'Activity Summary' || pg === 'Where Is My Money') return 'profit'
+    if (mod === 'Services & Jobs' || pg === 'Service Catalogue' || pg === 'Job Schedule') return 'services'
+    if (mod === 'Sales' || pg === 'All Sales' || pg === 'Sales Trends') return 'sales'
+    if (pg === 'Activity Summary' || pg === 'Where Is My Money' || pg === 'Cross-Activity Profit Matrix') return 'profit'
     return 'catalog'
   }
 
@@ -60,7 +60,7 @@ export default function HybridWorkspace({
   return (
     <div className="space-y-6">
       {/* Top Banner & Preset Selector */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-900/40 p-4 md:p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white/[0.03] p-4 md:p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 mb-1.5 flex-wrap">
             <ActiveHybridTradeBadge />
@@ -78,7 +78,7 @@ export default function HybridWorkspace({
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => setShowActivityConfig(!showActivityConfig)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold transition"
           >
             <Sliders className="w-3.5 h-3.5 text-indigo-400" />
             <span>Activity Switches</span>
@@ -91,14 +91,14 @@ export default function HybridWorkspace({
 
           <button
             onClick={() => setIsTradeModalOpen(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/40 text-xs font-semibold transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/35 text-indigo-200 text-xs font-semibold transition"
           >
             Switch Preset
           </button>
 
           <button
             onClick={() => setIsRecordSaleOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-lg shadow-emerald-900/30 transition"
           >
             <Plus className="w-3.5 h-3.5" /> Record Mixed Sale
           </button>
@@ -116,7 +116,7 @@ export default function HybridWorkspace({
       <HybridKpiCards />
 
       {/* Subnavigation Bar */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-2 pb-2 overflow-x-auto">
         {navTabs.map((tab) => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -145,10 +145,34 @@ export default function HybridWorkspace({
 
       {/* Sub-Workspace Views */}
       <div className="pt-1">
-        {activeTab === 'catalog' && <HybridCatalogWorkspace />}
-        {activeTab === 'services' && <HybridServicesWorkspace />}
-        {activeTab === 'sales' && <MixedSalesDrawerWorkspace />}
-        {activeTab === 'profit' && <CrossActivityProfitWorkspace />}
+        {activeTab === 'catalog' && (
+          <HybridCatalogWorkspace
+            activeModule={activeModule}
+            activePage={activePage}
+            onSwitchPage={onSwitchPage}
+          />
+        )}
+        {activeTab === 'services' && (
+          <HybridServicesWorkspace
+            activeModule={activeModule}
+            activePage={activePage}
+            onSwitchPage={onSwitchPage}
+          />
+        )}
+        {activeTab === 'sales' && (
+          <MixedSalesDrawerWorkspace
+            activeModule={activeModule}
+            activePage={activePage}
+            onSwitchPage={onSwitchPage}
+          />
+        )}
+        {activeTab === 'profit' && (
+          <CrossActivityProfitWorkspace
+            activeModule={activeModule}
+            activePage={activePage}
+            onSwitchPage={onSwitchPage}
+          />
+        )}
       </div>
 
       {/* Modals */}

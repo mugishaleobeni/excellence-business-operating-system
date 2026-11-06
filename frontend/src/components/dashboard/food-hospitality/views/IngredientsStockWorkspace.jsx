@@ -14,11 +14,13 @@ import { useExbos } from '../../../../context/ExbosContext'
 import LogKitchenWasteModal from '../modals/LogKitchenWasteModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
-export default function IngredientsStockWorkspace() {
+export default function IngredientsStockWorkspace({ activePage = 'Kitchen Ingredients' }) {
   const { demoWorkspaces, addDemoRecord, deleteDemoRecord } = useExbos()
   const archData = demoWorkspaces['food-and-hospitality'] || {}
   const ingredientsList = archData.records?.Ingredients || []
   const wasteList = archData.records?.WasteLogs || []
+
+  const isWasteView = activePage === 'Low Stock & Waste'
 
   const [wasteModalOpen, setWasteModalOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -31,6 +33,10 @@ export default function IngredientsStockWorkspace() {
   const lowStockCount = ingredientsList.filter(
     (ing) => (Number(ing.currentStock) || 0) <= (Number(ing.reorderLevel) || 5)
   ).length
+
+  const displayIngredients = isWasteView
+    ? ingredientsList.filter((ing) => (Number(ing.currentStock) || 0) <= (Number(ing.reorderLevel) || 5))
+    : ingredientsList
 
   const handleSaveWaste = (wasteData) => {
     addDemoRecord('food-and-hospitality', 'WasteLogs', wasteData)
@@ -47,16 +53,18 @@ export default function IngredientsStockWorkspace() {
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-950/60 via-[#071d18]/80 to-teal-950/60 border border-emerald-400/30 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-5 rounded-3xl bg-white/[0.03] shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-            Pillar 03 &amp; 04 · Kitchen Inventory &amp; Waste
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+            {isWasteView ? 'Kitchen Spoilage & Low Stock' : 'Pillar 03 & 04 · Kitchen Inventory'}
           </span>
           <h1 className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">
-            Kitchen Ingredients &amp; Spoilage Ledger
+            {isWasteView ? 'Kitchen Spoilage Ledger & Low Stock Reorders' : 'Kitchen Ingredients & Pantry Inventory'}
           </h1>
           <p className="text-xs text-slate-300 mt-0.5">
-            Auto-deducted ingredient stock paired with a zero-tolerance kitchen waste tracking ledger
+            {isWasteView
+              ? 'Zero-tolerance waste tracking ledger paired with automated low-stock reorder thresholds'
+              : 'Auto-deducted ingredient stock paired with a zero-tolerance kitchen waste tracking ledger'}
           </p>
         </div>
 
@@ -107,7 +115,11 @@ export default function IngredientsStockWorkspace() {
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
             <Package className="w-3.5 h-3.5" />
-            <span>Kitchen Ingredients Stock ({ingredientsList.length})</span>
+            <span>
+              {isWasteView
+                ? `Critical Low-Stock Ingredients (${displayIngredients.length})`
+                : `Kitchen Ingredients Stock (${displayIngredients.length})`}
+            </span>
           </h3>
         </div>
 
@@ -125,14 +137,16 @@ export default function IngredientsStockWorkspace() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {ingredientsList.length === 0 ? (
+                {displayIngredients.length === 0 ? (
                   <tr>
                     <td colSpan="6" className="py-6 text-center text-slate-400">
-                      No ingredients tracked yet. Create menu dishes to register recipe ingredients.
+                      {isWasteView
+                        ? 'No low stock ingredients! All kitchen inventory is healthy.'
+                        : 'No ingredients tracked yet. Create menu dishes to register recipe ingredients.'}
                     </td>
                   </tr>
                 ) : (
-                  ingredientsList.map((ing) => {
+                  displayIngredients.map((ing) => {
                     const isLow = (Number(ing.currentStock) || 0) <= (Number(ing.reorderLevel) || 5)
                     const val = (Number(ing.currentStock) || 0) * (Number(ing.unitCostRWF) || 0)
                     return (

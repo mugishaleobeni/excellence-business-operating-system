@@ -78,8 +78,14 @@ export default function AnimalActivityTimeline({
   }
 
   const modalNode = (
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
-      <div className="relative w-full max-w-xl max-h-[88vh] flex flex-col rounded-3xl border border-emerald-400/40 bg-[#061814] text-white shadow-2xl overflow-hidden my-auto">
+    <div
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-xl max-h-[88vh] flex flex-col rounded-3xl border border-emerald-400/40 bg-[#061814] text-white shadow-2xl overflow-hidden my-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#072019] shrink-0">
           <div>
@@ -91,7 +97,7 @@ export default function AnimalActivityTimeline({
                 {animal.name}
               </h2>
             </div>
-            <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5">
+            <p className="text-xs text-slate-300 mt-1 flex items-center gap-1.5 flex-wrap">
               <span>{animal.breed || animal.type}</span>
               <span className="text-white/30">·</span>
               <span>{animal.sex || 'Unknown'}</span>
@@ -113,17 +119,17 @@ export default function AnimalActivityTimeline({
 
         {/* Growth Stats Ribbon */}
         <div className="grid grid-cols-3 gap-2.5 p-4 bg-black/40 border-b border-white/10 text-center shrink-0">
-          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
-            <span className="text-[10px] text-slate-400 block uppercase font-medium">Starting Weight</span>
-            <span className="text-sm sm:text-base font-bold font-mono text-white mt-0.5 block">{startWeight} kg</span>
+          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center">
+            <span className="text-[10px] text-slate-400 uppercase font-medium truncate">Starting Weight</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-white mt-0.5">{startWeight} kg</span>
           </div>
-          <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-400/40">
-            <span className="text-[10px] text-emerald-300 block uppercase font-medium">Current Weight</span>
-            <span className="text-sm sm:text-base font-bold font-mono text-emerald-300 mt-0.5 block">{currentWeight} kg</span>
+          <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-400/40 flex flex-col justify-center">
+            <span className="text-[10px] text-emerald-300 uppercase font-medium truncate">Current Weight</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-emerald-300 mt-0.5">{currentWeight} kg</span>
           </div>
-          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
-            <span className="text-[10px] text-slate-400 block uppercase font-medium">Weight Gained</span>
-            <span className="text-sm sm:text-base font-bold font-mono text-sky-300 mt-0.5 block">+{weightGained} kg</span>
+          <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 flex flex-col justify-center">
+            <span className="text-[10px] text-slate-400 uppercase font-medium truncate">Weight Gained</span>
+            <span className="text-sm sm:text-base font-bold font-mono text-sky-300 mt-0.5">+{weightGained} kg</span>
           </div>
         </div>
 

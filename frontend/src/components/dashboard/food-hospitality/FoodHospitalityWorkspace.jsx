@@ -56,14 +56,13 @@ export default function FoodHospitalityWorkspace({
   const isTablesView =
     activePage === 'Tables & Bills' ||
     activePage === 'Dining Tables'
-  const isRoomsView =
-    activePage === 'Rooms Register' ||
-    activePage === 'Reservations & Check-In' ||
-    activePage === 'Rooms & Lodging' ||
-    activeModule === 'Rooms & Lodging'
   const isFoliosView =
     activePage === 'Guest Folios' ||
     activePage === 'Folios & Billing'
+  const isRoomsView =
+    activePage === 'Rooms Register' ||
+    activePage === 'Reservations & Check-In' ||
+    (activeModule === 'Rooms & Lodging' && !isFoliosView)
   const isStockView =
     activePage === 'Kitchen Ingredients' ||
     activePage === 'Ingredients & Stock' ||
@@ -102,12 +101,12 @@ export default function FoodHospitalityWorkspace({
         <KitchenQueueWorkspace />
       ) : isTablesView ? (
         <DiningTablesWorkspace />
-      ) : isRoomsView ? (
-        <RoomsLodgingWorkspace />
       ) : isFoliosView ? (
         <GuestFoliosWorkspace />
+      ) : isRoomsView ? (
+        <RoomsLodgingWorkspace activePage={activePage} />
       ) : isStockView ? (
-        <IngredientsStockWorkspace />
+        <IngredientsStockWorkspace activePage={activePage} />
       ) : isProfitView ? (
         <HospitalityProfitWorkspace />
       ) : (

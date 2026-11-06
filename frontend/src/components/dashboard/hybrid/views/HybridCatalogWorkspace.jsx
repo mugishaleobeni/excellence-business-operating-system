@@ -18,7 +18,11 @@ import { useExbos } from '../../../../context/ExbosContext'
 import AddHybridItemModal from '../modals/AddHybridItemModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
-export default function HybridCatalogWorkspace() {
+export default function HybridCatalogWorkspace({
+  activeModule = 'Products & Stock',
+  activePage = 'All Products',
+  onSwitchPage = () => {}
+}) {
   const { demoWorkspaces, updateDemoRecord, deleteDemoRecord } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const catalog = hybridWorkspace.records?.HybridItems || []
@@ -28,9 +32,21 @@ export default function HybridCatalogWorkspace() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
+  const isLowStockView = activePage === 'Low Stock Alerts'
+  const isTrackStockView = activePage === 'Track Stock (On/Off)'
+
   // Filter items
   const filteredItems = useMemo(() => {
     return catalog.filter((item) => {
+      // If Low Stock Alerts, strictly show only items needing reorder
+      if (isLowStockView) {
+        const isBelow =
+          item.trackStock &&
+          typeof item.currentStock === 'number' &&
+          item.currentStock <= (Number(item.reorderLevel) || 3)
+        if (!isBelow) return false
+      }
+
       const matchesActivity = activityFilter === 'all' || item.activity === activityFilter
       const query = searchQuery.toLowerCase().trim()
       const matchesSearch =
@@ -40,7 +56,7 @@ export default function HybridCatalogWorkspace() {
         item.id?.toLowerCase().includes(query)
       return matchesActivity && matchesSearch
     })
-  }, [catalog, activityFilter, searchQuery])
+  }, [catalog, activityFilter, searchQuery, isLowStockView])
 
   // Toggle stock tracking on/off
   const handleToggleStock = (item) => {
@@ -86,23 +102,60 @@ export default function HybridCatalogWorkspace() {
   return (
     <div className="space-y-5">
       {/* Workspace Sub-header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 border border-slate-800 p-4 rounded-xl backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-1">
         <div>
           <h2 className="text-base font-bold text-white flex items-center gap-2">
             <Package className="w-5 h-5 text-indigo-400" />
-            Unified Catalog & Selective Stock Matrix
+            {isLowStockView
+              ? 'Low Stock Inventory Alerts'
+              : isTrackStockView
+              ? 'Selective Stock Tracking Switch (On / Off)'
+              : 'Unified Catalog & Selective Stock Matrix'}
           </h2>
-          <p className="text-xs text-slate-400">
-            Configure stock tracking independently: track physical inventory while keeping billable services barrier-free.
+          <p className="text-xs text-slate-400 mt-0.5">
+            {isLowStockView
+              ? 'Showing physical goods that have fallen below reorder threshold. Replenish immediately.'
+              : isTrackStockView
+              ? 'Configure which catalog items decrement inventory upon checkout vs unlimited billable labor.'
+              : 'Configure stock tracking independently: track physical inventory while keeping billable services barrier-free.'}
           </p>
         </div>
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-lg shadow-lg shadow-indigo-900/30 transition shrink-0"
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-900/30 transition shrink-0"
         >
           <Plus className="w-4 h-4" /> Add Item or Service
         </button>
       </div>
+
+      {/* Subpage Alert / Info Banners */}
+      {isLowStockView && (
+        <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 text-rose-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+            <span>
+              <strong>Low Stock Alert:</strong> {filteredItems.length} tracked items require purchase reordering before sales checkout is blocked.
+            </span>
+          </div>
+          {onSwitchPage && (
+            <button
+              onClick={() => onSwitchPage('Products & Stock', 'All Products')}
+              className="text-xs text-rose-300 hover:text-white underline font-medium shrink-0"
+            >
+              View Full Catalog
+            </button>
+          )}
+        </div>
+      )}
+
+      {isTrackStockView && (
+        <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center gap-2 text-xs text-indigo-300">
+          <Layers className="w-4 h-4 shrink-0 text-indigo-400" />
+          <span>
+            <strong>Selective Stock Control:</strong> Click the toggle switch in the <em>Stock Tracking Switch</em> column to enable inventory auto-deduction for physical goods or disable it for billable services.
+          </span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
@@ -117,10 +170,10 @@ export default function HybridCatalogWorkspace() {
             <button
               key={tab.id}
               onClick={() => setActivityFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition shrink-0 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition shrink-0 ${
                 activityFilter === tab.id
                   ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700/80'
+                  : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
               }`}
             >
               {tab.label}
@@ -135,16 +188,16 @@ export default function HybridCatalogWorkspace() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search items, services, codes..."
-            className="w-full bg-slate-900/80 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-white/5 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       </div>
 
       {/* Catalog Table */}
-      <div className="bg-slate-900/40 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+      <div className="bg-white/[0.02] rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-800 font-semibold uppercase tracking-wider text-[11px]">
+            <thead className="bg-white/[0.04] text-slate-400 border-b border-white/5 font-semibold uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="px-4 py-3">Item / Service Details</th>
                 <th className="px-4 py-3">Activity Stream</th>
@@ -156,7 +209,7 @@ export default function HybridCatalogWorkspace() {
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80">
+            <tbody className="divide-y divide-white/5">
               {filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="px-4 py-10 text-center text-slate-500">
@@ -235,14 +288,14 @@ export default function HybridCatalogWorkspace() {
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => handleQuickStockAdjust(item, -1)}
-                              className="w-5 h-5 rounded bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold text-xs"
+                              className="w-5 h-5 rounded-md bg-white/10 text-slate-300 hover:text-white flex items-center justify-center font-bold text-xs transition"
                             >
                               -
                             </button>
                             <span
                               className={`font-bold px-2 py-0.5 rounded text-xs ${
                                 isLowStock
-                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                                  ? 'bg-rose-500/20 text-rose-300'
                                   : 'text-white'
                               }`}
                             >
@@ -250,7 +303,7 @@ export default function HybridCatalogWorkspace() {
                             </span>
                             <button
                               onClick={() => handleQuickStockAdjust(item, 1)}
-                              className="w-5 h-5 rounded bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center font-bold text-xs"
+                              className="w-5 h-5 rounded-md bg-white/10 text-slate-300 hover:text-white flex items-center justify-center font-bold text-xs transition"
                             >
                               +
                             </button>

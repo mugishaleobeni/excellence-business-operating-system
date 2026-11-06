@@ -162,23 +162,23 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-[#0f172a] border border-slate-700/80 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden my-6">
+      <div className="bg-[#071644] border border-white/10 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden my-6">
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-900/60">
+        <div className="flex items-center justify-between p-5 border-b border-white/10 bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/30 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
               <ShoppingCart className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Record Mixed Sale Checkout</h2>
               <p className="text-xs text-slate-400">
-                Single bill combining retail products, service labor & dining items
+                Single bill combining retail products, service labor &amp; dining items
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition"
           >
             <X className="w-5 h-5" />
           </button>
@@ -196,7 +196,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 placeholder="e.g. Jean Damascene"
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -208,7 +208,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="+250 788 123 456"
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
@@ -218,7 +218,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full bg-slate-800/90 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500"
               >
                 <option value="MTN MoMo Business">MTN MoMo Business</option>
                 <option value="Airtel Money">Airtel Money</option>
@@ -230,12 +230,12 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
           </div>
 
           {/* Add Item to Cart Line */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3.5 space-y-3">
+          <div className="bg-white/[0.03] rounded-2xl p-4 space-y-3">
             <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-indigo-400" /> Add Item / Service to Bill
               </span>
-              <span className="text-[11px] text-slate-500 font-normal">
+              <span className="text-[11px] text-slate-400 font-normal">
                 Selective stock auto-deducts only physical goods
               </span>
             </div>
@@ -249,7 +249,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                     const it = catalog.find((c) => c.id === e.target.value)
                     if (it) setCustomPrice(it.sellingPriceRWF || '')
                   }}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 >
                   <option value="">Select item, service, or food...</option>
                   {catalog.map((item) => (
@@ -268,7 +268,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                   value={selectedQty}
                   onChange={(e) => setSelectedQty(Math.max(1, parseInt(e.target.value) || 1))}
                   placeholder="Qty"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white text-center focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white text-center focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -278,7 +278,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                   value={customPrice}
                   onChange={(e) => setCustomPrice(e.target.value)}
                   placeholder="Price RWF"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-white text-right focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white text-right focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -287,7 +287,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                   type="button"
                   onClick={handleAddToCart}
                   disabled={!selectedItemId}
-                  className="w-full h-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1 transition"
+                  className="w-full h-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1 transition"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add
                 </button>
@@ -296,8 +296,8 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
           </div>
 
           {/* Cart Table */}
-          <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-900/40">
-            <div className="px-4 py-2.5 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between">
+          <div className="rounded-2xl overflow-hidden bg-white/[0.02]">
+            <div className="px-4 py-2.5 bg-white/[0.03] border-b border-white/5 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-300">
                 Cart Items ({cartItems.length})
               </span>
@@ -310,13 +310,13 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                 No items added to this bill yet. Select an item or service above.
               </div>
             ) : (
-              <div className="divide-y divide-slate-800 max-h-56 overflow-y-auto">
+              <div className="divide-y divide-white/5 max-h-56 overflow-y-auto">
                 {cartItems.map((item, idx) => (
                   <div key={idx} className="p-3 flex items-center justify-between text-xs gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${getActivityBadgeColor(
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${getActivityBadgeColor(
                             item.activity
                           )}`}
                         >
@@ -344,7 +344,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
                         min="1"
                         value={item.quantity}
                         onChange={(e) => handleUpdateQty(idx, e.target.value)}
-                        className="w-14 bg-slate-800 border border-slate-700 rounded px-1.5 py-1 text-xs text-center text-white focus:outline-none focus:border-indigo-500"
+                        className="w-14 bg-white/5 border border-white/10 rounded px-1.5 py-1 text-xs text-center text-white focus:outline-none focus:border-indigo-500"
                       />
                       <span className="font-bold text-white min-w-[70px] text-right">
                         {Number(item.lineTotal).toLocaleString()} RWF
@@ -365,7 +365,7 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
 
           {/* Totals Summary */}
           {cartItems.length > 0 && (
-            <div className="bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border border-indigo-900/40 rounded-xl p-3.5 flex items-center justify-between">
+            <div className="bg-white/[0.04] rounded-2xl p-4 flex items-center justify-between">
               <div>
                 <div className="text-[11px] text-slate-400">Total Bill Amount</div>
                 <div className="text-xl font-bold text-white">
