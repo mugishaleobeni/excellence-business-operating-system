@@ -88,7 +88,7 @@ export default function DashboardTopNav({
             <button
               type="button"
               onClick={() => setNotifOpen(!notifOpen)}
-              className="p-1.5 sm:p-2 rounded-xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:bg-white/20 cursor-pointer relative"
+              className="p-1.5 sm:p-2 rounded-xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:bg-white/20 active:scale-95 transition-all duration-150 cursor-pointer relative"
               title="Business & Platform Alerts"
             >
               <Bell className="w-4 h-4" />
@@ -199,7 +199,7 @@ export default function DashboardTopNav({
               navigate('/login')
             }}
             title={user ? `Sign Out (${user.name || user.email})` : 'Sign Out / Switch User'}
-            className="px-2.5 py-1.5 sm:py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 cursor-pointer flex items-center gap-1.5 transition-all shadow-sm"
+            className="px-2.5 py-1.5 sm:py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-[0.98] text-rose-300 border border-rose-500/30 cursor-pointer flex items-center gap-1.5 transition-all duration-150 shadow-sm"
           >
             <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-400" />
             <span className="text-xs font-semibold">Sign Out</span>
@@ -209,7 +209,7 @@ export default function DashboardTopNav({
 
       {/* Main Action Bar: Page Title (Left) + Search Bar (Right) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-        <h1 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate">
+        <h1 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white tracking-tight truncate leading-tight">
           {activePage}
         </h1>
 
@@ -222,7 +222,7 @@ export default function DashboardTopNav({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search records, items, workflows..."
-            className="w-full pl-10 pr-20 py-2 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none transition-all shadow-inner"
+            className="w-full pl-10 pr-20 h-10 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none transition-all duration-150 shadow-inner"
           />
           <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1 pointer-events-none">
             <kbd className="px-1.5 py-0.5 rounded-md bg-white/15 border border-white/25 text-[10px] font-mono font-bold text-[#9EDCFF] shadow-sm">

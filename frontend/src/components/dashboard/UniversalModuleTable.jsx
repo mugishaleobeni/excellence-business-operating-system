@@ -158,18 +158,18 @@ export default function UniversalModuleTable({
       {/* Table Action Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/10">
         <div>
-          <h3 className="font-orbitron text-base sm:text-lg font-extrabold text-white">
+          <h3 className="font-orbitron text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
             {title}
           </h3>
           {subtitle && (
-            <p className="text-xs text-slate-300 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-slate-300 mt-1 leading-normal">{subtitle}</p>
           )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Search Input */}
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
               value={searchTerm}
@@ -178,7 +178,7 @@ export default function UniversalModuleTable({
                 setPage(1)
               }}
               placeholder="Search records..."
-              className="pl-8 pr-3 py-1.5 rounded-xl bg-white/10 border border-white/15 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:outline-none w-44 sm:w-56 transition-all"
+              className="pl-8 pr-3 h-9 rounded-xl bg-white/10 border border-white/15 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none w-44 sm:w-56 transition-all shadow-inner"
             />
           </div>
 
@@ -191,7 +191,7 @@ export default function UniversalModuleTable({
                   setFilterCategory(e.target.value)
                   setPage(1)
                 }}
-                className="px-3 py-1.5 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white focus:outline-none cursor-pointer"
+                className="px-3 h-9 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white focus:outline-none focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 cursor-pointer transition-all"
               >
                 <option value="ALL">All Categories</option>
                 {categories.map((c) => (
@@ -208,7 +208,7 @@ export default function UniversalModuleTable({
             <button
               type="button"
               onClick={onAddNew}
-              className="btn-sapphire-clean px-4 py-2 text-xs font-bold whitespace-nowrap"
+              className="btn-sapphire-clean h-9 px-4 text-xs font-bold whitespace-nowrap active:scale-[0.98] transition-transform duration-150"
             >
               <Plus className="w-3.5 h-3.5 text-[#9EDCFF]" />
               <span>{addNewLabel}</span>
@@ -219,37 +219,37 @@ export default function UniversalModuleTable({
 
       {/* 3-Number Summary Strip (ExBOS Master Workflow Rule: Section 1 & 9) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-orbitron font-bold text-[#9EDCFF] block">
+            <span className="text-[10px] uppercase font-bold text-[#9EDCFF] tracking-wider block">
               Total Listed Records
             </span>
-            <div className="font-orbitron text-base sm:text-lg font-extrabold text-white mt-0.5">
+            <div className="font-mono tabular-nums text-base sm:text-lg font-bold text-white tracking-tight mt-1">
               {summaryStrip.totalCount} {summaryStrip.totalCount === 1 ? 'Record' : 'Records'}
             </div>
           </div>
           <span className="w-2.5 h-2.5 rounded-full bg-[#218DFF] shadow-[0_0_8px_#218DFF]" />
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-orbitron font-bold text-[#9EDCFF] block">
+            <span className="text-[10px] uppercase font-bold text-[#9EDCFF] tracking-wider block">
               Tracked Value / Turnover
             </span>
-            <div className="font-orbitron text-base sm:text-lg font-extrabold text-emerald-400 mt-0.5">
+            <div className="font-mono tabular-nums text-base sm:text-lg font-bold text-emerald-400 tracking-tight mt-1">
               {formatRWF(summaryStrip.totalVal, hideFinancials)}
             </div>
           </div>
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
           <div>
-            <span className="text-[10px] uppercase font-orbitron font-bold text-[#9EDCFF] block">
-              Attention &amp; Status Status
+            <span className="text-[10px] uppercase font-bold text-[#9EDCFF] tracking-wider block">
+              Attention &amp; Status
             </span>
             <div
-              className={`font-orbitron text-base sm:text-lg font-extrabold mt-0.5 ${
+              className={`font-mono tabular-nums text-base sm:text-lg font-bold tracking-tight mt-1 ${
                 summaryStrip.alertCount > 0 ? 'text-amber-400' : 'text-slate-300'
               }`}
             >
@@ -272,16 +272,16 @@ export default function UniversalModuleTable({
       <div className="hidden md:block w-full min-h-[220px] rounded-2xl bg-[#040C26]/90 border border-white/10 shadow-lg overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
-            <tr className="border-b border-white/15 bg-white/5 text-[10px] sm:text-[11px] font-orbitron uppercase tracking-wider text-slate-300">
+            <tr className="border-b border-white/15 bg-white/5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-300">
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`py-3.5 px-3 font-bold whitespace-nowrap ${
+                  className={`py-3.5 px-4 font-bold whitespace-nowrap ${
                     col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
-                  } ${col.width || ''} ${col.sortable ? 'cursor-pointer select-none hover:text-white' : ''}`}
+                  } ${col.width || ''} ${col.sortable ? 'cursor-pointer select-none hover:text-white transition-colors' : ''}`}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  <div className={`flex items-center gap-1 ${col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'}`}>
+                  <div className={`flex items-center gap-1.5 ${col.align === 'right' ? 'justify-end' : col.align === 'center' ? 'justify-center' : 'justify-start'}`}>
                     <span className="truncate">{col.label}</span>
                     {col.sortable && (
                       <ArrowUpDown className="w-3 h-3 text-slate-400 opacity-70 shrink-0" />
@@ -289,7 +289,7 @@ export default function UniversalModuleTable({
                   </div>
                 </th>
               ))}
-              <th className="py-3.5 px-3 text-center font-bold text-slate-300 w-28 whitespace-nowrap font-orbitron text-[10px] sm:text-[11px] tracking-wider">
+              <th className="py-3.5 px-4 text-center font-bold text-slate-300 w-28 whitespace-nowrap text-[10px] sm:text-[11px] uppercase tracking-wider">
                 ACTIONS
               </th>
             </tr>
@@ -344,7 +344,7 @@ export default function UniversalModuleTable({
                       return (
                         <td
                           key={col.key}
-                          className="py-3.5 px-3 text-right font-orbitron font-extrabold whitespace-nowrap truncate"
+                          className="py-3.5 px-4 text-right font-mono tabular-nums font-bold text-xs sm:text-sm whitespace-nowrap truncate"
                         >
                           <span
                             className={
@@ -363,7 +363,7 @@ export default function UniversalModuleTable({
                       const isLow = Number(row.quantity) <= (Number(row.lowStockAlert) || 5) || String(val || '').toLowerCase().includes('low') || String(val || '').toLowerCase().includes('warning')
                       const isDead = String(val || '').toLowerCase().includes('dead')
                       return (
-                        <td key={col.key} className="py-3.5 px-3 truncate">
+                        <td key={col.key} className="py-3.5 px-4 truncate">
                           <span
                             className={`text-xs font-semibold truncate block max-w-full ${isLow ? 'text-amber-400' : isDead ? 'text-rose-400' : 'text-[#9EDCFF]'
                               }`}
@@ -378,7 +378,7 @@ export default function UniversalModuleTable({
                     return (
                       <td
                         key={col.key}
-                        className={`py-3.5 px-3 text-slate-200 truncate ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
+                        className={`py-3.5 px-4 text-slate-200 truncate ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'
                           }`}
                       >
                         {col.key === 'title' && row.email ? (
@@ -391,11 +391,11 @@ export default function UniversalModuleTable({
                             </span>
                           </div>
                         ) : col.key === 'date' ? (
-                          <span className="text-slate-400 font-mono text-xs whitespace-nowrap block truncate">
+                          <span className="text-slate-400 font-mono tabular-nums text-xs whitespace-nowrap block truncate">
                             {val || '—'}
                           </span>
                         ) : col.key === 'phone' ? (
-                          <span className="text-slate-200 font-mono text-xs whitespace-nowrap block truncate">
+                          <span className="text-slate-200 font-mono tabular-nums text-xs whitespace-nowrap block truncate">
                             {val || row.phone || '—'}
                           </span>
                         ) : col.key === 'location' ? (
@@ -417,7 +417,7 @@ export default function UniversalModuleTable({
 
                   {/* Actions Column with View, Update, Delete */}
                   <td
-                    className="py-3.5 px-3 text-center whitespace-nowrap w-28"
+                    className="py-3.5 px-4 text-center whitespace-nowrap w-28"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-center gap-1.5">
@@ -426,7 +426,7 @@ export default function UniversalModuleTable({
                           type="button"
                           onClick={() => onReorderRow(row)}
                           title="One-click Reorder Stock"
-                          className="px-2 py-1 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 border border-[#218DFF]/40 text-[#9EDCFF] hover:text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all shadow-sm group"
+                          className="px-2 py-1 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 active:scale-95 border border-[#218DFF]/40 text-[#9EDCFF] hover:text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-all duration-150 shadow-sm group"
                         >
                           <Truck className="w-3.5 h-3.5 text-[#218DFF] group-hover:scale-110 transition-transform" />
                           <span>Reorder</span>
@@ -437,7 +437,7 @@ export default function UniversalModuleTable({
                           type="button"
                           onClick={() => onViewRow(row)}
                           title="View Details"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#9EDCFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
+                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 active:scale-95 border border-white/15 hover:border-[#9EDCFF]/60 text-slate-300 hover:text-white transition-all duration-150 cursor-pointer shadow-sm group"
                         >
                           <Eye className="w-3.5 h-3.5 text-[#9EDCFF] group-hover:scale-110 transition-transform" />
                         </button>
@@ -447,7 +447,7 @@ export default function UniversalModuleTable({
                           type="button"
                           onClick={() => onEditRow(row)}
                           title="Update / Edit"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#218DFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
+                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 active:scale-95 border border-white/15 hover:border-[#218DFF]/60 text-slate-300 hover:text-white transition-all duration-150 cursor-pointer shadow-sm group"
                         >
                           <Edit2 className="w-3.5 h-3.5 text-[#218DFF] group-hover:scale-110 transition-transform" />
                         </button>
@@ -457,9 +457,9 @@ export default function UniversalModuleTable({
                           type="button"
                           onClick={() => setDeleteConfirmRow(row)}
                           title="Delete"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all cursor-pointer shadow-sm group"
+                          className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 active:scale-95 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all duration-150 cursor-pointer shadow-sm group"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                          <Trash2 className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
                         </button>
                       )}
                     </div>

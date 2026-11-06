@@ -93,7 +93,7 @@ function MetricCard({
               </div>
             )}
             <span
-              className="text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate"
+              className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate"
               title={title}
             >
               {title}
@@ -109,7 +109,7 @@ function MetricCard({
               e.stopPropagation();
               setShowExplanation(!showExplanation);
             }}
-            className={`p-1.5 rounded-xl transition-all cursor-pointer shrink-0 ${
+            className={`p-1.5 rounded-xl transition-all duration-150 active:scale-95 cursor-pointer shrink-0 ${
               showExplanation
                 ? "bg-[#218DFF] text-white shadow-md shadow-[#218DFF]/40"
                 : "text-slate-400 hover:text-[#9EDCFF] hover:bg-white/10"
@@ -121,11 +121,11 @@ function MetricCard({
         </div>
 
         <div className="mt-2">
-          <div className="font-orbitron font-extrabold text-xl sm:text-2xl text-white tracking-tight truncate">
+          <div className="font-orbitron font-extrabold text-xl sm:text-2xl text-white tracking-tight truncate tabular-nums">
             {displayValue}
           </div>
           {subtitle && (
-            <div className="text-[11px] text-slate-400 font-medium mt-1 truncate">
+            <div className="text-[11px] text-slate-400 font-medium mt-1 truncate leading-normal">
               {subtitle}
             </div>
           )}

@@ -54,8 +54,8 @@ export default function CustomSelect({
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         style={{ backgroundColor: '#071644', color: '#ffffff' }}
-        className={`w-full px-3.5 py-2.5 rounded-xl exbos-modal-input text-xs sm:text-sm text-white flex items-center justify-between gap-2 cursor-pointer transition-all border ${
-          open ? 'border-[#218DFF] shadow-[0_0_15px_rgba(33,141,255,0.3)]' : 'border-white/20 hover:border-white/40'
+        className={`w-full px-3.5 py-2.5 rounded-xl exbos-modal-input text-xs sm:text-sm text-white flex items-center justify-between gap-2 cursor-pointer transition-all duration-150 active:scale-[0.99] border ${
+          open ? 'border-[#218DFF] shadow-[0_0_15px_rgba(33,141,255,0.3)]' : 'border-white/15 hover:border-white/35'
         } focus:outline-none text-left select-none ${buttonClassName}`}
       >
         <span className="truncate flex items-center gap-2">

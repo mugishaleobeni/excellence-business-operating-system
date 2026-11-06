@@ -41,9 +41,9 @@ export default function RailNavigation({
               onClick={() => handleModuleClick(mod)}
               title={mod === 'Documents' ? 'Documents & Sharing' : `${mod} Module`}
               aria-label={mod}
-              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer border shrink-0 ${
+              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150 active:scale-95 cursor-pointer border shrink-0 ${
                 isActive
-                  ? 'exbos-glass-pill-active border-white/40'
+                  ? 'exbos-glass-pill-active border-white/40 shadow-sm'
                   : 'bg-transparent border-transparent text-slate-300 hover:bg-white/15 hover:text-white'
               }`}
             >
@@ -69,9 +69,9 @@ export default function RailNavigation({
               onClick={() => handleModuleClick(mod)}
               title={mod === 'Documents' ? 'Documents & Sharing' : `${mod} Module`}
               aria-label={mod}
-              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer border shrink-0 ${
+              className={`w-12 h-12 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-150 active:scale-95 cursor-pointer border shrink-0 ${
                 isActive
-                  ? 'exbos-glass-pill-active border-white/40'
+                  ? 'exbos-glass-pill-active border-white/40 shadow-sm'
                   : 'bg-transparent border-transparent text-slate-300 hover:bg-white/15 hover:text-white'
               }`}
             >
@@ -87,7 +87,7 @@ export default function RailNavigation({
           type="button"
           onClick={toggleTheme}
           title="Switch Light / Dark Mode"
-          className="w-11 h-11 rounded-2xl bg-white/10 hover:bg-white/20 text-[#9EDCFF] flex items-center justify-center cursor-pointer border border-[#9EDCFF]/20"
+          className="w-11 h-11 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-150 text-[#9EDCFF] flex items-center justify-center cursor-pointer border border-[#9EDCFF]/20"
         >
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
@@ -95,7 +95,7 @@ export default function RailNavigation({
           type="button"
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
           title={sidebarCollapsed ? 'Expand Secondary Sidebar' : 'Collapse Secondary Sidebar'}
-          className="hidden lg:flex w-11 h-11 rounded-2xl bg-white/10 hover:bg-white/20 text-[#9EDCFF] items-center justify-center cursor-pointer border border-[#9EDCFF]/20"
+          className="hidden lg:flex w-11 h-11 rounded-2xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-150 text-[#9EDCFF] items-center justify-center cursor-pointer border border-[#9EDCFF]/20"
         >
           {sidebarCollapsed ? (
             <PanelLeftOpen className="w-4 h-4" />

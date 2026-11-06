@@ -168,8 +168,8 @@ export default function ContextualSidebar({
           </div>
 
           {/* Navigation Group (Categorized with Frosted Pill Active State) */}
-          <div className="space-y-1.5">
-            <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF]/75 px-2 pb-1">
+          <div className="space-y-1">
+            <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF]/75 px-2 pb-1.5 font-bold">
               {activeModule === 'Documents' ? 'Documents & Sharing' : activeModule} Modules
             </div>
             {subPages.map((p, idx) => {
@@ -193,20 +193,20 @@ export default function ContextualSidebar({
                     setActivePage(p)
                     setMobileSidebarOpen(false)
                   }}
-                  className={`w-full text-left px-3.5 py-2.5 rounded-2xl text-xs sm:text-sm flex items-center justify-between transition-all cursor-pointer border ${
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] flex items-center justify-between transition-all duration-150 active:scale-[0.99] cursor-pointer border ${
                     isCurrent
-                      ? 'exbos-glass-pill-active border-white/30 text-white'
+                      ? 'exbos-glass-pill-active border-white/30 text-white font-semibold'
                       : 'bg-transparent border-transparent text-slate-300 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   <span className="truncate flex items-center gap-2">
-                    <span>{p}</span>
+                    <span className="truncate">{p}</span>
                     {isAlert && (
-                      <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
                     )}
                   </span>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    className={`text-[10px] font-mono tabular-nums font-bold px-2 py-0.5 rounded-full shrink-0 ${
                       isCurrent
                         ? 'bg-white/25 text-white'
                         : isAlert
