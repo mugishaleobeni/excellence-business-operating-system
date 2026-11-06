@@ -8,6 +8,8 @@ import {
 import { TRADE_PRESETS } from '../components/dashboard/make-and-sell/data/tradePresets'
 import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePresets'
 import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
+import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
+import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
 
 const ExbosContext = createContext(null)
 
@@ -58,7 +60,15 @@ export const createCleanWorkspaces = () => {
         Batches: [],
         Feeds: [],
         Gestations: [],
-        HealthRecords: []
+        HealthRecords: [],
+        MenuItems: [],
+        KitchenOrders: [],
+        Ingredients: [],
+        Rooms: [],
+        GuestFolios: [],
+        WasteLogs: [],
+        HybridItems: [],
+        MixedSales: []
       }
     }
   })
@@ -115,7 +125,15 @@ export function sanitizeUserWorkspaces(data) {
           Batches: [],
           Feeds: [],
           Gestations: [],
-          HealthRecords: []
+          HealthRecords: [],
+          MenuItems: [],
+          KitchenOrders: [],
+          Ingredients: [],
+          Rooms: [],
+          GuestFolios: [],
+          WasteLogs: [],
+          HybridItems: [],
+          MixedSales: []
         }
       }
 
@@ -457,6 +475,58 @@ export function ExbosProvider({ children }) {
     } catch {}
   }, [agricultureTrade])
 
+  // Active Trade / Preset for Food & Hospitality Architecture
+  const [foodTrade, setFoodTrade] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_food_trade') || 'combined'
+    } catch {
+      return 'combined'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_food_trade', foodTrade)
+    } catch {}
+  }, [foodTrade])
+
+  // Active Trade / Preset for Hybrid Business Architecture
+  const [hybridTrade, setHybridTrade] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_hybrid_trade') || 'techRepair'
+    } catch {
+      return 'techRepair'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_hybrid_trade', hybridTrade)
+    } catch {}
+  }, [hybridTrade])
+
+  // Active Activities in Hybrid Business
+  const [hybridActivities, setHybridActivities] = useState(() => {
+    try {
+      const saved = localStorage.getItem('exbos_hybrid_activities')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return { retail: true, service: true, food: false, production: false }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_hybrid_activities', JSON.stringify(hybridActivities))
+    } catch {}
+  }, [hybridActivities])
+
+  const toggleHybridActivity = (key) => {
+    setHybridActivities((prev) => ({
+      ...prev,
+      [key]: !prev[key]
+    }))
+  }
+
   const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_demo_workspaces')
@@ -796,6 +866,81 @@ export function ExbosProvider({ children }) {
     })
   }
 
+  // Switch Food & Hospitality Specialization / Preset
+  const applyFoodTrade = (tradeKey) => {
+    const preset = FOOD_HOSPITALITY_PRESETS[tradeKey]
+    if (!preset || preset.isSupportContact) return
+    setFoodTrade(tradeKey)
+    try {
+      localStorage.setItem('exbos_food_trade', tradeKey)
+    } catch {}
+
+    setDemoWorkspaces((prev) => {
+      const base = prev['food-and-hospitality'] || {}
+      return {
+        ...prev,
+        'food-and-hospitality': {
+          ...base,
+          businessName: preset.businessName || base.businessName,
+          category: preset.category || base.category,
+          tradeId: tradeKey,
+          metrics: {
+            ...(base.metrics || {}),
+            attentionHeadline: preset.attentionHeadline || 'Ready for hospitality records · All systems live'
+          },
+          records: {
+            ...(base.records || {}),
+            MenuItems: [...(preset.menuItems || [])],
+            KitchenOrders: [...(preset.kitchenOrders || [])],
+            Ingredients: [...(preset.ingredients || [])],
+            Rooms: [...(preset.rooms || [])],
+            GuestFolios: [...(preset.guestFolios || [])],
+            WasteLogs: [...(preset.wasteLogs || [])]
+          }
+        }
+      }
+    })
+  }
+
+  // Switch Hybrid Business Specialization / Preset
+  const applyHybridTrade = (tradeKey) => {
+    const preset = HYBRID_PRESETS[tradeKey]
+    if (!preset || preset.isSupportContact) return
+    setHybridTrade(tradeKey)
+    try {
+      localStorage.setItem('exbos_hybrid_trade', tradeKey)
+    } catch {}
+
+    if (preset.activeActivities) {
+      setHybridActivities(preset.activeActivities)
+      try {
+        localStorage.setItem('exbos_hybrid_activities', JSON.stringify(preset.activeActivities))
+      } catch {}
+    }
+
+    setDemoWorkspaces((prev) => {
+      const base = prev['hybrid'] || {}
+      return {
+        ...prev,
+        hybrid: {
+          ...base,
+          businessName: preset.businessName || base.businessName,
+          category: preset.category || base.category,
+          tradeId: tradeKey,
+          metrics: {
+            ...(base.metrics || {}),
+            attentionHeadline: preset.attentionHeadline || 'Ready for hybrid operations · All systems live'
+          },
+          records: {
+            ...(base.records || {}),
+            HybridItems: [...(preset.items || [])],
+            MixedSales: [...(preset.mixedSales || [])]
+          }
+        }
+      }
+    })
+  }
+
   const login = (userData) => {
     const archId = userData.architectureId || 'buy-and-sell'
     const cleanMap = createCleanWorkspaces()
@@ -1069,7 +1214,16 @@ export function ExbosProvider({ children }) {
         applyServiceTrade,
         agricultureTrade,
         setAgricultureTrade,
-        applyAgricultureTrade
+        applyAgricultureTrade,
+        foodTrade,
+        setFoodTrade,
+        applyFoodTrade,
+        hybridTrade,
+        setHybridTrade,
+        applyHybridTrade,
+        hybridActivities,
+        setHybridActivities,
+        toggleHybridActivity
       }}
     >
       {children}

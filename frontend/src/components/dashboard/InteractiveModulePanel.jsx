@@ -71,6 +71,8 @@ import ModuleKpiCards, { ModuleKpiCards as NamedModuleKpiCards } from "./cards/M
 import MakeSellWorkspace from "./make-and-sell/MakeSellWorkspace"
 import ServicesWorkspace from "./services/ServicesWorkspace"
 import AgricultureWorkspace from "./agriculture/AgricultureWorkspace"
+import FoodHospitalityWorkspace from "./food-hospitality/FoodHospitalityWorkspace"
+import HybridWorkspace from "./hybrid/HybridWorkspace"
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
@@ -1492,7 +1494,53 @@ export default function InteractiveModulePanel({
     )
   }
 
-  // 3. Standard Structured Table View across All Architectures
+  // 5. Food & Hospitality Business Architecture: Restaurant, Kitchen Queue, Tables, Rooms & Folios
+  if (
+    activeArchId === 'food-and-hospitality' &&
+    (activeModule === 'Restaurant & Bar' ||
+     activeModule === 'Rooms & Lodging' ||
+     activeModule === 'Ingredients & Stock' ||
+     activePage === 'Live Kitchen & Rooms' ||
+     activePage === 'Menu Items' ||
+     activePage === 'Orders & Kitchen Queue' ||
+     activePage === 'Tables & Bills' ||
+     activePage === 'Rooms Register' ||
+     activePage === 'Reservations & Check-In' ||
+     activePage === 'Guest Folios' ||
+     activePage === 'Kitchen Ingredients' ||
+     activePage === 'Low Stock & Waste')
+  ) {
+    return (
+      <FoodHospitalityWorkspace
+        activeModule={activeModule}
+        activePage={activePage}
+        onSwitchPage={onSwitchPage}
+      />
+    )
+  }
+
+  // 6. Hybrid Enterprise Architecture: Multi-Activity Catalog, Services & Mixed Sales Drawer
+  if (
+    activeArchId === 'hybrid' &&
+    (activeModule === 'Products & Stock' ||
+     activeModule === 'Services & Jobs' ||
+     activePage === 'Activity Summary' ||
+     activePage === 'All Products' ||
+     activePage === 'Track Stock (On/Off)' ||
+     activePage === 'Low Stock Alerts' ||
+     activePage === 'Service Catalogue' ||
+     activePage === 'Job Schedule')
+  ) {
+    return (
+      <HybridWorkspace
+        activeModule={activeModule}
+        activePage={activePage}
+        onSwitchPage={onSwitchPage}
+      />
+    )
+  }
+
+  // 7. Standard Structured Table View across All Architectures
   return (
     <div className="space-y-6">
       {/* Dynamic Module KPI Overview Cards */}

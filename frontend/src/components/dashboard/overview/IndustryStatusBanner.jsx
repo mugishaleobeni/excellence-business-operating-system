@@ -12,6 +12,8 @@ import {
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
 import { SERVICE_PRESETS } from '../services/data/servicePresets'
+import HospitalityStatusBanner from './banners/HospitalityStatusBanner'
+import HybridStatusBanner from './banners/HybridStatusBanner'
 
 export default function IndustryStatusBanner({
   activeArchId = 'buy-and-sell',
@@ -172,7 +174,27 @@ export default function IndustryStatusBanner({
     )
   }
 
-  // 2. LIVESTOCK ARCHITECTURE REAL-TIME STATUS
+  // 2. FOOD & HOSPITALITY ARCHITECTURE REAL-TIME STATUS
+  if (activeArchId === 'food-and-hospitality') {
+    return (
+      <HospitalityStatusBanner
+        handleModuleClick={handleModuleClick}
+        setActivePage={setActivePage}
+      />
+    )
+  }
+
+  // 3. HYBRID ENTERPRISE ARCHITECTURE REAL-TIME STATUS
+  if (activeArchId === 'hybrid') {
+    return (
+      <HybridStatusBanner
+        handleModuleClick={handleModuleClick}
+        setActivePage={setActivePage}
+      />
+    )
+  }
+
+  // 4. LIVESTOCK ARCHITECTURE REAL-TIME STATUS
   if (activeArchId !== 'agriculture') return null
 
   const workspace = demoWorkspaces?.['agriculture'] || {}
