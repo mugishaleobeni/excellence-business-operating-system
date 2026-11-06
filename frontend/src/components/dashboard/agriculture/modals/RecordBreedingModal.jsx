@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Check, Calendar, Activity, Clock } from 'lucide-react'
 import { GESTATION_PERIODS } from '../data/animalBreedsData'
 import CustomSelect from '../../../common/CustomSelect'
@@ -56,7 +57,7 @@ export default function RecordBreedingModal({
     onClose()
   }
 
-  return (
+  const modalNode = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
       <div className="relative w-full max-w-lg rounded-3xl border border-emerald-400/30 bg-[#061814]/95 text-white shadow-2xl overflow-hidden my-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-emerald-950/70 via-[#0a2820]/80 to-teal-950/70">
@@ -194,5 +195,7 @@ export default function RecordBreedingModal({
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalNode, document.body) : modalNode
 }
 

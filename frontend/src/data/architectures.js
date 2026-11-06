@@ -142,12 +142,12 @@ export const SIX_ARCHITECTURES = [
     slug: 'agriculture',
     headline: 'From Farm to Market, Stay in Control.',
     description:
-      'Organize crops, livestock, farm expenses, production records, agricultural inventory, and sales with Six-Month Survival Intelligence.',
-    capabilities: ['Crops', 'Livestock', 'Farm Inputs', 'Production Costs', 'Sales'],
+      'Organize livestock, farm expenses, production records, feed inventory, veterinary care, and sales with Six-Month Survival Intelligence.',
+    capabilities: ['Livestock', 'Animal Health', 'Feed Management', 'Breeding', 'Production Costs', 'Sales'],
     image: agricultureImage,
     thumb: agricultureImage,
     videoUrl: '',
-    examples: ['Pig Farming & Livestock Breeding', 'Poultry (Layers & Broilers)', 'Dairy Farming & Milk Production', 'Crop & Horticulture Farms', 'Integrated Circular Farms (AGUKA Model)'],
+    examples: ['Pig Farming & Livestock Breeding', 'Poultry (Layers & Broilers)', 'Dairy Farming & Milk Production', 'Goats & Sheep Husbandry', 'Integrated Multi-Livestock Farms (AGUKA Model)'],
     workflows: [
       'Six-Month Business Survival Calculator (Green / Yellow / Red Status)',
       'Smart Budget Classification (Fixed Capital vs Livestock vs Safety Budget)',
@@ -166,8 +166,7 @@ export const SIX_ARCHITECTURES = [
     navigation: {
       Overview: ['Dashboard', 'Where Is My Money', 'Survival Runway & AI Advice'],
       Livestock: ['Animal Register', 'Feed Management', 'Breeding & Births', 'Health & Vet Care', 'Daily Production', 'Trade vs Breed Profit'],
-      'Crops & Fields': ['Field Plots', 'Crop Cycles', 'Harvest Records'],
-      'Farm Inventory': ['Farm Inputs', 'Harvested Stock', 'Low Stock Alerts'],
+      'Farm Inventory': ['Farm Inputs', 'Feed & Stock', 'Low Stock Alerts'],
       Sales: ['Farm Sales', 'Sales Trends'],
       Purchases: ['Feed & Input Orders', 'Unpaid Purchases'],
       Expenses: ['All Expenses', 'Budget Categories (Auto-Sorted)'],

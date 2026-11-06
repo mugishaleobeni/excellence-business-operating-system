@@ -24,10 +24,14 @@ function assert(condition, message) {
   }
 }
 
-// 1. Agribusiness Specialization Presets
+// 1. Agribusiness Specialization Presets (7 Livestock Presets, zero crops)
 assert(
-  Object.keys(AGRICULTURE_PRESETS).length >= 8,
-  'Loaded all 8 Agribusiness presets (pigs, poultry, dairy, small-ruminants, crops, circular, clean-slate, other)'
+  Object.keys(AGRICULTURE_PRESETS).length === 7,
+  'Loaded all 7 Agribusiness presets (pigs, poultry, dairy, small-ruminants, circular, clean-slate, other)'
+)
+assert(
+  !AGRICULTURE_PRESETS.crops,
+  'Crop preset is completely removed as requested (Pure Livestock & Animal Husbandry)'
 )
 
 const pigPreset = AGRICULTURE_PRESETS.pigs
@@ -94,13 +98,58 @@ assert(
   'Pillar 06: Veterinary treatment logged with medicine cost and follow-up booster date'
 )
 
-// 6. Pillar 07: Daily Farm Production (Eggs, Milk, Honey)
-const testCollected = 120
+// 6. Pillar 07: Daily Farm Production & Egg Harvest Economics
+const testCollected = 184
 const testBroken = 4
 const testAvailable = testCollected - testBroken
+const testSold = 150
+const testUnitPrice = 150
+const testCashEarned = testSold * testUnitPrice
+const testRemaining = testAvailable - testSold
+const testStoredValue = testRemaining * testUnitPrice
+const testGrossValue = testCashEarned + testStoredValue
+
+const flockHens = 200
+const rationKgPerHen = 0.125
+const feedCostPerKgRWF = 540
+const dailyFlockFeedCost = flockHens * rationKgPerHen * feedCostPerKgRWF
+const dailyFlockNetProfit = testGrossValue - dailyFlockFeedCost
+
 assert(
-  testAvailable === 116,
-  'Pillar 07: Production records yield: 120 collected - 4 broken = 116 net trays available for sale'
+  testAvailable === 180,
+  'Pillar 07: Production harvest: 184 collected - 4 broken = 180 net clean eggs'
+)
+assert(
+  testCashEarned === 22500 && testRemaining === 30,
+  'Pillar 07: Sales allocation: 150 sold @ 150 RWF = 22,500 RWF cash, 30 eggs remaining in storage'
+)
+assert(
+  dailyFlockFeedCost === 13500,
+  'Pillar 07: Flock feed intake: 200 hens x 0.125 kg x 540 RWF = 13,500 RWF daily feed expense'
+)
+assert(
+  dailyFlockNetProfit === 13500,
+  'Pillar 07: Daily Flock Profit: 27,000 RWF (gross egg value) - 13,500 RWF (feed cost) = +13,500 RWF Net Daily Margin'
+)
+
+// 7. Feed Restocking & Depletion Calculation
+const bagsBought = 10
+const bagWeightKg = 50
+const bagPrice = 26000
+const totalKgStock = bagsBought * bagWeightKg
+const calculatedCostPerKg = bagPrice / bagWeightKg
+const pigsEating = 14
+const dailyPigRation = 2.0
+const dailyIntakeKg = pigsEating * dailyPigRation
+const daysUntilStockout = Math.floor(totalKgStock / dailyIntakeKg)
+
+assert(
+  totalKgStock === 500 && calculatedCostPerKg === 520,
+  'Feed Store: 10 bags x 50kg = 500 kg received @ 520 RWF/kg (26,000 RWF/bag)'
+)
+assert(
+  daysUntilStockout === 17,
+  'Feed Depletion: 500 kg stock ÷ (14 pigs x 2.0 kg/day = 28 kg/day) = 17 days of feed remaining'
 )
 
 // 7. Pillar 10: True Cost of Raising vs Deceptive Paper Profit

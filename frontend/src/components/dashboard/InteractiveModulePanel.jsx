@@ -1422,7 +1422,6 @@ export default function InteractiveModulePanel({
   if (
     activeArchId === 'agriculture' &&
     (activeModule === 'Livestock' ||
-     activeModule === 'Crops & Fields' ||
      activeModule === 'Farm Inventory' ||
      activePage === 'Survival Runway & AI Advice' ||
      activePage === 'Animal Register' ||

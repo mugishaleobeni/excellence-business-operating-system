@@ -4,7 +4,7 @@ import {
   Egg,
   Milk,
   ShieldCheck,
-  Sprout,
+  RefreshCw,
   Sparkles,
   Layers,
   HelpCircle,
@@ -19,7 +19,7 @@ const ICON_MAP = {
   Egg,
   Milk,
   ShieldCheck,
-  Sprout,
+  RefreshCw,
   Sparkles,
   Layers,
   HelpCircle

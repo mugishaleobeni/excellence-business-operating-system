@@ -8,23 +8,30 @@ import {
   TrendingDown,
   DollarSign,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  Trash2
 } from 'lucide-react'
 import { useExbos } from '../../../../context/ExbosContext'
 import LogFeedingModal from '../modals/LogFeedingModal'
+import AddFeedStockModal from '../modals/AddFeedStockModal'
+import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
 export default function FeedNutritionWorkspace() {
-  const { demoWorkspaces, updateDemoRecord, addDemoRecord } = useExbos()
+  const { demoWorkspaces, updateDemoRecord, addDemoRecord, deleteDemoRecord, addTransaction } = useExbos()
   const archData = demoWorkspaces['agriculture'] || {}
   const feedList = archData.records?.Feeds || []
   const animalsList = archData.records?.Animals || []
   const batchesList = archData.records?.Batches || []
+  const feedingLogs = archData.records?.FeedingLogs || []
 
   const [logModalOpen, setLogModalOpen] = useState(false)
+  const [addFeedModalOpen, setAddFeedModalOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+
   const [activeHeads, setActiveHeads] = useState(() => {
     const totalAnimals = animalsList.length
     const totalBatchHeads = batchesList.reduce((acc, b) => acc + (Number(b.quantity) || 0), 0)
-    return totalAnimals + totalBatchHeads || 10
+    return totalAnimals + totalBatchHeads || 14
   })
   const [dailyRationKg, setDailyRationKg] = useState('2.0')
 
@@ -37,10 +44,10 @@ export default function FeedNutritionWorkspace() {
   }, [feedList])
 
   const headsNum = Math.max(1, parseInt(activeHeads, 10) || 1)
-  const rationNum = Math.max(0.1, parseFloat(dailyRationKg) || 0.1)
-  const dailyTotalKg = headsNum * rationNum
-  const weeklyTotalKg = dailyTotalKg * 7
-  const monthlyTotalKg = dailyTotalKg * 30
+  const rationNum = Math.max(0.01, parseFloat(dailyRationKg) || 0.1)
+  const dailyTotalKg = Math.round(headsNum * rationNum * 10) / 10
+  const weeklyTotalKg = Math.round(dailyTotalKg * 7)
+  const monthlyTotalKg = Math.round(dailyTotalKg * 30)
 
   // Run-Out Date Calculation
   const daysRemaining = dailyTotalKg > 0 ? Math.floor(totalStockKg / dailyTotalKg) : 0
@@ -51,8 +58,24 @@ export default function FeedNutritionWorkspace() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
   }, [daysRemaining])
 
+  const handleSaveFeedStock = (newFeed) => {
+    addDemoRecord('agriculture', 'Feeds', newFeed)
+
+    if (newFeed.recordExpense && newFeed.totalPurchaseCostRWF > 0) {
+      addTransaction({
+        architectureId: 'agriculture',
+        title: `Feed Purchase: ${newFeed.name} (${newFeed.currentStockKg} kg)`,
+        type: 'out',
+        category: 'Feed & Nutrition',
+        amountRWF: newFeed.totalPurchaseCostRWF,
+        account: 'Cash / Mobile Money',
+        source: newFeed.supplier || 'Feed Dealer'
+      })
+    }
+  }
+
   const handleSaveFeeding = (feedingLog) => {
-    // Deduct from feed stock
+    // 1. Deduct from feed stock
     const targetFeed = feedList.find((f) => f.id === feedingLog.feedId)
     if (targetFeed) {
       const newStock = Math.max(0, (targetFeed.currentStockKg || 0) - feedingLog.totalKgUsed)
@@ -60,6 +83,30 @@ export default function FeedNutritionWorkspace() {
         currentStockKg: newStock
       })
     }
+
+    // 2. Record Feeding Log
+    addDemoRecord('agriculture', 'FeedingLogs', feedingLog)
+
+    // 3. Update Animal or Batch active daily ration
+    if (feedingLog.consumerMode === 'individual' && feedingLog.targetId) {
+      updateDemoRecord('agriculture', 'Animals', feedingLog.targetId, {
+        assignedFeedName: feedingLog.feedName,
+        dailyRationKg: feedingLog.rationPerHeadKg,
+        dailyFeedCostRWF: feedingLog.costPerKgRWF * feedingLog.rationPerHeadKg
+      })
+    } else if (feedingLog.consumerMode === 'batch' && feedingLog.targetId) {
+      updateDemoRecord('agriculture', 'Batches', feedingLog.targetId, {
+        assignedFeedName: feedingLog.feedName,
+        dailyRationKg: feedingLog.rationPerHeadKg,
+        dailyFeedCostRWF: feedingLog.totalCostRWF
+      })
+    }
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    deleteDemoRecord('agriculture', 'Feeds', deleteTarget.id)
+    setDeleteTarget(null)
   }
 
   const formatRWF = (val) => `${Number(val || 0).toLocaleString()} RWF`
@@ -76,17 +123,26 @@ export default function FeedNutritionWorkspace() {
             Feed Management &amp; Stock Depletion
           </h1>
           <p className="text-xs text-slate-300 mt-0.5">
-            Predict feed duration, track daily consumption and prevent emergency starvation sales
+            Add feed inventory, record daily intake per pig/pen/flock, and predict exact stockout dates
           </p>
         </div>
 
-        <button
-          onClick={() => setLogModalOpen(true)}
-          className="px-5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>Log Feeding Ration</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => setAddFeedModalOpen(true)}
+            className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-white font-bold text-xs flex items-center gap-2 transition-all"
+          >
+            <Package className="w-4 h-4 text-emerald-400" />
+            <span>+ Add Feed Stock</span>
+          </button>
+          <button
+            onClick={() => setLogModalOpen(true)}
+            className="px-5 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/25 transition-all"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>Log Daily Feeding</span>
+          </button>
+        </div>
       </div>
 
       {/* Real-time Depletion Predictor Banner */}
@@ -145,8 +201,8 @@ export default function FeedNutritionWorkspace() {
             <span className="text-slate-400">Ration (kg/head):</span>
             <input
               type="number"
-              step="0.1"
-              min="0.1"
+              step="0.01"
+              min="0.01"
               value={dailyRationKg}
               onChange={(e) => setDailyRationKg(e.target.value)}
               className="w-16 px-2.5 py-1 rounded-lg bg-black/40 border border-white/15 text-white font-mono text-center"
@@ -160,7 +216,7 @@ export default function FeedNutritionWorkspace() {
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
             <Package className="w-3.5 h-3.5" />
-            <span>Feed Stock Inventory ({feedList.length} Types · {totalStockKg} kg on Hand)</span>
+            <span>Feed Stock in Store ({feedList.length} Formulas · {totalStockKg} kg on Hand)</span>
           </h3>
           <span className="text-xs font-mono text-slate-300">
             Total Inventory Value: {formatRWF(totalValueRWF)}
@@ -172,25 +228,27 @@ export default function FeedNutritionWorkspace() {
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-white/5 text-[11px] font-bold text-slate-300 uppercase tracking-wider border-b border-white/10">
                 <tr>
-                  <th className="py-3 px-4">Feed Description</th>
+                  <th className="py-3 px-4">Feed Formula / Name</th>
                   <th className="py-3 px-3">Brand / Supplier</th>
-                  <th className="py-3 px-3">Stock Available</th>
+                  <th className="py-3 px-3">Stock in Store</th>
                   <th className="py-3 px-3">Cost per kg</th>
-                  <th className="py-3 px-3">Reorder Threshold</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-4 text-right">Inventory Worth</th>
+                  <th className="py-3 px-3">Reorder Alert</th>
+                  <th className="py-3 px-3">Stock Status</th>
+                  <th className="py-3 px-3">Inventory Value</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {feedList.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400">
-                      No feed inventory found. Switch specialization or add feed orders in Purchases.
+                    <td colSpan={8} className="py-8 text-center text-slate-400">
+                      No feed inventory found. Click "+ Add Feed Stock" to record your feed purchases.
                     </td>
                   </tr>
                 ) : (
                   feedList.map((feed) => {
                     const isLow = (feed.currentStockKg || 0) <= (feed.reorderLevelKg || 100)
+                    const bags50kg = Math.floor((feed.currentStockKg || 0) / 50)
                     return (
                       <tr key={feed.id} className="hover:bg-white/[0.02] transition-colors">
                         <td className="py-3 px-4">
@@ -199,9 +257,14 @@ export default function FeedNutritionWorkspace() {
                         </td>
                         <td className="py-3 px-3 text-slate-300">{feed.brand || 'Local Milling'}</td>
                         <td className="py-3 px-3">
-                          <span className="font-bold text-emerald-300 text-sm">
+                          <div className="font-bold text-emerald-300 text-sm">
                             {feed.currentStockKg || 0} kg
-                          </span>
+                          </div>
+                          {bags50kg > 0 && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              ≈ {bags50kg} bags (50kg)
+                            </span>
+                          )}
                         </td>
                         <td className="py-3 px-3 font-mono">{formatRWF(feed.costPerKgRWF)}</td>
                         <td className="py-3 px-3 text-slate-400">{feed.reorderLevelKg || 100} kg</td>
@@ -218,8 +281,17 @@ export default function FeedNutritionWorkspace() {
                             </span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-medium text-white">
+                        <td className="py-3 px-3 font-mono font-medium text-white">
                           {formatRWF((feed.currentStockKg || 0) * (feed.costPerKgRWF || 0))}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => setDeleteTarget(feed)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 transition-colors"
+                            title="Remove Feed"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </td>
                       </tr>
                     )
@@ -231,11 +303,28 @@ export default function FeedNutritionWorkspace() {
         </div>
       </div>
 
+      {/* Modals */}
+      <AddFeedStockModal
+        isOpen={addFeedModalOpen}
+        onClose={() => setAddFeedModalOpen(false)}
+        onSaveFeedStock={handleSaveFeedStock}
+      />
+
       <LogFeedingModal
         isOpen={logModalOpen}
         onClose={() => setLogModalOpen(false)}
         feedStockList={feedList}
+        animalsList={animalsList}
+        batchesList={batchesList}
         onSaveFeeding={handleSaveFeeding}
+      />
+
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Remove Feed Stock"
+        message={`Are you sure you want to remove "${deleteTarget?.name}" from feed inventory?`}
+        onConfirm={confirmDelete}
+        onClose={() => setDeleteTarget(null)}
       />
     </div>
   )

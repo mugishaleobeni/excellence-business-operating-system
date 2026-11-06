@@ -218,6 +218,9 @@ export default function AnimalDirectoryWorkspace({ activeSubPage = 'Animal Regis
                               </span>
                             )}
                           </div>
+                          <span className="text-[10px] text-emerald-300/80 block mt-0.5 font-mono">
+                            {animal.dailyRationKg ? `Feed: ${animal.dailyRationKg} kg/day` : 'Feed: 2.0 kg/day'}
+                          </span>
                         </td>
                         <td className="py-3 px-3 text-slate-300">
                           <span className="inline-flex items-center gap-1">
@@ -315,6 +318,9 @@ export default function AnimalDirectoryWorkspace({ activeSubPage = 'Animal Regis
                         <td className="py-3 px-3">
                           <span className="font-bold text-teal-300 text-sm">
                             {batch.quantity} heads
+                          </span>
+                          <span className="text-[10px] text-teal-300/80 block mt-0.5 font-mono">
+                            {batch.dailyRationKg ? `Feed: ${batch.dailyRationKg} kg/head` : batch.type === 'Chickens' ? 'Feed: 0.125 kg/bird' : 'Feed: 2.0 kg/head'}
                           </span>
                           {batch.initialQuantity && batch.initialQuantity !== batch.quantity && (
                             <span className="text-[10px] text-slate-400 block">

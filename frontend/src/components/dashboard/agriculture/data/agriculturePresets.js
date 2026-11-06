@@ -122,8 +122,8 @@ export const AGRICULTURE_PRESETS = {
     dailyFeedPerHeadKg: 0.125,
     animals: [],
     batches: [
-      { id: 'BAT-POU-01', name: 'ISA Brown Layers (House A)', type: 'Chickens', breed: 'ISA Brown (Layers)', quantity: 200, ageWeeks: 28, unitCostRWF: 6500, acquisitionDate: '2026-05-10', location: 'House A (Deep Litter)', notes: 'Peak production cycle' },
-      { id: 'BAT-POU-02', name: 'Cobb 500 Broilers (Batch 12)', type: 'Chickens', breed: 'Cobb 500 (Broilers)', quantity: 300, ageWeeks: 5, unitCostRWF: 1200, acquisitionDate: '2026-10-01', location: 'House B (Broiler Pen)', notes: 'Average weight 1.8 kg, ready in 10 days' }
+      { id: 'BAT-POU-01', name: 'ISA Brown Layers (House A)', type: 'Chickens', breed: 'ISA Brown (Layers)', quantity: 200, ageWeeks: 28, unitCostRWF: 6500, acquisitionDate: '2026-05-10', location: 'House A (Deep Litter)', dailyRationKg: 0.125, notes: 'Peak production cycle' },
+      { id: 'BAT-POU-02', name: 'Cobb 500 Broilers (Batch 12)', type: 'Chickens', breed: 'Cobb 500 (Broilers)', quantity: 300, ageWeeks: 5, unitCostRWF: 1200, acquisitionDate: '2026-10-01', location: 'House B (Broiler Pen)', dailyRationKg: 0.100, notes: 'Average weight 1.8 kg, ready in 10 days' }
     ],
     feeds: [
       { id: 'FED-POU-01', name: 'Premium Layers Mash (20% Protein)', brand: 'Tunga Feed Ltd', currentStockKg: 850, costPerKgRWF: 540, reorderLevelKg: 200 },
@@ -134,7 +134,30 @@ export const AGRICULTURE_PRESETS = {
       { id: 'HLT-POU-01', animalRef: 'ISA Brown Layers (House A)', diagnosis: 'Preventative Newcastle Vaccine', treatment: 'Lasota in Drinking Water', date: '2026-10-18', costRWF: 8500, nextDate: '2026-12-18', status: 'Completed' }
     ],
     production: [
-      { id: 'PRD-POU-01', date: '2026-11-05', item: 'Fresh Table Eggs', quantity: 184, broken: 4, available: 180, unit: 'eggs', sold: 120, remaining: 60, status: 'Crated & Fresh' }
+      {
+        id: 'PRD-POU-01',
+        date: '2026-11-05',
+        item: 'Fresh Table Eggs',
+        sourceAnimal: 'ISA Brown Layers (House A)',
+        headCount: 200,
+        unit: 'eggs',
+        collected: 184,
+        broken: 4,
+        quantity: 180,
+        soldQuantity: 150,
+        remainingInStorage: 30,
+        unitPriceRWF: 150,
+        cashEarnedRWF: 22500,
+        storedValueRWF: 4500,
+        grossProductionValueRWF: 27000,
+        dailyFeedCostRWF: 13500,
+        dailyNetProfitRWF: 13500,
+        isProfitable: true,
+        layingRatePercent: '92.0',
+        buyerName: 'Kigali Fresh Bakery',
+        status: 'In Storage',
+        notes: 'Optimal morning laying session'
+      }
     ]
   },
 
@@ -233,39 +256,14 @@ export const AGRICULTURE_PRESETS = {
     production: []
   },
 
-  crops: {
-    id: 'crops',
-    name: 'Crops & Horticulture',
-    category: 'Commercial Field Crops & Greenhouses',
-    iconName: 'Wheat',
-    businessName: 'Musanze High-Yield Potato & Veg Farm',
-    headline: 'Plot Land Records, Fertilizer Cycles & Harvest Yields',
-    description: 'Manage agricultural field plots, seed germination, NPK/UREA input application, and harvest sack accounting.',
-    attentionHeadline: 'Field Plot 1 (Irish Potatoes) · Projected Harvest in 18 Days',
-    animalLabel: 'Crops',
-    feedUnit: 'kg',
-    dailyFeedPerHeadKg: 0,
-    animals: [],
-    batches: [],
-    feeds: [
-      { id: 'FED-CRP-01', name: 'NPK 17-17-17 Fertilizer', brand: 'Rwanda Fertilizer Co', currentStockKg: 500, costPerKgRWF: 850, reorderLevelKg: 150 },
-      { id: 'FED-CRP-02', name: 'UREA 46% Nitrogen Fertilizer', brand: 'One Acre Fund', currentStockKg: 300, costPerKgRWF: 920, reorderLevelKg: 100 }
-    ],
-    gestations: [],
-    healthRecords: [],
-    production: [
-      { id: 'PRD-CRP-01', date: '2026-10-28', item: 'Kinigi Irish Potatoes (Grade A)', quantity: 65, unit: 'sacks', available: 65, sold: 50, remaining: 15, status: 'Stored in Cool Store' }
-    ]
-  },
-
   circular: {
     id: 'circular',
     name: 'Integrated Circular Farm (AGUKA Model)',
-    category: 'Closed-Loop Multi-Enterprise Agribusiness',
+    category: 'Closed-Loop Multi-Livestock Agribusiness',
     iconName: 'RefreshCw',
     businessName: 'Aguka Circular Integrated Bio-Farm',
-    headline: 'Closed-Loop Swine, Poultry & Crops with Bio-Slurry Recycling',
-    description: 'Pigs produce manure for biogas and crop fertilization; crops provide grain for milling; poultry creates daily cash flow.',
+    headline: 'Closed-Loop Swine, Poultry & Cattle with Bio-Slurry Recycling',
+    description: 'Pigs produce manure for biogas and organic bio-slurry; poultry creates daily cash flow; multi-livestock integration optimizes feed conversion.',
     attentionHeadline: 'Circular Loop Optimal · Zero Chemical Fertilizer Purchased This Season',
     animalLabel: 'Mixed Farm',
     feedUnit: 'kg',
@@ -282,7 +280,7 @@ export const AGRICULTURE_PRESETS = {
     gestations: [],
     healthRecords: [],
     production: [
-      { id: 'AGK-PRD-01', date: '2026-11-05', item: 'Organic Bio-Slurry Fertilizer', quantity: 200, unit: 'liters', available: 200, sold: 100, remaining: 100, status: 'Applied to Maize Plot' }
+      { id: 'AGK-PRD-01', date: '2026-11-05', item: 'Organic Bio-Slurry Fertilizer', quantity: 200, unit: 'liters', available: 200, sold: 100, remaining: 100, status: 'Bottled & Stored' }
     ]
   },
 
@@ -313,12 +311,12 @@ export const AGRICULTURE_PRESETS = {
     iconName: 'HelpCircle',
     businessName: 'Specialized Agribusiness Workshop',
     headline: 'Direct Implementation Support on WhatsApp',
-    description: 'Have a fish farm, bee apiary, rabbitry, or specialized crop farm? Chat with our team for personalized setup.',
+    description: 'Have a fish farm, bee apiary, rabbitry, or specialized livestock venture? Chat with our team for personalized setup.',
     attentionHeadline: 'Official ExBOS Farm Specialist Hotline: +250 781 963 981',
     isSupportContact: true,
     whatsappNumber: '+250 781 963 981',
     whatsappFormatted: '+250 781 963 981',
-    whatsappMessage: 'Hello ExBOS Agribusiness Support, I need help setting up my specialized livestock or crop farm workflow.',
+    whatsappMessage: 'Hello ExBOS Agribusiness Support, I need help setting up my specialized livestock farming workflow.',
     animalLabel: 'Specialized',
     feedUnit: 'kg',
     dailyFeedPerHeadKg: 0,
