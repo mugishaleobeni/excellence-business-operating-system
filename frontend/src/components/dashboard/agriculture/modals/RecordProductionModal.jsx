@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Check, Egg, Milk, Sparkles, Scale, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react'
 import CustomSelect from '../../../common/CustomSelect'
@@ -13,20 +13,88 @@ export default function RecordProductionModal({
   feedStockList = [],
   onSaveProduction
 }) {
+  // Derive allowed production items dynamically based on registered species
+  const hasPoultry =
+    animalsList.some((a) => /chicken|poultry|layer|broiler|hen/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /chicken|poultry|layer|broiler|hen/i.test(b.type || b.breed))
+  const hasDairy =
+    animalsList.some((a) => /cow|cattle|dairy|bovine/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /cow|cattle|dairy|bovine/i.test(b.type || b.breed))
+  const hasGoats =
+    animalsList.some((a) => /goat/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /goat/i.test(b.type || b.breed))
+  const hasPigs =
+    animalsList.some((a) => /pig|swine/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /pig|swine/i.test(b.type || b.breed))
+
+  const availableItems = []
+  if (hasPoultry) {
+    availableItems.push({
+      value: 'Fresh Table Eggs',
+      label: 'Fresh Table Eggs (Flock Layers)',
+      unit: 'eggs',
+      price: '150',
+      defaultQty: '180'
+    })
+  }
+  if (hasDairy) {
+    availableItems.push({
+      value: 'Fresh Raw Cow Milk',
+      label: 'Fresh Raw Cow Milk (Dairy Herd)',
+      unit: 'liters',
+      price: '600',
+      defaultQty: '40'
+    })
+  }
+  if (hasGoats) {
+    availableItems.push({
+      value: 'Fresh Goat Milk',
+      label: 'Fresh Goat Milk',
+      unit: 'liters',
+      price: '800',
+      defaultQty: '15'
+    })
+  }
+  if (hasPigs) {
+    availableItems.push({
+      value: 'Weaned Piglets',
+      label: 'Weaned Piglets (Farrowed)',
+      unit: 'piglets',
+      price: '35000',
+      defaultQty: '8'
+    })
+    availableItems.push({
+      value: 'Market Live Porkers',
+      label: 'Market Live Porkers',
+      unit: 'heads',
+      price: '160000',
+      defaultQty: '2'
+    })
+  }
+  if (availableItems.length === 0) {
+    availableItems.push({
+      value: 'Livestock Yield',
+      label: 'Livestock Yield / Harvest',
+      unit: 'units',
+      price: '1000',
+      defaultQty: '5'
+    })
+  }
+
+  const defaultItem = availableItems[0]
+
   const [sourceType, setSourceType] = useState('batch') // 'batch' | 'individual'
   const [selectedBatchId, setSelectedBatchId] = useState(() => batchesList[0]?.id || '')
   const [selectedAnimalId, setSelectedAnimalId] = useState(() => animalsList[0]?.id || '')
-  const [itemType, setItemType] = useState('Fresh Table Eggs')
-  const [unit, setUnit] = useState('eggs') // 'eggs' | 'trays' | 'liters'
-  const [collected, setCollected] = useState('180')
-  const [broken, setBroken] = useState('4')
-  const [soldQuantity, setSoldQuantity] = useState('150')
-  const [unitPriceRWF, setUnitPriceRWF] = useState('150')
+  const [itemType, setItemType] = useState(defaultItem.value)
+  const [unit, setUnit] = useState(defaultItem.unit)
+  const [collected, setCollected] = useState(defaultItem.defaultQty)
+  const [broken, setBroken] = useState('0')
+  const [soldQuantity, setSoldQuantity] = useState('0')
+  const [unitPriceRWF, setUnitPriceRWF] = useState(defaultItem.price)
   const [buyerName, setBuyerName] = useState('Walk-in Customers / Local Store')
   const [productionDate, setProductionDate] = useState(() => new Date().toISOString().split('T')[0])
   const [notes, setNotes] = useState('')
-
-  if (!isOpen) return null
 
   // Resolve source details
   const currentBatch = batchesList.find((b) => b.id === selectedBatchId) || batchesList[0] || {}
@@ -104,6 +172,8 @@ export default function RecordProductionModal({
     onClose()
   }
 
+  if (!isOpen) return null
+
   const modalNode = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto">
       <div className="relative w-full max-w-xl max-h-[92vh] flex flex-col rounded-3xl border border-emerald-400/30 bg-[#061814]/95 text-white shadow-2xl overflow-hidden my-auto">
@@ -176,16 +246,17 @@ export default function RecordProductionModal({
                 value={itemType}
                 onChange={(val) => {
                   setItemType(val)
-                  if (val === 'Fresh Table Eggs') setUnit('eggs')
-                  else if (val === 'Fresh Raw Cow Milk') setUnit('liters')
-                  else setUnit('kg')
+                  const matched = availableItems.find((it) => it.value === val)
+                  if (matched) {
+                    setUnit(matched.unit)
+                    setUnitPriceRWF(matched.price)
+                    setCollected(matched.defaultQty)
+                  }
                 }}
-                options={[
-                  { value: 'Fresh Table Eggs', label: 'Fresh Table Eggs' },
-                  { value: 'Fresh Raw Cow Milk', label: 'Fresh Raw Cow Milk' },
-                  { value: 'Organic Honey', label: 'Organic Honey' },
-                  { value: 'Organic Bio-Slurry', label: 'Organic Bio-Slurry' }
-                ]}
+                options={availableItems.map((it) => ({
+                  value: it.value,
+                  label: it.label
+                }))}
               />
             </div>
           </div>

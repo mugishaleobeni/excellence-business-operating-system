@@ -99,6 +99,15 @@ export default function TrueProfitWorkspace() {
           quantity: remaining
         })
       }
+    } else if (saleData.saleCategory === 'produce') {
+      const prod = productionList.find((p) => p.id === saleData.sourceId)
+      if (prod) {
+        const remaining = Math.max(0, (Number(prod.remainingInStorage ?? prod.quantity) || 0) - saleData.unitsSold)
+        updateDemoRecord('agriculture', 'Production', prod.id, {
+          remainingInStorage: remaining,
+          soldQuantity: (Number(prod.soldQuantity) || 0) + saleData.unitsSold
+        })
+      }
     }
   }
 

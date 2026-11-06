@@ -134,7 +134,7 @@ export default function SellAnimalModal({
                     : 'bg-white/5 text-slate-300 border-white/10'
                 }`}
               >
-                Eggs / Milk / Honey
+                Harvested Yield
               </button>
             </div>
           </div>
@@ -145,10 +145,12 @@ export default function SellAnimalModal({
               <CustomSelect
                 value={selectedAnimalId || targetAnimal.id}
                 onChange={setSelectedAnimalId}
-                options={animalsList.map((a) => ({
-                  value: a.id,
-                  label: `${a.name} (${a.id} · ${a.currentWeightKg || a.startingWeightKg || 0} kg)`
-                }))}
+                options={animalsList
+                  .filter((a) => !a.healthStatus?.toLowerCase().includes('sold'))
+                  .map((a) => ({
+                    value: a.id,
+                    label: `${a.name} (${a.breed || 'Livestock'} · ${a.id} · ${a.currentWeightKg || a.startingWeightKg || 0} kg)`
+                  }))}
                 placeholder="Select live animal to sell..."
               />
             </div>
@@ -161,10 +163,12 @@ export default function SellAnimalModal({
                 <CustomSelect
                   value={selectedBatchId || targetBatch.id}
                   onChange={setSelectedBatchId}
-                  options={batchesList.map((b) => ({
-                    value: b.id,
-                    label: `${b.name} (${b.quantity} heads left)`
-                  }))}
+                  options={batchesList
+                    .filter((b) => (Number(b.quantity) || 0) > 0)
+                    .map((b) => ({
+                      value: b.id,
+                      label: `${b.name} (${b.quantity} heads left)`
+                    }))}
                   placeholder="Select batch..."
                 />
               </div>
@@ -189,10 +193,12 @@ export default function SellAnimalModal({
                 <CustomSelect
                   value={selectedProduceId || targetProduce.id}
                   onChange={setSelectedProduceId}
-                  options={productionList.map((p) => ({
-                    value: p.id,
-                    label: `${p.item} (${p.quantity} ${p.unit} available)`
-                  }))}
+                  options={productionList
+                    .filter((p) => (Number(p.remainingInStorage) || Number(p.quantity) || 0) > 0)
+                    .map((p) => ({
+                      value: p.id,
+                      label: `${p.item} (${p.remainingInStorage || p.quantity} ${p.unit} in store)`
+                    }))}
                   placeholder="Select produce..."
                 />
               </div>

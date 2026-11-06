@@ -279,6 +279,55 @@ export default function InteractiveModulePanel({
       })
     }
 
+    if (activeArchId === 'agriculture') {
+      const liveAnimals = (recordsMap['Animals'] || [])
+        .filter((a) => !a.healthStatus?.toLowerCase().includes('sold'))
+        .map((a) => ({
+          ...a,
+          id: a.id,
+          title: `Live ${a.type || 'Animal'}: ${a.name} (${a.breed || 'Breed'} · ${a.id})`,
+          unit: 'head',
+          quantity: 1,
+          sellingPriceRWF: a.sellingPriceRWF || (a.totalRaisedCostRWF ? Math.round(a.totalRaisedCostRWF * 1.3) : a.purchasePriceRWF ? Math.round(a.purchasePriceRWF * 1.3) : 250000),
+          purchasePriceRWF: a.totalRaisedCostRWF || a.purchasePriceRWF || 0,
+          unitCostRWF: a.totalRaisedCostRWF || a.purchasePriceRWF || 0,
+          category: 'Live Breeding Animal',
+          itemType: 'animal'
+        }))
+
+      const batchAnimals = (recordsMap['Batches'] || [])
+        .filter((b) => (Number(b.quantity) || 0) > 0)
+        .map((b) => ({
+          ...b,
+          id: b.id,
+          title: `Flock/Herd Batch: ${b.name} (${b.type} · ${b.breed || 'Batch'})`,
+          unit: 'heads',
+          quantity: Number(b.quantity) || 0,
+          sellingPriceRWF: b.sellingPriceRWF || (b.unitCostRWF ? Math.round(b.unitCostRWF * 1.35) : 85000),
+          purchasePriceRWF: b.unitCostRWF || 0,
+          unitCostRWF: b.unitCostRWF || 0,
+          category: 'Livestock Batch',
+          itemType: 'batch'
+        }))
+
+      const farmHarvests = (recordsMap['Production'] || [])
+        .filter((p) => (Number(p.remainingInStorage) || Number(p.quantity) || 0) > 0)
+        .map((p) => ({
+          ...p,
+          id: p.id,
+          title: `Harvest Yield: ${p.item} (${p.sourceAnimal || 'Farm Harvest'})`,
+          unit: p.unit || (p.item?.toLowerCase().includes('milk') ? 'liters' : p.item?.toLowerCase().includes('egg') ? 'eggs' : 'units'),
+          quantity: Number(p.remainingInStorage) || Number(p.quantity) || 0,
+          sellingPriceRWF: p.unitPriceRWF || (p.item?.toLowerCase().includes('milk') ? 600 : p.item?.toLowerCase().includes('egg') ? 150 : 1000),
+          purchasePriceRWF: 0,
+          unitCostRWF: 0,
+          category: 'Harvested Produce',
+          itemType: 'production'
+        }))
+
+      return [...liveAnimals, ...batchAnimals, ...farmHarvests]
+    }
+
     return customList
   }, [recordsMap, activeArchId])
 
@@ -1429,7 +1478,10 @@ export default function InteractiveModulePanel({
      activePage === 'Breeding & Births' ||
      activePage === 'Health & Vet Care' ||
      activePage === 'Daily Production' ||
-     activePage === 'Trade vs Breed Profit')
+     activePage === 'Trade vs Breed Profit' ||
+     activePage === 'Farm Sales' ||
+     activePage === 'Farm Sales & Profit' ||
+     activeModule === 'Sales')
   ) {
     return (
       <AgricultureWorkspace
@@ -2049,6 +2101,27 @@ export default function InteractiveModulePanel({
 
             updateDemoRecord(activeArchId, "Inventory", selectedProd.id, prodUpdates)
             updateDemoRecord(activeArchId, "Products", selectedProd.id, prodUpdates)
+
+            if (activeArchId === 'agriculture') {
+              if (selectedProd.itemType === 'animal') {
+                updateDemoRecord('agriculture', 'Animals', selectedProd.id, {
+                  healthStatus: 'Sold · Archived'
+                })
+              } else if (selectedProd.itemType === 'batch') {
+                const curQty = Number(selectedProd.quantity) || 0
+                const newQty = Math.max(0, curQty - salePayload.quantity)
+                updateDemoRecord('agriculture', 'Batches', selectedProd.id, {
+                  quantity: newQty
+                })
+              } else if (selectedProd.itemType === 'production') {
+                const curRem = Number(selectedProd.remainingInStorage ?? selectedProd.quantity) || 0
+                const newRem = Math.max(0, curRem - salePayload.quantity)
+                updateDemoRecord('agriculture', 'Production', selectedProd.id, {
+                  remainingInStorage: newRem,
+                  soldQuantity: (Number(selectedProd.soldQuantity) || 0) + salePayload.quantity
+                })
+              }
+            }
           }
           setModalOpen(false)
           setEditRow(null)

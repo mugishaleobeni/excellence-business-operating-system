@@ -22,8 +22,6 @@ export default function AddFeedStockModal({
   const [supplierName, setSupplierName] = useState('Kigali Feeds Depot')
   const [recordExpense, setRecordExpense] = useState(true)
 
-  if (!isOpen) return null
-
   // Calculations
   const totalKg = packageUnit === 'bags50kg'
     ? Math.max(0, (parseInt(bagCount, 10) || 0) * 50)
@@ -60,6 +58,8 @@ export default function AddFeedStockModal({
     }
     onClose()
   }
+
+  if (!isOpen) return null
 
   const modalNode = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto">

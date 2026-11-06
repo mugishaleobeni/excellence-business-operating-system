@@ -59,7 +59,12 @@ export default function AgricultureWorkspace({
     activePage === 'Harvest Records' ||
     activePage === 'Daily Collection' ||
     activeModule === 'Farm Inventory'
-  const isProfitView = activePage === 'Trade vs Breed Profit' || activePage === 'Farm Sales'
+  const isProfitView =
+    activePage === 'Trade vs Breed Profit' ||
+    activePage === 'Farm Sales' ||
+    activePage === 'Farm Sales & Profit' ||
+    activePage === 'Livestock Sales' ||
+    activeModule === 'Sales'
   const isSurvivalView =
     activePage === 'Survival Runway & AI Advice' ||
     activePage === 'Survival Period Settings' ||

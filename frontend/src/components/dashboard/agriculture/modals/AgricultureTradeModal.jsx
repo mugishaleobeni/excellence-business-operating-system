@@ -73,7 +73,7 @@ export default function AgricultureTradeModal({
             </div>
             <div>
               <h2 className="font-orbitron text-lg font-bold tracking-wide text-white flex items-center gap-2">
-                <span>Select Agriculture &amp; Livestock Specialization</span>
+                <span>Select Livestock Specialization</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                   Arch 04
                 </span>

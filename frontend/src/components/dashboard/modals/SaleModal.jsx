@@ -76,11 +76,11 @@ export default function SaleModal({
       case "agriculture":
       case "agriculture-livestock":
         return {
-          label: "Select Farm Product / Harvest to Sell",
-          placeholder: "-- Select harvested crops, animal products, or livestock --",
-          searchPlaceholder: "Search farm outputs...",
-          emptyTitle: "No farm stock available",
-          emptySub: "Log harvests or animal products in Farm Inventory first."
+          label: "Select Livestock or Harvest to Sell",
+          placeholder: "-- Select live animal, batch, or harvested yield --",
+          searchPlaceholder: "Search live animals, batches, or produce...",
+          emptyTitle: "No livestock or farm produce available",
+          emptySub: "Register animals or log harvest in Livestock module first."
         };
       case "food-hospitality":
         return {
@@ -140,8 +140,10 @@ export default function SaleModal({
   const profitMarginPct = totalSaleAmount > 0 ? Math.round((totalProfit / totalSaleAmount) * 100) : 0;
   const isOutOfStock = selectedSaleProduct && (Number(selectedSaleProduct.quantity) || 0) <= 0;
 
+  const isAgri = activeArchId === 'agriculture' || activeArchId === 'agriculture-livestock';
+  const defaultUnit = isAgri ? 'head' : 'piece';
   const saleAvailableStock = Number(selectedSaleProduct?.quantity ?? selectedSaleProduct?.currentStock) || 0;
-  const saleUnit = selectedSaleProduct?.unit || 'piece';
+  const saleUnit = selectedSaleProduct?.unit || defaultUnit;
   const saleUnitCost = unitCostNum;
   const saleOriginalCatalogPrice = Number(selectedSaleProduct?.sellingPriceRWF ?? selectedSaleProduct?.amountRWF) || 0;
   const saleQtyNum = qtyNum;
@@ -160,7 +162,7 @@ export default function SaleModal({
     if (!saleProductId || !selectedSaleProduct) return;
     if (qtyNum <= 0 || unitPriceNum <= 0) return;
 
-    const effectiveUnit = selectedSaleProduct.unit || "piece";
+    const effectiveUnit = selectedSaleProduct.unit || defaultUnit;
     const custName = saleCustomerName.trim() || "Walk-in Client";
     const custPhone = saleCustomerPhone.trim();
 

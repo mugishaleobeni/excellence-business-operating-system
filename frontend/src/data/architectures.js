@@ -137,12 +137,12 @@ export const SIX_ARCHITECTURES = [
   {
     id: 'agriculture',
     number: '04',
-    name: 'Agriculture & Livestock',
-    shortName: 'Agriculture & Livestock',
+    name: 'Livestock & Animal Farming',
+    shortName: 'Livestock',
     slug: 'agriculture',
-    headline: 'From Farm to Market, Stay in Control.',
+    headline: 'From Breeding to Market, Stay in Total Control.',
     description:
-      'Organize livestock, farm expenses, production records, feed inventory, veterinary care, and sales with Six-Month Survival Intelligence.',
+      'Organize livestock herds and flocks, feed depletion, breeding cycles, veterinary care, and real profit per head with Six-Month Survival Intelligence.',
     capabilities: ['Livestock', 'Animal Health', 'Feed Management', 'Breeding', 'Production Costs', 'Sales'],
     image: agricultureImage,
     thumb: agricultureImage,
@@ -153,7 +153,7 @@ export const SIX_ARCHITECTURES = [
       'Smart Budget Classification (Fixed Capital vs Livestock vs Safety Budget)',
       'Intelligent Feed Management & Run-Out Date Prediction',
       'Livestock Investment & Breeding Readiness Verification',
-      'Pig Trading Intelligence & Expansion Sustainability Evaluator'
+      'Livestock Trading Intelligence & Expansion Sustainability Evaluator'
     ],
     dashboardFeatures: [
       'Six-Month Financial Survival Indicator & Cash Flow Simulator',
@@ -165,8 +165,7 @@ export const SIX_ARCHITECTURES = [
       'Farms fail when owners expand livestock before securing 6 months of feed and operating reserves. ExBOS forecasts feed run-out dates, separates breeding from trading profit, and tells you if your farm can survive 6 months without sales.',
     navigation: {
       Overview: ['Dashboard', 'Where Is My Money', 'Survival Runway & AI Advice'],
-      Livestock: ['Animal Register', 'Feed Management', 'Breeding & Births', 'Health & Vet Care', 'Daily Production', 'Trade vs Breed Profit'],
-      'Farm Inventory': ['Farm Inputs', 'Feed & Stock', 'Low Stock Alerts'],
+      Livestock: ['Animal Register', 'Feed Management', 'Breeding & Births', 'Health & Vet Care', 'Daily Production', 'Livestock Sales & Profit'],
       Sales: ['Farm Sales', 'Sales Trends'],
       Purchases: ['Feed & Input Orders', 'Unpaid Purchases'],
       Expenses: ['All Expenses', 'Budget Categories (Auto-Sorted)'],

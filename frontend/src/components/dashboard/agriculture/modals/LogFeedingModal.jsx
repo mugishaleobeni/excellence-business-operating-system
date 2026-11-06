@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Check, Scale, Calendar, Package, Clock, AlertTriangle, Users, Tag } from 'lucide-react'
 import CustomSelect from '../../../common/CustomSelect'
@@ -24,8 +24,6 @@ export default function LogFeedingModal({
   const [rationPerHeadKg, setRationPerHeadKg] = useState('2.0')
   const [feedDate, setFeedDate] = useState(() => new Date().toISOString().split('T')[0])
 
-  if (!isOpen) return null
-
   const selectedFeed = feedStockList.find((f) => f.id === selectedFeedId) || feedStockList[0] || {}
   const heads = Math.max(1, parseInt(headCount, 10) || 1)
   const ration = Math.max(0.01, parseFloat(rationPerHeadKg) || 0.1)
@@ -35,25 +33,25 @@ export default function LogFeedingModal({
 
   const currentStock = Number(selectedFeed.currentStockKg) || 0
   const daysLeft = totalDailyKg > 0 ? Math.floor(currentStock / totalDailyKg) : 0
-  const depletionDate = useMemo(() => {
-    if (daysLeft <= 0) return 'Immediate Depletion'
-    const d = new Date()
-    d.setDate(d.getDate() + daysLeft)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  }, [daysLeft])
+  const depletionDate = daysLeft <= 0
+    ? 'Immediate Depletion'
+    : (() => {
+        const d = new Date()
+        d.setDate(d.getDate() + daysLeft)
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      })()
 
   // Get consumer display name
-  const consumerName = useMemo(() => {
-    if (consumerMode === 'batch') {
-      const b = batchesList.find((item) => item.id === selectedBatchId)
-      return b ? `${b.name} (${b.quantity} heads)` : 'Flock / Pen Batch'
-    }
-    if (consumerMode === 'individual') {
-      const a = animalsList.find((item) => item.id === selectedAnimalId)
-      return a ? `${a.name} (${a.type} · ${a.id})` : 'Individual Animal'
-    }
-    return customGroup.trim() || 'Custom Group'
-  }, [consumerMode, selectedBatchId, selectedAnimalId, customGroup, batchesList, animalsList])
+  let consumerName = 'Flock / Pen Batch'
+  if (consumerMode === 'batch') {
+    const b = batchesList.find((item) => item.id === selectedBatchId)
+    consumerName = b ? `${b.name} (${b.quantity} heads)` : 'Flock / Pen Batch'
+  } else if (consumerMode === 'individual') {
+    const a = animalsList.find((item) => item.id === selectedAnimalId)
+    consumerName = a ? `${a.name} (${a.type} · ${a.id})` : 'Individual Animal'
+  } else {
+    consumerName = customGroup.trim() || 'Custom Group'
+  }
 
   const handleBatchChange = (batchId) => {
     setSelectedBatchId(batchId)
@@ -98,6 +96,8 @@ export default function LogFeedingModal({
     }
     onClose()
   }
+
+  if (!isOpen) return null
 
   const modalNode = (
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-md animate-fadeIn overflow-y-auto">

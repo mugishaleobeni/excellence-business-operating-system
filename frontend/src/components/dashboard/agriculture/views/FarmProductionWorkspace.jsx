@@ -49,13 +49,43 @@ export default function FarmProductionWorkspace() {
     return productionList.reduce((acc, p) => acc + (Number(p.cashEarnedRWF) || 0), 0)
   }, [productionList])
 
+  // Derive registered animal species dynamically
+  const hasPoultry =
+    animalsList.some((a) => /chicken|poultry|layer|broiler|hen/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /chicken|poultry|layer|broiler|hen/i.test(b.type || b.breed))
+  const hasDairy =
+    animalsList.some((a) => /cow|cattle|dairy|bovine/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /cow|cattle|dairy|bovine/i.test(b.type || b.breed))
+  const hasGoats =
+    animalsList.some((a) => /goat/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /goat/i.test(b.type || b.breed))
+  const hasPigs =
+    animalsList.some((a) => /pig|swine/i.test(a.type || a.breed)) ||
+    batchesList.some((b) => /pig|swine/i.test(b.type || b.breed))
+
+  const workspaceTitle = hasPoultry
+    ? 'Daily Egg Harvest, Sales & Flock Margin'
+    : hasDairy
+    ? 'Daily Milk Harvest & Dairy Margin'
+    : hasPigs
+    ? 'Swine Litters, Weaned Piglets & Farm Output'
+    : 'Daily Farm Harvest & Operational Margin'
+
+  const workspaceSubtitle = hasPoultry
+    ? "Log eggs collected, broken & sold: compare daily egg sales vs today's flock feed cost to verify net margin"
+    : hasDairy
+    ? "Log morning & evening milk yield: compare daily milk revenue against cattle ration cost"
+    : hasPigs
+    ? "Log weaned litters, market porkers & farm yields: compare output value against daily feed cost"
+    : "Log daily livestock harvests: compare gross output value against daily animal feed cost"
+
   // Today's flock comparison (most recent record)
-  const latestProduction = productionList[0] || {}
-  const latestDailyFeedCost = latestProduction.dailyFeedCostRWF || 13500
-  const latestDailyGrossValue = latestProduction.grossProductionValueRWF || 26400
-  const latestDailyProfit = latestProduction.dailyNetProfitRWF !== undefined
-    ? latestProduction.dailyNetProfitRWF
-    : latestDailyGrossValue - latestDailyFeedCost
+  const latestProduction = productionList[0] || null
+  const latestDailyFeedCost = latestProduction ? (Number(latestProduction.dailyFeedCostRWF) || 0) : 0
+  const latestDailyGrossValue = latestProduction ? (Number(latestProduction.grossProductionValueRWF) || 0) : 0
+  const latestDailyProfit = latestProduction
+    ? (latestProduction.dailyNetProfitRWF !== undefined ? latestProduction.dailyNetProfitRWF : latestDailyGrossValue - latestDailyFeedCost)
+    : 0
   const isLatestProfitable = latestDailyProfit >= 0
 
   const handleSaveProduction = (rec) => {
@@ -92,10 +122,10 @@ export default function FarmProductionWorkspace() {
             Pillar 07 · Daily Production &amp; Operational Margin
           </span>
           <h1 className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">
-            Daily Harvest, Egg Sales &amp; Profit
+            {workspaceTitle}
           </h1>
           <p className="text-xs text-slate-300 mt-0.5">
-            Log eggs, milk, honey: compare daily harvest sales vs today's flock feed cost to verify real daily profit
+            {workspaceSubtitle}
           </p>
         </div>
 
@@ -174,7 +204,11 @@ export default function FarmProductionWorkspace() {
                 </span>
               </h3>
               <p className="text-xs text-slate-300">
-                Did today's egg yield cover what the flock consumed in feed?
+                {hasPoultry
+                  ? "Did today's egg yield cover what the flock consumed in feed?"
+                  : hasDairy
+                  ? "Did today's milk yield cover cattle feed intake?"
+                  : "Compare today's livestock yield value against daily herd feed cost"}
               </p>
             </div>
           </div>
@@ -193,7 +227,9 @@ export default function FarmProductionWorkspace() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4 text-xs">
           <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/5">
-            <span className="text-slate-400 text-[11px] block">Flock Feed Consumed Today</span>
+            <span className="text-slate-400 text-[11px] block">
+              {hasPoultry ? 'Flock Feed Consumed Today' : 'Herd Feed Consumed Today'}
+            </span>
             <span className="text-base font-bold font-mono text-rose-300 mt-1 block">
               -{formatRWF(latestDailyFeedCost)}
             </span>
@@ -207,11 +243,19 @@ export default function FarmProductionWorkspace() {
             <span className="text-[10px] text-slate-400">Cash sales + stored inventory</span>
           </div>
           <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/5">
-            <span className="text-slate-400 text-[11px] block">Laying Efficiency Benchmark</span>
-            <span className="text-base font-bold font-mono text-white mt-1 block">
-              {latestProduction.layingRatePercent || 88.5}% Laying Rate
+            <span className="text-slate-400 text-[11px] block">
+              {hasPoultry ? 'Laying Rate Efficiency' : hasDairy ? 'Dairy Milk Output' : 'Yield Benchmark'}
             </span>
-            <span className="text-[10px] text-emerald-300">Target above 75% for optimal margin</span>
+            <span className="text-base font-bold font-mono text-white mt-1 block">
+              {hasPoultry
+                ? `${latestProduction?.layingRatePercent || 0}% Laying Rate`
+                : hasDairy
+                ? `${latestProduction?.collected || 0} Liters Collected`
+                : `${latestProduction?.collected || 0} Units Logged`}
+            </span>
+            <span className="text-[10px] text-emerald-300">
+              {hasPoultry ? 'Optimal layer rate > 75%' : 'Tracking daily livestock productivity'}
+            </span>
           </div>
         </div>
       </div>
@@ -220,7 +264,7 @@ export default function FarmProductionWorkspace() {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-2">
-            <Egg className="w-3.5 h-3.5" />
+            {hasPoultry ? <Egg className="w-3.5 h-3.5" /> : hasDairy ? <Milk className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
             <span>Recorded Yields, Sales &amp; Margins ({productionList.length})</span>
           </h3>
         </div>

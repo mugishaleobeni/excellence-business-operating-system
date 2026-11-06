@@ -4,6 +4,7 @@ import {
   Layers,
   Clock,
   Egg,
+  Milk,
   HeartPulse,
   TrendingUp,
   Scale
@@ -17,13 +18,34 @@ export default function AgricultureKpiCards({
   production = [],
   onNavigateTab
 }) {
-  const totalBreedingHeads = animals.length
+  const totalBreedingHeads = animals.filter((a) => !a.healthStatus?.toLowerCase().includes('sold')).length
   const totalBatchHeads = batches.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0)
   const totalPopulation = totalBreedingHeads + totalBatchHeads
 
   const totalFeedKg = feeds.reduce((sum, f) => sum + (Number(f.currentStockKg) || 0), 0)
   const activeGestations = gestations.filter((g) => !g.status?.includes('Completed')).length
-  const totalStoredYields = production.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
+  const totalStoredYields = production.reduce(
+    (sum, p) => sum + (Number(p.remainingInStorage) || Number(p.quantity) || 0),
+    0
+  )
+
+  const hasPoultry =
+    animals.some((a) => /chicken|poultry|layer|broiler|hen/i.test(a.type || a.breed)) ||
+    batches.some((b) => /chicken|poultry|layer|broiler|hen/i.test(b.type || b.breed))
+  const hasDairy =
+    animals.some((a) => /cow|cattle|dairy|bovine/i.test(a.type || a.breed)) ||
+    batches.some((b) => /cow|cattle|dairy|bovine/i.test(b.type || b.breed))
+  const hasPigs =
+    animals.some((a) => /pig|swine/i.test(a.type || a.breed)) ||
+    batches.some((b) => /pig|swine/i.test(b.type || b.breed))
+
+  const yieldLabel = hasPoultry
+    ? 'Egg Yields'
+    : hasDairy
+    ? 'Milk Yields'
+    : hasPigs
+    ? 'Farm Output'
+    : 'Yields in Store'
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -101,10 +123,16 @@ export default function AgricultureKpiCards({
       >
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold text-slate-400 group-hover:text-emerald-300 transition-colors uppercase tracking-wider">
-            Yields in Storage
+            {yieldLabel}
           </span>
           <div className="w-7 h-7 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center">
-            <Egg className="w-3.5 h-3.5" />
+            {hasPoultry ? (
+              <Egg className="w-3.5 h-3.5" />
+            ) : hasDairy ? (
+              <Milk className="w-3.5 h-3.5" />
+            ) : (
+              <TrendingUp className="w-3.5 h-3.5" />
+            )}
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-teal-300 mt-1">
