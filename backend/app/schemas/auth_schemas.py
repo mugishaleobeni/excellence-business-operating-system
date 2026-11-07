@@ -3,6 +3,24 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.seed_defaults import ARCHITECTURE_IDS
 
 
+class SendVerificationSchema(BaseModel):
+    """Pydantic v2 schema for sending a 6-digit registration verification OTP."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    email: EmailStr
+    fullName: Optional[str] = Field(default="Business Founder", max_length=120)
+
+
+class VerifyEmailCodeSchema(BaseModel):
+    """Pydantic v2 schema for verifying the 6-digit email OTP in Step 2 of registration."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+
+
 class RegisterBusinessSchema(BaseModel):
     """Pydantic v2 schema for the 7-step guided business registration flow."""
 
@@ -11,7 +29,7 @@ class RegisterBusinessSchema(BaseModel):
     fullName: str = Field(..., min_length=2, max_length=120)
     email: EmailStr
     phone: str = Field(default="+250 788 000 000", max_length=40)
-    password: str = Field(default="ExbosPass2026!", min_length=4, max_length=128)
+    password: str = Field(..., min_length=6, max_length=128)
     architectureId: str = Field(default="make-and-sell")
     businessName: str = Field(..., min_length=2, max_length=150)
     businessCategory: Optional[str] = Field(default="General SME")
@@ -23,8 +41,11 @@ class RegisterBusinessSchema(BaseModel):
     enabledActivities: list[str] = Field(
         default_factory=lambda: ["buy-and-sell", "services"]
     )
-    demoSpendableRWF: float = Field(default=0, ge=0)
-    demoMonthlyRevenueRWF: float = Field(default=0, ge=0)
+    startingSpendableRWF: float = Field(default=0, ge=0)
+    startingMonthlyRevenueRWF: float = Field(default=0, ge=0)
+    primaryItem: Optional[str] = Field(default=None)
+    demoSpendableRWF: Optional[float] = Field(default=None, ge=0)
+    demoMonthlyRevenueRWF: Optional[float] = Field(default=None, ge=0)
     demoPrimaryItem: Optional[str] = Field(default=None)
 
     @field_validator("architectureId")
@@ -41,7 +62,7 @@ class LoginSchema(BaseModel):
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
 
     email: EmailStr
-    password: Optional[str] = Field(default="")
+    password: str = Field(..., min_length=1, max_length=128)
     architectureId: Optional[str] = Field(default=None)
     name: Optional[str] = Field(default=None)
     businessName: Optional[str] = Field(default=None)
@@ -82,4 +103,3 @@ class ResetPasswordSchema(BaseModel):
     email: EmailStr
     code: str = Field(..., min_length=4, max_length=10)
     newPassword: str = Field(..., min_length=6, max_length=128)
-

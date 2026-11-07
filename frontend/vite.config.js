@@ -652,10 +652,15 @@ function serverStoragePlugin() {
         const url = req.url ? req.url.split('?')[0] : ''
 
         if (url.startsWith('/api/v1')) {
-          proxyToFlask(req, res, () => {
-            res.statusCode = 503
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ success: false, error: 'Flask backend offline on port ' + backendPort }))
+          let body = ''
+          req.on('data', chunk => { body += chunk })
+          req.on('end', () => {
+            req._BufferedBody = body
+            proxyToFlask(req, res, () => {
+              res.statusCode = 503
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ success: false, error: 'Flask backend offline on port ' + backendPort }))
+            })
           })
           return
         }

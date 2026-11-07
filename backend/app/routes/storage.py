@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.database import get_db, serialize_doc
 from app.schemas.workspace_schemas import StorageSnapshotSchema
 from app.seed_defaults import (
@@ -32,13 +33,19 @@ def _set_config_val(db, key: str, value, now_iso: str) -> None:
 
 @storage_bp.route("", methods=["GET"])
 @storage_bp.route("/", methods=["GET"])
+@jwt_required(optional=True)
 def get_storage_snapshot():
     """
     Hydrate full application state for ExbosContext.jsx on initial load.
     Reads directly from MongoDB collections (workspaces, transactions, businesses, platform_config).
     """
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    jwt_email = get_jwt_identity()
+    scope_key = (
+        request.args.get("scopeKey")
+        or (jwt_email.lower() if jwt_email else None)
+        or "default"
+    )
 
     # 1. Assemble all 6 architecture workspaces
     workspaces_map = get_default_workspaces()
@@ -52,7 +59,8 @@ def get_storage_snapshot():
             workspaces_map[arch_id] = {**workspaces_map.get(arch_id, {}), **clean_ws}
 
     # 2. Load recent financial ledger transactions
-    tx_cursor = db.transactions.find({}).sort("timestamp", -1).limit(500)
+    tx_query = {"scopeKey": scope_key} if scope_key != "default" else {}
+    tx_cursor = db.transactions.find(tx_query).sort("timestamp", -1).limit(500)
     transactions = []
     for tx in tx_cursor:
         clean_tx = serialize_doc(tx)
@@ -94,6 +102,7 @@ def get_storage_snapshot():
 
 @storage_bp.route("", methods=["POST"])
 @storage_bp.route("/", methods=["POST"])
+@jwt_required(optional=True)
 @validate_json(StorageSnapshotSchema)
 def save_storage_snapshot(validated_data: StorageSnapshotSchema):
     """
@@ -102,7 +111,18 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    scope_key = request.args.get("scopeKey", "default")
+    jwt_email = get_jwt_identity()
+    user_email = (
+        (validated_data.user or {}).get("email", "").lower()
+        if isinstance(validated_data.user, dict)
+        else ""
+    )
+    scope_key = (
+        request.args.get("scopeKey")
+        or (jwt_email.lower() if jwt_email else None)
+        or user_email
+        or "default"
+    )
 
     # 1. Persist workspaces
     if validated_data.workspaces and isinstance(validated_data.workspaces, dict):
@@ -128,7 +148,12 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
             if not isinstance(tx, dict):
                 continue
             tx_id = str(tx.get("id") or f"TX-{now_ms}")
-            tx_payload = {**tx, "id": tx_id, "updated_at": now_iso}
+            tx_payload = {
+                **tx,
+                "id": tx_id,
+                "scopeKey": scope_key,
+                "updated_at": now_iso,
+            }
             tx_payload.pop("_id", None)
             db.transactions.update_one(
                 {"id": tx_id},

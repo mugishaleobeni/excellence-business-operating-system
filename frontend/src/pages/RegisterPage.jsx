@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
+import { exbosApi } from '../utils/apiClient'
 import PublicNavbar from '../components/layout/PublicNavbar'
 import CodeSlots from '../components/common/CodeSlots'
 import { formatRWF } from '../utils/currencyWords'
@@ -48,6 +49,10 @@ export default function RegisterPage() {
   const returnTo = searchParams.get('returnTo')
 
   const [step, setStep] = useState(1)
+  const [maxCompletedStep, setMaxCompletedStep] = useState(1)
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [serverOtpHint, setServerOtpHint] = useState('')
+  const [submitting, setSubmitting] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [codeStatus, setCodeStatus] = useState('idle')
   const [errors, setErrors] = useState({})
@@ -203,105 +208,145 @@ export default function RegisterPage() {
     return true
   }
 
-  const nextStep = (e) => {
+  const nextStep = async (e) => {
     if (e) e.preventDefault()
     if (!validateStep(step)) return
-    setStep((prev) => Math.min(7, prev + 1))
+
+    // Step 1 -> Step 2: Send 6-digit OTP verification code via Flask + Gmail SMTP
+    if (step === 1) {
+      setSubmitting(true)
+      try {
+        const res = await exbosApi.sendVerification({
+          email: form.email.trim().toLowerCase(),
+          fullName: form.fullName.trim()
+        })
+        if (!res.ok) {
+          showToast(res.error || 'Could not send verification email.', 'Registration Error')
+          return
+        }
+        const sentFlag = res.data?.data?.emailSent
+        const fallbackCode = res.data?.data?.verificationCode || ''
+        if (!sentFlag && fallbackCode) {
+          setServerOtpHint(fallbackCode)
+        } else {
+          setServerOtpHint('')
+        }
+        setMaxCompletedStep((prev) => Math.max(prev, 2))
+        setStep(2)
+      } finally {
+        setSubmitting(false)
+      }
+      return
+    }
+
+    // Step 2 -> Step 3: Verify the 6-digit OTP code against MongoDB before unlocking Step 3
+    if (step === 2) {
+      if (form.verificationCode.trim().length < 6) {
+        showToast('Please enter the 6-digit verification code sent to your email.', 'Verification Required')
+        return
+      }
+      if (!emailVerified) {
+        setSubmitting(true)
+        try {
+          const res = await exbosApi.verifyEmail({
+            email: form.email.trim().toLowerCase(),
+            code: form.verificationCode.trim()
+          })
+          if (!res.ok) {
+            setCodeStatus('error')
+            showToast(res.error || 'Invalid or expired 6-digit verification code.', 'Verification Failed')
+            return
+          }
+          setEmailVerified(true)
+          setCodeStatus('success')
+        } finally {
+          setSubmitting(false)
+        }
+      }
+      setMaxCompletedStep((prev) => Math.max(prev, 3))
+      setStep(3)
+      return
+    }
+
+    const nextNum = Math.min(7, step + 1)
+    setMaxCompletedStep((prev) => Math.max(prev, nextNum))
+    setStep(nextNum)
   }
 
   const prevStep = () => setStep((prev) => Math.max(1, prev - 1))
 
-  const handleAutoFillDemoSample = () => {
-    const sampleMap = {
-      'make-and-sell': {
-        fullName: 'Eric Ndayisaba',
-        email: 'eric@inyangebakery.rw',
-        businessName: 'Inyange Artisan Bakery & Roastery',
-        businessCategory: 'Bakery & Food Production',
-        location: 'Kigali, Nyarugenge',
-        demoSpendableRWF: '4650000',
-        demoMonthlyRevenueRWF: '3420000',
-        demoPrimaryItem: 'Artisan Brioche Loaf Batch (120 units)'
-      },
-      'buy-and-sell': {
-        fullName: 'Jean-Paul Habimana',
-        email: 'jp@kigaliprime.rw',
-        businessName: 'Kigali Prime Hardware & Mart',
-        businessCategory: 'Retail & Wholesale Hardware',
-        location: 'Kigali, Gisozi',
-        demoSpendableRWF: '5070000',
-        demoMonthlyRevenueRWF: '3280000',
-        demoPrimaryItem: 'Twyford Ceramic Tiles Box'
-      },
-      services: {
-        fullName: 'Diane Mukamana',
-        email: 'diane@luminastudio.rw',
-        businessName: 'Lumina Aesthetics & Technical Studio',
-        businessCategory: 'Services, Bookings & Projects',
-        location: 'Kigali, Kimihurura',
-        demoSpendableRWF: '4290000',
-        demoMonthlyRevenueRWF: '2960000',
-        demoPrimaryItem: 'Executive Bridal & Spa Package'
-      },
-      agriculture: {
-        fullName: 'Aline Uwase',
-        email: 'aline@agukafarm.rw',
-        businessName: 'Aguka Smart Pig & Feed Farm',
-        businessCategory: 'Livestock Breeding & Circular Farming',
-        location: 'Bugesera, Nyamata',
-        demoSpendableRWF: '5480000',
-        demoMonthlyRevenueRWF: '3650000',
-        demoPrimaryItem: 'Tunga Balanced Pig Feed (50kg)'
-      },
-      'food-and-hospitality': {
-        fullName: 'Patrick Mugisha',
-        email: 'patrick@millebistro.rw',
-        businessName: 'Mille Collines Bistro & Suites',
-        businessCategory: 'Restaurant & Boutique Accommodation',
-        location: 'Kigali, Kiyovu',
-        demoSpendableRWF: '5890000',
-        demoMonthlyRevenueRWF: '4120000',
-        demoPrimaryItem: 'Grilled Lake Kivu Tilapia Platter'
-      },
-      hybrid: {
-        fullName: 'Pacifique Nshimiyimana',
-        email: 'pacifique@techpulse.rw',
-        businessName: 'TechPulse Electronics & Repair Hub',
-        businessCategory: 'Hybrid Retail + Technical Repair',
-        location: 'Kigali, CBD',
-        demoSpendableRWF: '5240000',
-        demoMonthlyRevenueRWF: '3790000',
-        demoPrimaryItem: 'Samsung A55 Screen + Installation Service'
-      }
+  const handleStepBarClick = (targetStep) => {
+    if (targetStep === step) return
+    if (targetStep < step) {
+      setStep(targetStep)
+      return
     }
-    const chosen = sampleMap[form.architectureId] || sampleMap['buy-and-sell']
-    setForm((prev) => ({
-      ...prev,
-      ...chosen
-    }))
-    setErrors({})
+    if (targetStep <= maxCompletedStep && validateStep(step)) {
+      setStep(targetStep)
+    } else {
+      showToast(
+        `Please complete Step 0${step} (${STEPS[step - 1].title}) before advancing to Step 0${targetStep}.`,
+        'Step Locked'
+      )
+    }
   }
 
-  const handleFinishRegistration = () => {
-    registerNewBusiness({
-      fullName: form.fullName || 'Jean-Claude Nshuti (Demo)',
-      email: form.email || 'founder@exbosbusiness.rw',
-      phone: form.phone,
-      businessName: form.businessName || `${selectedArchObj.shortName} Demo Enterprise`,
-      businessCategory: form.businessCategory,
-      location: form.location,
-      architectureId: form.architectureId,
-      planTier: form.planTier,
-      currency: form.currency,
-      language: form.language,
-      demoSpendableRWF: form.demoSpendableRWF,
-      demoMonthlyRevenueRWF: form.demoMonthlyRevenueRWF,
-      demoPrimaryItem: form.demoPrimaryItem
-    })
-    if (returnTo === 'calculator' || pendingCalculator) {
-      navigate('/business-tools')
-    } else {
-      navigate(`/dashboard?arch=${form.architectureId}`)
+  const handleResendVerificationCode = async () => {
+    setSubmitting(true)
+    try {
+      const res = await exbosApi.sendVerification({
+        email: form.email.trim().toLowerCase(),
+        fullName: form.fullName.trim()
+      })
+      if (res.ok) {
+        const sentFlag = res.data?.data?.emailSent
+        const fallbackCode = res.data?.data?.verificationCode || ''
+        if (!sentFlag && fallbackCode) {
+          setServerOtpHint(fallbackCode)
+        }
+        setForm((prev) => ({ ...prev, verificationCode: '' }))
+        setCodeStatus('idle')
+        setEmailVerified(false)
+      } else {
+        showToast(res.error || 'Failed to resend verification code.', 'Error')
+      }
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleFinishRegistration = async () => {
+    if (!validateStep(1) || !validateStep(4)) {
+      return
+    }
+    setSubmitting(true)
+    try {
+      await registerNewBusiness({
+        fullName: form.fullName.trim(),
+        email: form.email.trim().toLowerCase(),
+        phone: form.phone,
+        password: form.password,
+        businessName: form.businessName.trim(),
+        businessCategory: form.businessCategory.trim() || selectedArchObj.name,
+        country: form.country,
+        location: form.location.trim() || 'Kigali, Rwanda',
+        architectureId: form.architectureId,
+        planTier: form.planTier,
+        currency: form.currency,
+        language: form.language,
+        startingSpendableRWF: form.demoSpendableRWF,
+        startingMonthlyRevenueRWF: form.demoMonthlyRevenueRWF,
+        primaryItem: form.demoPrimaryItem
+      })
+      if (returnTo === 'calculator' || pendingCalculator) {
+        navigate('/business-tools')
+      } else {
+        navigate(`/dashboard?arch=${form.architectureId}`)
+      }
+    } catch (err) {
+      showToast(err.message || 'Could not complete registration.', 'Registration Failed')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -402,11 +447,12 @@ export default function RegisterPage() {
               const Icon = s.icon
               const active = s.num === step
               const done = s.num < step
+              const locked = s.num > maxCompletedStep
               return (
                 <button
                   key={s.num}
                   type="button"
-                  onClick={() => setStep(s.num)}
+                  onClick={() => handleStepBarClick(s.num)}
                   style={{
                     boxShadow: 'none',
                     border: 'none',
@@ -414,12 +460,14 @@ export default function RegisterPage() {
                     backdropFilter: 'blur(18px) saturate(160%)',
                     WebkitBackdropFilter: 'blur(18px) saturate(160%)'
                   }}
-                  className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer flex flex-col gap-1 ${
+                  className={`p-2 sm:p-2.5 rounded-xl text-left transition-all flex flex-col gap-1 ${
                     active
-                      ? 'bg-white/30 text-white'
+                      ? 'bg-white/30 text-white cursor-pointer'
                       : done
-                      ? 'bg-white/15 text-[#9EDCFF] hover:bg-white/20'
-                      : 'bg-white/10 opacity-80 text-slate-200 hover:opacity-100 hover:bg-white/15'
+                      ? 'bg-white/15 text-[#9EDCFF] hover:bg-white/20 cursor-pointer'
+                      : locked
+                      ? 'bg-white/5 opacity-45 text-slate-300 cursor-not-allowed'
+                      : 'bg-white/10 opacity-80 text-slate-200 hover:opacity-100 hover:bg-white/15 cursor-pointer'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -581,8 +629,12 @@ export default function RegisterPage() {
                 <Link to="/login" className="text-xs font-bold text-white hover:text-[#9EDCFF] no-underline transition-colors">
                   Already have an account? Sign In
                 </Link>
-                <button type="submit" className="btn-sapphire px-6 py-3 text-sm">
-                  <span>Continue to Step 2</span>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn-sapphire px-6 py-3 text-sm disabled:opacity-60"
+                >
+                  <span>{submitting ? 'Sending Verification Code...' : 'Continue to Step 2'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -592,9 +644,24 @@ export default function RegisterPage() {
           {/* STEP 2: VERIFY EMAIL */}
           {step === 2 && (
             <form onSubmit={nextStep} className="space-y-6">
-              <div className="p-4 rounded-2xl bg-white/10 text-sm text-[#9EDCFF] backdrop-blur-md">
-                We sent a 6-digit verification code to{' '}
-                <strong className="text-white">{form.email || 'founder@yourbusiness.rw'}</strong>. Verify your email before configuring your workspace.
+              <div className="p-4 rounded-2xl bg-white/10 text-sm text-[#9EDCFF] backdrop-blur-md flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  We sent a 6-digit verification code to{' '}
+                  <strong className="text-white">{form.email}</strong>. Enter the code below to verify your email address.
+                  {serverOtpHint && (
+                    <div className="mt-1.5 text-xs text-amber-300 font-mono">
+                      Offline SMTP Fallback Code: <strong>{serverOtpHint}</strong>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleResendVerificationCode}
+                  className="px-3 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-bold text-white cursor-pointer shrink-0"
+                >
+                  Resend Code
+                </button>
               </div>
 
               <div className="space-y-3">
@@ -609,12 +676,23 @@ export default function RegisterPage() {
                     status={codeStatus}
                     onChange={(code) => {
                       setForm((prev) => ({ ...prev, verificationCode: code }))
+                      setEmailVerified(false)
                       if (codeStatus !== 'idle') setCodeStatus('idle')
                     }}
-                    onComplete={(code) => {
-                      // Demo verify auto-validation
+                    onComplete={async (code) => {
                       if (code.length === 6) {
-                        setCodeStatus('success')
+                        const res = await exbosApi.verifyEmail({
+                          email: form.email.trim().toLowerCase(),
+                          code: code.trim()
+                        })
+                        if (res.ok) {
+                          setEmailVerified(true)
+                          setCodeStatus('success')
+                        } else {
+                          setEmailVerified(false)
+                          setCodeStatus('error')
+                          showToast(res.error || 'Invalid 6-digit verification code.', 'Verification Failed')
+                        }
                       }
                     }}
                     accentColor="#f5f5f5"
@@ -787,40 +865,40 @@ export default function RegisterPage() {
                   </div>
                 </div>
 
-                {/* Custom Demo Balances & First Item for Dashboard Reflection */}
+                {/* Opening Balances & First Item for Dashboard Initialization */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold uppercase text-[#9EDCFF]">
-                    Starting Demo Spendable Balance (RWF)
+                    Opening Spendable Balance (RWF)
                   </label>
                   <input
                     type="number"
                     value={form.demoSpendableRWF}
                     onChange={(e) => setForm({ ...form, demoSpendableRWF: e.target.value })}
-                    placeholder="e.g. 5200000"
+                    placeholder="e.g. 0 or current cash/MoMo balance"
                     className="w-full px-4 py-3 rounded-2xl reg-input bg-white/15 border-0 outline-none text-sm text-white focus:outline-none focus:bg-white/25 transition-all"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold uppercase text-[#9EDCFF]">
-                    Starting Demo Monthly Revenue (RWF)
+                    Current Monthly Revenue Target (RWF)
                   </label>
                   <input
                     type="number"
                     value={form.demoMonthlyRevenueRWF}
                     onChange={(e) => setForm({ ...form, demoMonthlyRevenueRWF: e.target.value })}
-                    placeholder="e.g. 3450000"
+                    placeholder="e.g. 0 or monthly target"
                     className="w-full px-4 py-3 rounded-2xl reg-input bg-white/15 border-0 outline-none text-sm text-white focus:outline-none focus:bg-white/25 transition-all"
                   />
                 </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <label className="block text-xs font-semibold uppercase text-[#9EDCFF]">
-                    Your First Demo Product, Service, or Batch Name (Optional)
+                    Your First Product, Service, or Batch Name (Optional)
                   </label>
                   <input
                     type="text"
                     value={form.demoPrimaryItem}
                     onChange={(e) => setForm({ ...form, demoPrimaryItem: e.target.value })}
-                    placeholder="e.g. Twyford Ceramic Tiles / Artisan Brioche Loaf / Solar Installation"
+                    placeholder="e.g. Portland Cement 50kg / Artisan Loaf / Technical Service"
                     className="w-full px-4 py-3 rounded-2xl reg-input bg-white/15 border-0 outline-none text-sm text-white focus:outline-none focus:bg-white/25 transition-all"
                   />
                 </div>
@@ -1000,11 +1078,14 @@ export default function RegisterPage() {
                 </button>
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={handleFinishRegistration}
-                  className="btn-sapphire px-8 py-4 text-sm sm:text-base font-orbitron"
+                  className="btn-sapphire px-8 py-4 text-sm sm:text-base font-orbitron disabled:opacity-60"
                 >
                   <span>
-                    {pendingCalculator || returnTo === 'calculator'
+                    {submitting
+                      ? 'Creating Cloud Workspace...'
+                      : pendingCalculator || returnTo === 'calculator'
                       ? 'Complete & Return to Calculator'
                       : 'Open Personalized Dashboard'}
                   </span>

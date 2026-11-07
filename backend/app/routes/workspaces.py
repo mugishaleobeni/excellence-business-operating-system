@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from flask import Blueprint, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.database import get_db, serialize_doc
 from app.schemas.workspace_schemas import (
     ApplyPresetSchema,
@@ -17,6 +17,15 @@ from app.seed_defaults import (
 from app.utils.responses import error_response, success_response, validate_json
 
 workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/api/v1/workspaces")
+
+
+def _resolve_scope_key() -> str:
+    jwt_email = get_jwt_identity()
+    return (
+        request.args.get("scopeKey")
+        or (jwt_email.lower() if jwt_email else None)
+        or "default"
+    )
 
 
 def _load_or_init_workspace(db, arch_id: str, scope_key: str = "default") -> dict:
@@ -49,7 +58,7 @@ def _load_or_init_workspace(db, arch_id: str, scope_key: str = "default") -> dic
 def list_workspaces():
     """Return all 6 architecture workspaces."""
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     result = {}
     for arch_id in ARCHITECTURE_IDS:
         ws = _load_or_init_workspace(db, arch_id, scope_key)
@@ -69,7 +78,7 @@ def get_workspace(arch_id: str):
             status_code=404,
         )
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     ws = _load_or_init_workspace(db, arch_id, scope_key)
     ws.pop("_id", None)
     ws.pop("scopeKey", None)
@@ -86,7 +95,7 @@ def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
             error=f"Unknown architecture '{arch_id}'.", status_code=404
         )
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     _load_or_init_workspace(db, arch_id, scope_key)
@@ -116,7 +125,7 @@ def apply_workspace_preset(arch_id: str, validated_data: ApplyPresetSchema):
             error=f"Unknown architecture '{arch_id}'.", status_code=404
         )
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     ws = _load_or_init_workspace(db, arch_id, scope_key)
@@ -178,7 +187,7 @@ def list_module_records(arch_id: str, module_name: str):
             status_code=400,
         )
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     ws = _load_or_init_workspace(db, arch_id, scope_key)
     records = ws.get("records", {}).get(module_name, [])
     return success_response(data=records)
@@ -206,7 +215,7 @@ def create_module_record(
         )
 
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
@@ -357,7 +366,7 @@ def update_module_record(
         return error_response(f"Invalid module bucket '{module_name}'.", status_code=400)
 
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     ws = _load_or_init_workspace(db, arch_id, scope_key)
@@ -398,7 +407,7 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         return error_response(f"Invalid module bucket '{module_name}'.", status_code=400)
 
     db = get_db()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     ws = _load_or_init_workspace(db, arch_id, scope_key)

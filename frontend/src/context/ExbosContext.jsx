@@ -10,7 +10,7 @@ import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePr
 import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
 import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
 import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
-import { exbosApi } from '../utils/apiClient'
+import { exbosApi, getAuthHeaders, resolveStorageUrl } from '../utils/apiClient'
 
 const ExbosContext = createContext(null)
 
@@ -193,11 +193,20 @@ export function ExbosProvider({ children }) {
     }
   }, [hideFinancials])
 
-  // Authenticated User State
+  // Authenticated User State (Requires real backend token; purges legacy demo sessions)
   const [user, setUser] = useState(() => {
     try {
+      localStorage.removeItem('exbos_demo_workspaces')
+      const token = localStorage.getItem('exbos_access_token')
       const saved = localStorage.getItem('exbos_user')
-      return saved ? JSON.parse(saved) : null
+      if (!token || !saved) return null
+      const parsed = JSON.parse(saved)
+      if (parsed?.isDemo || String(parsed?.role || '').includes('Demo')) {
+        localStorage.removeItem('exbos_user')
+        localStorage.removeItem('exbos_access_token')
+        return null
+      }
+      return parsed
     } catch {
       return null
     }
@@ -485,7 +494,7 @@ export function ExbosProvider({ children }) {
 
   const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
     try {
-      const saved = localStorage.getItem('exbos_demo_workspaces')
+      const saved = localStorage.getItem('exbos_workspaces_v2')
       if (saved) return sanitizeUserWorkspaces(JSON.parse(saved))
     } catch {
       // ignore
@@ -493,10 +502,13 @@ export function ExbosProvider({ children }) {
     return createCleanWorkspaces()
   })
 
-  // Load stored data from React dev server storage on mount
+  // Load stored data from Flask + MongoDB Atlas backend on mount and when user changes
   useEffect(() => {
     let isMounted = true
-    fetch('/api/storage')
+    const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
+    fetch(resolveStorageUrl(scopeParam), {
+      headers: getAuthHeaders()
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((serverData) => {
         if (!isMounted || !serverData) return
@@ -506,9 +518,6 @@ export function ExbosProvider({ children }) {
         }
         if (Array.isArray(serverData.transactions)) {
           setTransactions(sanitizeUserTransactions(serverData.transactions))
-        }
-        if (serverData.user) {
-          setUser(serverData.user)
         }
         if (Array.isArray(serverData.businesses)) {
           setBusinesses(serverData.businesses.filter((b) => !['BIZ-1001', 'BIZ-1002', 'BIZ-1003'].includes(b.id)))
@@ -532,15 +541,16 @@ export function ExbosProvider({ children }) {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [user?.email])
 
-  // Persist live user data to both localStorage and React dev server on disk
+  // Persist live user data to both localStorage and Flask + MongoDB Atlas backend
   useEffect(() => {
     try {
-      localStorage.setItem('exbos_demo_workspaces', JSON.stringify(demoWorkspaces))
+      localStorage.setItem('exbos_workspaces_v2', JSON.stringify(demoWorkspaces))
       localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
     } catch {}
 
+    const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
     const payload = JSON.stringify({
       workspaces: demoWorkspaces,
       transactions,
@@ -553,9 +563,9 @@ export function ExbosProvider({ children }) {
       savedAt: new Date().toISOString()
     })
 
-    fetch('/api/storage', {
+    fetch(resolveStorageUrl(scopeParam), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: payload
     }).catch(() => {})
   }, [demoWorkspaces, transactions, user, businesses, savedAnalyses, integrations, exportHistory, superAdminBroadcast])
@@ -736,7 +746,7 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_demo_workspaces', JSON.stringify(clean))
       localStorage.removeItem('exbos_transactions')
     } catch {}
-    fetch('/api/storage/reset', { method: 'POST' }).catch(() => {})
+    fetch(resolveStorageUrl('/reset'), { method: 'POST', headers: getAuthHeaders() }).catch(() => {})
   }
 
   const applyMakeSellTrade = (tradeKey) => {
@@ -917,59 +927,37 @@ export function ExbosProvider({ children }) {
     })
   }
 
-  const login = (userData) => {
-    const archId = userData.architectureId || 'buy-and-sell'
-    const cleanMap = createCleanWorkspaces()
-    const archWorkspace = (demoWorkspaces && demoWorkspaces[archId]) || cleanMap[archId]
-
-    const loggedIn = {
-      id: userData.id || `USER-${Date.now().toString().slice(-4)}`,
-      name: userData.name || archWorkspace.ownerName || 'Business Owner',
-      email: userData.email || archWorkspace.email || 'owner@exbos.rw',
-      phone: userData.phone || archWorkspace.phone || '+250 788 000 000',
-      role: userData.role || 'Business Owner',
-      businessName: userData.businessName || archWorkspace.businessName || `${archId} Enterprise`,
-      businessCategory: userData.businessCategory || archWorkspace.category || 'Operations',
-      location: userData.location || archWorkspace.location || 'Kigali, Rwanda',
-      architectureId: archId,
-      planTier: userData.planTier || 'Bronze',
-      currency: userData.currency || 'RWF',
-      verified: true
-    }
-
-    setUser(loggedIn)
-
-    exbosApi
-      .login({
-        email: loggedIn.email,
-        name: loggedIn.name,
-        businessName: loggedIn.businessName,
-        architectureId: archId,
-        role: loggedIn.role
-      })
-      .then((res) => {
-        if (res.ok && res.data?.data?.access_token) {
-          try {
-            localStorage.setItem('exbos_access_token', res.data.data.access_token)
-          } catch {}
-        }
-      })
-
-    updateDemoWorkspace(archId, {
-      ownerName: loggedIn.name,
-      businessName: loggedIn.businessName,
-      email: loggedIn.email,
-      phone: loggedIn.phone,
-      location: loggedIn.location,
-      category: loggedIn.businessCategory
+  const login = async (credentials) => {
+    const res = await exbosApi.login({
+      email: (credentials.email || '').trim().toLowerCase(),
+      password: credentials.password || '',
+      architectureId: credentials.architectureId || undefined
     })
 
-    return loggedIn
+    if (!res.ok || !res.data?.data?.user) {
+      throw new Error(res.error || 'Invalid email or password.')
+    }
+
+    const { access_token, user: backendUser, workspaces: backendWorkspaces } = res.data.data
+    try {
+      if (access_token) {
+        localStorage.setItem('exbos_access_token', access_token)
+      }
+    } catch {}
+
+    if (backendWorkspaces && typeof backendWorkspaces === 'object') {
+      setDemoWorkspaces(sanitizeUserWorkspaces(backendWorkspaces))
+    }
+
+    setUser(backendUser)
+    return backendUser
   }
 
-  const updateUserProfile = (updates) => {
+  const updateUserProfile = async (updates) => {
+    const res = await exbosApi.updateProfile(updates)
+    const updatedUser = res.ok && res.data?.data?.user ? res.data.data.user : null
     setUser((prev) => {
-      const next = { ...(prev || {}), ...updates, isDemo: true }
+      const next = updatedUser || { ...(prev || {}), ...updates }
       const archId = next.architectureId || 'buy-and-sell'
       updateDemoWorkspace(archId, {
         ownerName: next.name,
@@ -983,106 +971,63 @@ export function ExbosProvider({ children }) {
     })
   }
 
-  const registerNewBusiness = (payload) => {
+  const registerNewBusiness = async (payload) => {
     const archId = payload.architectureId || 'buy-and-sell'
-    const newBizId = `BIZ-${1000 + businesses.length + 1}`
-    const newBiz = {
-      id: newBizId,
-      name: payload.businessName || 'New ExBOS Demo Business',
-      owner: payload.fullName || 'Demo Business Founder',
-      email: payload.email || 'demo@exbos.rw',
-      architecture: archId,
-      plan: payload.planTier || 'Free',
-      billingType: payload.planTier === 'Free' ? 'Free' : 'Paid',
-      status: 'Active (Demo)',
-      branches: 1,
-      monthlySpendRWF:
-        pricingPlans.find((p) => p.tier === payload.planTier)?.priceRWF || 0,
-      expiryDate: payload.planTier === 'Free' ? 'Forever' : '2027-10-30',
-      auditNote: 'Registered in Interactive Demo Mode.'
-    }
-    setBusinesses((prev) => [newBiz, ...prev])
-
-    exbosApi
-      .register({
-        fullName: payload.fullName || 'Business Founder',
-        email: payload.email || 'owner@exbos.rw',
-        phone: payload.phone || '+250 788 000 000',
-        password: payload.password || 'ExbosPass2026!',
-        architectureId: archId,
-        businessName: payload.businessName || 'New ExBOS Business',
-        businessCategory: payload.businessCategory || 'Operations',
-        country: payload.country || 'Rwanda',
-        location: payload.location || 'Kigali, Rwanda',
-        currency: payload.currency || 'RWF',
-        language: payload.language || 'en',
-        planTier: payload.planTier || 'Growth Plan',
-        demoSpendableRWF: Number(payload.demoSpendableRWF) || 0,
-        demoMonthlyRevenueRWF: Number(payload.demoMonthlyRevenueRWF) || 0,
-        demoPrimaryItem: payload.demoPrimaryItem || null
-      })
-      .then((res) => {
-        if (res.ok && res.data?.data?.access_token) {
-          try {
-            localStorage.setItem('exbos_access_token', res.data.data.access_token)
-          } catch {}
-        }
-      })
-
-    // Update the target architecture's demo workspace with the exact user-entered demo metrics & first item
-    const customMetrics = {}
-    if (Number(payload.demoSpendableRWF) > 0) {
-      customMetrics.spendableRWF = Number(payload.demoSpendableRWF)
-    }
-    if (Number(payload.demoMonthlyRevenueRWF) > 0) {
-      customMetrics.monthlyRevenueRWF = Number(payload.demoMonthlyRevenueRWF)
-      customMetrics.netProfitRWF = Math.round(Number(payload.demoMonthlyRevenueRWF) * 0.42)
-    }
-
-    updateDemoWorkspace(archId, {
-      ownerName: payload.fullName || 'Demo Business Founder',
-      businessName: payload.businessName || 'New ExBOS Demo Business',
-      email: payload.email || 'demo@exbos.rw',
+    const res = await exbosApi.register({
+      fullName: (payload.fullName || '').trim(),
+      email: (payload.email || '').trim().toLowerCase(),
       phone: payload.phone || '+250 788 000 000',
+      password: payload.password,
+      architectureId: archId,
+      businessName: (payload.businessName || '').trim(),
+      businessCategory: payload.businessCategory || 'Operations',
+      country: payload.country || 'Rwanda',
       location: payload.location || 'Kigali, Rwanda',
-      category: payload.businessCategory || 'Business Operations',
-      metrics: customMetrics
+      currency: payload.currency || 'RWF',
+      language: payload.language || 'en',
+      planTier: payload.planTier || 'Growth Plan',
+      startingSpendableRWF: Number(payload.startingSpendableRWF ?? payload.demoSpendableRWF) || 0,
+      startingMonthlyRevenueRWF: Number(payload.startingMonthlyRevenueRWF ?? payload.demoMonthlyRevenueRWF) || 0,
+      primaryItem: payload.primaryItem || payload.demoPrimaryItem || null
     })
 
-    if (payload.demoPrimaryItem) {
-      addDemoRecord(archId, 'Inventory', {
-        title: payload.demoPrimaryItem,
-        subPage: 'Demo Setup Item',
-        unitCostRWF: 15000,
-        sellingPriceRWF: 25000,
-        quantity: 25,
-        status: `Added by ${payload.fullName || 'Demo Owner'} during Registration`
-      })
+    if (!res.ok || !res.data?.data?.user) {
+      throw new Error(res.error || 'Registration failed. Please check your details.')
     }
 
-    const newUser = login({
-      id: `USR-${Date.now()}`,
-      name: payload.fullName,
-      email: payload.email,
-      phone: payload.phone,
-      role: 'Business Owner (Demo)',
-      businessName: payload.businessName,
-      businessCategory: payload.businessCategory,
-      location: payload.location,
-      architectureId: archId,
-      planTier: payload.planTier || 'Free',
-      currency: payload.currency || 'RWF'
-    })
+    const {
+      access_token,
+      user: createdUser,
+      business: createdBiz,
+      workspaces: createdWorkspaces
+    } = res.data.data
+
+    try {
+      if (access_token) {
+        localStorage.setItem('exbos_access_token', access_token)
+      }
+    } catch {}
+
+    if (createdBiz) {
+      setBusinesses((prev) => [createdBiz, ...prev.filter((b) => b.id !== createdBiz.id)])
+    }
+    if (createdWorkspaces && typeof createdWorkspaces === 'object') {
+      setDemoWorkspaces(sanitizeUserWorkspaces(createdWorkspaces))
+    }
+
+    setUser(createdUser)
     if (payload.language) {
       setLanguage(payload.language)
     }
-    return newUser
+    return createdUser
   }
 
   const logout = () => {
     setUser(null)
     try {
       localStorage.removeItem('exbos_access_token')
+      localStorage.removeItem('exbos_user')
+      localStorage.removeItem('exbos_workspaces_v2')
     } catch {}
   }
 

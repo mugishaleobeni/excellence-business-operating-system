@@ -12,7 +12,9 @@ from app.schemas.auth_schemas import (
     LoginSchema,
     RegisterBusinessSchema,
     ResetPasswordSchema,
+    SendVerificationSchema,
     UpdateProfileSchema,
+    VerifyEmailCodeSchema,
 )
 from app.schemas.transaction_schemas import (
     TransactionAuditEditSchema,
@@ -40,11 +42,12 @@ __all__ = [
     "PricingPlanUpdateSchema",
     "RegisterBusinessSchema",
     "ResetPasswordSchema",
+    "SendVerificationSchema",
     "StorageSnapshotSchema",
     "SubscriptionUpdateSchema",
     "TransactionAuditEditSchema",
     "TransactionCreateSchema",
     "UpdateProfileSchema",
+    "VerifyEmailCodeSchema",
     "WorkspacePatchSchema",
 ]
-
