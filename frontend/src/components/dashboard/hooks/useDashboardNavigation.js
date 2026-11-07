@@ -5,8 +5,13 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
 
-  // 1. Resolve Architecture ID from URL > localStorage > user > default 'buy-and-sell'
+  // 1. Resolve Architecture ID:
+  //    - If the signed-in user has a registered architectureId, lock strictly to `user.architectureId`
+  //      so they always stay in their registered business architecture and cannot be switched.
   const activeArchId = useMemo(() => {
+    if (user?.architectureId && architectures.some((a) => a.id === user.architectureId)) {
+      return user.architectureId
+    }
     const fromUrl = searchParams.get('arch')
     if (fromUrl && architectures.some((a) => a.id === fromUrl)) {
       return fromUrl
@@ -17,7 +22,7 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
         return fromStorage
       }
     } catch (e) {}
-    return user?.architectureId || 'buy-and-sell'
+    return 'buy-and-sell'
   }, [searchParams, architectures, user])
 
   const currentArch = useMemo(() => {

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from flask import Blueprint, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.database import get_db, serialize_doc
 from app.schemas.transaction_schemas import (
     TransactionAuditEditSchema,
@@ -13,6 +13,24 @@ transactions_bp = Blueprint(
 )
 
 
+def _resolve_scope_key() -> str:
+    jwt_email = get_jwt_identity()
+    return (
+        request.args.get("scopeKey")
+        or (jwt_email.lower() if jwt_email else None)
+        or "default"
+    )
+
+
+def _normalize_tx_type(raw_type: str | None) -> str:
+    if not raw_type:
+        return "INFLOW"
+    upper = str(raw_type).strip().upper()
+    if upper in ("OUT", "OUTFLOW", "EXPENSE", "DEBIT"):
+        return "OUTFLOW"
+    return "INFLOW"
+
+
 @transactions_bp.route("", methods=["GET"])
 @transactions_bp.route("/", methods=["GET"])
 @jwt_required(optional=True)
@@ -21,15 +39,18 @@ def list_transactions():
     List financial ledger transactions with optional filtering by architectureId and type.
     """
     db = get_db()
+    scope_key = _resolve_scope_key()
     arch_id = request.args.get("architectureId")
     tx_type = request.args.get("type")
     limit = min(int(request.args.get("limit", "200")), 1000)
 
     query: dict = {}
+    if scope_key != "default":
+        query["scopeKey"] = scope_key
     if arch_id:
         query["architectureId"] = arch_id
     if tx_type:
-        query["type"] = tx_type.upper()
+        query["type"] = _normalize_tx_type(tx_type)
 
     cursor = db.transactions.find(query).sort("timestamp", -1).limit(limit)
     items = []
@@ -53,26 +74,35 @@ def create_transaction(validated_data: TransactionCreateSchema):
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
 
     raw_dump = validated_data.model_dump(exclude_none=True)
     tx_id = str(raw_dump.get("id") or f"TX-{now_ms}")
     arch_id = raw_dump.get("architectureId", "make-and-sell")
     amount = float(raw_dump.get("amountRWF", 0))
-    tx_type = raw_dump.get("type", "INFLOW")
+    tx_type = _normalize_tx_type(raw_dump.get("type"))
+    payment_method = (
+        raw_dump.get("paymentMethod")
+        or raw_dump.get("account")
+        or "MTN MoMo"
+    )
 
     tx_doc = {
         **raw_dump,
         "id": tx_id,
+        "scopeKey": scope_key,
         "architectureId": arch_id,
         "type": tx_type,
         "amountRWF": amount,
+        "paymentMethod": payment_method,
+        "account": raw_dump.get("account") or payment_method,
         "timestamp": raw_dump.get("timestamp") or now_iso,
+        "date": raw_dump.get("date") or now.strftime("%Y-%m-%d %H:%M"),
         "editHistory": raw_dump.get("editHistory") or [],
         "created_at": now_iso,
         "updated_at": now_iso,
     }
-    db.transactions.insert_one(tx_doc)
+    db.transactions.update_one({"id": tx_id}, {"$set": tx_doc}, upsert=True)
 
     # Synchronize workspace cashflow metrics
     ws_doc = db.workspaces.find_one(
@@ -136,7 +166,7 @@ def edit_transaction_with_audit(
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
-    scope_key = request.args.get("scopeKey", "default")
+    scope_key = _resolve_scope_key()
 
     tx_doc = db.transactions.find_one({"id": tx_id})
     if not tx_doc:

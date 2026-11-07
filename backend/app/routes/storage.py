@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from app.database import get_db, serialize_doc
+from app.routes.workspaces import _sync_bucket_to_module_records
 from app.schemas.workspace_schemas import StorageSnapshotSchema
 from app.seed_defaults import (
     DEFAULT_BUSINESSES,
@@ -9,6 +10,8 @@ from app.seed_defaults import (
     DEFAULT_PLATINUM_PROGRAM,
     DEFAULT_PRICING_PLANS,
     DEFAULT_USER,
+    MODULE_RECORD_BUCKETS,
+    create_empty_record_buckets,
     get_default_workspaces,
 )
 from app.utils.responses import validate_json
@@ -56,6 +59,13 @@ def get_storage_snapshot():
         clean_ws.pop("_id", None)
         clean_ws.pop("scopeKey", None)
         if arch_id:
+            records_obj = clean_ws.get("records")
+            if not isinstance(records_obj, dict):
+                records_obj = create_empty_record_buckets()
+            else:
+                for b in MODULE_RECORD_BUCKETS:
+                    records_obj.setdefault(b, [])
+            clean_ws["records"] = records_obj
             workspaces_map[arch_id] = {**workspaces_map.get(arch_id, {}), **clean_ws}
 
     # 2. Load recent financial ledger transactions
@@ -124,11 +134,38 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
         or "default"
     )
 
-    # 1. Persist workspaces
+    # 1. Persist workspaces (safeguarding against unhydrated empty state overwrites)
     if validated_data.workspaces and isinstance(validated_data.workspaces, dict):
         for arch_id, ws_data in validated_data.workspaces.items():
             if not isinstance(ws_data, dict):
                 continue
+            existing_ws = db.workspaces.find_one(
+                {"scopeKey": scope_key, "architectureId": arch_id}
+            )
+            incoming_records = ws_data.get("records")
+            if isinstance(incoming_records, dict) and existing_ws:
+                existing_records = existing_ws.get("records") or {}
+                merged_records = dict(existing_records)
+                for bucket_name, bucket_items in incoming_records.items():
+                    if not isinstance(bucket_items, list):
+                        continue
+                    # Only accept incoming bucket if non-empty OR existing bucket was already empty
+                    # (explicit deletions go through DELETE /api/v1/workspaces/<arch>/records/<bucket>/<id>
+                    # or PATCH /api/v1/workspaces/<arch>)
+                    if len(bucket_items) > 0 or len(existing_records.get(bucket_name) or []) == 0:
+                        merged_records[bucket_name] = bucket_items
+                        if len(bucket_items) > 0:
+                            _sync_bucket_to_module_records(
+                                db, scope_key, arch_id, bucket_name, bucket_items, now_iso
+                            )
+                ws_data = {**ws_data, "records": merged_records}
+            elif isinstance(incoming_records, dict):
+                for bucket_name, bucket_items in incoming_records.items():
+                    if isinstance(bucket_items, list) and len(bucket_items) > 0:
+                        _sync_bucket_to_module_records(
+                            db, scope_key, arch_id, bucket_name, bucket_items, now_iso
+                        )
+
             payload = {
                 **ws_data,
                 "architectureId": arch_id,
@@ -197,14 +234,20 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
 
 
 @storage_bp.route("/reset", methods=["POST"])
+@jwt_required(optional=True)
 def reset_storage_snapshot():
     """
     Reset all 6 architecture workspaces and ledger transactions to a clean zero-base state.
-    Matches ExbosContext.jsx resetDemoData().
+    Matches ExbosContext.jsx resetWorkspaceData().
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
-    scope_key = request.args.get("scopeKey", "default")
+    jwt_email = get_jwt_identity()
+    scope_key = (
+        request.args.get("scopeKey")
+        or (jwt_email.lower() if jwt_email else None)
+        or "default"
+    )
 
     default_workspaces = get_default_workspaces()
     for arch_id, ws_payload in default_workspaces.items():
@@ -220,7 +263,9 @@ def reset_storage_snapshot():
             upsert=True,
         )
 
-    db.transactions.delete_many({})
+    tx_filter = {"scopeKey": scope_key} if scope_key != "default" else {}
+    db.transactions.delete_many(tx_filter)
+    db.module_records.delete_many({"scopeKey": scope_key})
     db.businesses.delete_many({"id": {"$in": ["BIZ-1001", "BIZ-1002", "BIZ-1003"]}})
     _set_config_val(db, "saved_analyses", [], now_iso)
     _set_config_val(db, "export_history", [], now_iso)

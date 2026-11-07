@@ -15,7 +15,9 @@ export default function ContextualSidebar({
   activePage,
   setActivePage,
   activeModule,
-  currentArch = {}
+  currentArch = {},
+  architectures = [],
+  onSwitchArch = null
 }) {
   if (sidebarCollapsed) return null
 
@@ -152,18 +154,18 @@ export default function ContextualSidebar({
             </div>
 
             {/* Active Business Architecture Badge */}
-            <div className="px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 flex items-center justify-between">
-              <div>
+            <div className="px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 space-y-1.5">
+              <div className="flex items-center justify-between">
                 <span className="block text-[9px] font-orbitron uppercase tracking-wider text-[#9EDCFF]/75">
                   Business Architecture
                 </span>
-                <strong className="block text-xs font-bold text-white">
-                  {currentArch.number} · {currentArch.name}
-                </strong>
+                <span className="px-2 py-0.5 rounded-full bg-[#218DFF]/20 border border-[#218DFF]/40 text-[9px] font-bold text-[#9EDCFF] uppercase">
+                  Active
+                </span>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-[#218DFF]/20 border border-[#218DFF]/40 text-[9px] font-bold text-[#9EDCFF] uppercase">
-                Active
-              </span>
+              <strong className="block text-xs font-bold text-white">
+                {currentArch.number} · {currentArch.name}
+              </strong>
             </div>
           </div>
 

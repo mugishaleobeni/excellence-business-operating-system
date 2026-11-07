@@ -19,17 +19,17 @@ export default function HospitalityStatusBanner({
   const workspace = demoWorkspaces?.['food-and-hospitality'] || {}
   const records = workspace.records || {}
 
-  const kitchenOrders = Array.isArray(records['KitchenOrders']) && records['KitchenOrders'].length > 0
+  const kitchenOrders = Array.isArray(records['KitchenOrders'])
     ? records['KitchenOrders']
-    : currentPreset.kitchenOrders || []
+    : []
 
-  const rooms = Array.isArray(records['Rooms']) && records['Rooms'].length > 0
+  const rooms = Array.isArray(records['Rooms'])
     ? records['Rooms']
-    : currentPreset.rooms || []
+    : []
 
-  const ingredients = Array.isArray(records['Ingredients']) && records['Ingredients'].length > 0
+  const ingredients = Array.isArray(records['Ingredients'])
     ? records['Ingredients']
-    : currentPreset.ingredients || []
+    : []
 
   const activeOrders = kitchenOrders.filter(
     (o) => o.status === 'Pending' || o.status === 'Cooking'

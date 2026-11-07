@@ -15,7 +15,7 @@ import LogKitchenWasteModal from '../modals/LogKitchenWasteModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
 export default function IngredientsStockWorkspace({ activePage = 'Kitchen Ingredients' }) {
-  const { demoWorkspaces, addDemoRecord, deleteDemoRecord } = useExbos()
+  const { demoWorkspaces, addDemoRecord, updateDemoRecord, deleteDemoRecord, addTransaction } = useExbos()
   const archData = demoWorkspaces['food-and-hospitality'] || {}
   const ingredientsList = archData.records?.Ingredients || []
   const wasteList = archData.records?.WasteLogs || []
@@ -40,6 +40,25 @@ export default function IngredientsStockWorkspace({ activePage = 'Kitchen Ingred
 
   const handleSaveWaste = (wasteData) => {
     addDemoRecord('food-and-hospitality', 'WasteLogs', wasteData)
+    const matchedIng = ingredientsList.find(
+      (i) => i.id === wasteData.ingredientId || i.name?.toLowerCase() === wasteData.itemName?.toLowerCase()
+    )
+    if (matchedIng && updateDemoRecord) {
+      const nextStock = Math.max(0, (Number(matchedIng.currentStock) || 0) - (Number(wasteData.quantity) || 0))
+      updateDemoRecord('food-and-hospitality', 'Ingredients', matchedIng.id, {
+        currentStock: nextStock
+      })
+    }
+    if (addTransaction && Number(wasteData.estimatedCostRWF) > 0) {
+      addTransaction({
+        architectureId: 'food-and-hospitality',
+        title: `Kitchen Waste: ${wasteData.itemName || 'Ingredient'} (${wasteData.reason || 'Spoilage'})`,
+        type: 'out',
+        category: 'Kitchen Spoilage & Waste',
+        amountRWF: Number(wasteData.estimatedCostRWF),
+        account: 'Inventory Loss'
+      })
+    }
   }
 
   const confirmDelete = () => {

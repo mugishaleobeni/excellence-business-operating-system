@@ -12,44 +12,38 @@ export default function ServicesWorkspace({
   onSwitchPage = () => {}
 }) {
   const {
-    demoWorkspaces,
-    updateDemoWorkspace,
-    addDemoRecord,
-    updateDemoRecord,
-    deleteDemoRecord,
+    workspaces,
+    updateWorkspace,
+    addTransaction,
     addToast,
     serviceTrade = 'salon',
     applyServiceTrade
   } = useExbos()
 
   const currentPreset = SERVICE_PRESETS[serviceTrade] || SERVICE_PRESETS.salon
-  const workspace = demoWorkspaces?.['services'] || {}
+  const workspace = workspaces?.['services'] || {}
   const records = workspace.records || {}
 
-  // Load records or fallback to currentPreset
+  // Load live user records only (zero un-entered preset fallbacks)
   const services = useMemo(() => {
     const list = records['Services']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.services || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const consumables = useMemo(() => {
     const list = records['Consumables']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.consumables || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const jobs = useMemo(() => {
     const list = records['Jobs']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.jobs || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const staff = useMemo(() => {
     const list = records['Staff']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.staff || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const categories = useMemo(() => {
     const list = records['Categories']
@@ -60,7 +54,7 @@ export default function ServicesWorkspace({
   // --- SERVICE ACTIONS ---
   const handleAddService = (newSrv) => {
     const nextList = [newSrv, ...services]
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Services: nextList }
     })
     addToast({ title: 'Service Added', message: `Added "${newSrv.name}" to catalogue.`, type: 'success' })
@@ -68,7 +62,7 @@ export default function ServicesWorkspace({
 
   const handleUpdateService = (id, updates) => {
     const nextList = services.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Services: nextList }
     })
     addToast({ title: 'Service Updated', message: `Updated service details.`, type: 'success' })
@@ -76,7 +70,7 @@ export default function ServicesWorkspace({
 
   const handleDeleteService = (id) => {
     const nextList = services.filter((s) => s.id !== id)
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Services: nextList }
     })
     addToast({ title: 'Service Deleted', message: `Removed service from catalogue.`, type: 'info' })
@@ -85,7 +79,7 @@ export default function ServicesWorkspace({
   // --- CONSUMABLES ACTIONS ---
   const handleAddConsumable = (newCon) => {
     const nextList = [newCon, ...consumables]
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Consumables: nextList }
     })
     addToast({ title: 'Supply Added', message: `Recorded ${newCon.name} in supplies stock.`, type: 'success' })
@@ -93,7 +87,7 @@ export default function ServicesWorkspace({
 
   const handleUpdateConsumable = (id, updates) => {
     const nextList = consumables.map((c) => (c.id === id ? { ...c, ...updates } : c))
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Consumables: nextList }
     })
     addToast({ title: 'Supply Updated', message: `Updated supply stock levels.`, type: 'success' })
@@ -101,7 +95,7 @@ export default function ServicesWorkspace({
 
   const handleDeleteConsumable = (id) => {
     const nextList = consumables.filter((c) => c.id !== id)
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Consumables: nextList }
     })
     addToast({ title: 'Supply Removed', message: `Removed supply item.`, type: 'info' })
@@ -110,7 +104,7 @@ export default function ServicesWorkspace({
   const handleAddCategory = (catName) => {
     if (categories.includes(catName)) return
     const nextList = [...categories, catName]
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Categories: nextList }
     })
     addToast({ title: 'Category Created', message: `Added category "${catName}".`, type: 'success' })
@@ -119,23 +113,48 @@ export default function ServicesWorkspace({
   // --- JOBS ACTIONS ---
   const handleAddJob = (newJob) => {
     const nextList = [newJob, ...jobs]
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Jobs: nextList }
     })
+    const initialPaid = Number(newJob.depositPaidRWF || 0)
+    if (initialPaid > 0 && addTransaction) {
+      addTransaction({
+        architectureId: 'services',
+        title: `Booking Deposit: ${newJob.serviceName || newJob.ticketNumber} (${newJob.customerName})`,
+        type: 'in',
+        category: 'Service Bookings',
+        amountRWF: initialPaid,
+        account: newJob.paymentMethod || 'Cash / MoMo'
+      })
+    }
     addToast({ title: 'Booking Created', message: `Scheduled booking for ${newJob.customerName}.`, type: 'success' })
   }
 
   const handleUpdateJob = (id, updates) => {
+    const prevJob = jobs.find((j) => j.id === id)
     const nextList = jobs.map((j) => (j.id === id ? { ...j, ...updates } : j))
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Jobs: nextList }
     })
+    if (prevJob && updates.status === 'Completed' && prevJob.status !== 'Completed' && addTransaction) {
+      const remainingPaid = Math.max(0, Number(updates.totalPriceRWF ?? prevJob.totalPriceRWF ?? 0) - Number(prevJob.depositPaidRWF || 0))
+      if (remainingPaid > 0) {
+        addTransaction({
+          architectureId: 'services',
+          title: `Completed Service: ${prevJob.serviceName || prevJob.ticketNumber} (${prevJob.customerName})`,
+          type: 'in',
+          category: 'Completed Services',
+          amountRWF: remainingPaid,
+          account: updates.paymentMethod || prevJob.paymentMethod || 'Cash / MoMo'
+        })
+      }
+    }
     addToast({ title: 'Job Updated', message: `Updated ${updates.ticketNumber || 'job'}.`, type: 'success' })
   }
 
   const handleDeleteJob = (id) => {
     const nextList = jobs.filter((j) => j.id !== id)
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Jobs: nextList }
     })
     addToast({ title: 'Job Removed', message: `Deleted job card.`, type: 'info' })
@@ -155,7 +174,7 @@ export default function ServicesWorkspace({
         }
       }
     })
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Consumables: updatedConsumables }
     })
   }
@@ -163,7 +182,7 @@ export default function ServicesWorkspace({
   // --- STAFF ACTIONS ---
   const handleAddStaff = (newMember) => {
     const nextList = [...staff, newMember]
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Staff: nextList }
     })
     addToast({ title: 'Staff Member Added', message: `Added ${newMember.name} to roster.`, type: 'success' })
@@ -171,7 +190,7 @@ export default function ServicesWorkspace({
 
   const handleUpdateStaff = (id, updates) => {
     const nextList = staff.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Staff: nextList }
     })
     addToast({ title: 'Staff Updated', message: `Updated staff profile.`, type: 'success' })
@@ -179,7 +198,7 @@ export default function ServicesWorkspace({
 
   const handleDeleteStaff = (id) => {
     const nextList = staff.filter((s) => s.id !== id)
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Staff: nextList }
     })
     addToast({ title: 'Staff Removed', message: `Removed staff member.`, type: 'info' })
@@ -197,9 +216,19 @@ export default function ServicesWorkspace({
       paidTo: member.name
     }
     const currentExpenses = Array.isArray(records['Expenses']) ? records['Expenses'] : []
-    updateDemoWorkspace('services', {
+    updateWorkspace('services', {
       records: { ...records, Expenses: [payoutExpense, ...currentExpenses] }
     })
+    if (addTransaction && Number(amountRWF) > 0) {
+      addTransaction({
+        architectureId: 'services',
+        title: payoutExpense.title,
+        type: 'out',
+        category: 'Salaries & Commissions',
+        amountRWF: Number(amountRWF),
+        account: 'Cash / MoMo'
+      })
+    }
     addToast({
       title: 'Daily Payout Settled',
       message: `Paid ${amountRWF.toLocaleString()} RWF to ${member.name}. Recorded in expenses.`,

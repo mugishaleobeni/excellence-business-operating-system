@@ -14,7 +14,7 @@ import RecordVetHealthModal from '../modals/RecordVetHealthModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
 export default function FarmHealthWorkspace() {
-  const { demoWorkspaces, updateDemoRecord, addDemoRecord, deleteDemoRecord } = useExbos()
+  const { demoWorkspaces, updateDemoRecord, addDemoRecord, deleteDemoRecord, addTransaction } = useExbos()
   const archData = demoWorkspaces['agriculture'] || {}
   const animalsList = archData.records?.Animals || []
   const batchesList = archData.records?.Batches || []
@@ -29,6 +29,16 @@ export default function FarmHealthWorkspace() {
 
   const handleSaveHealthRecord = (record) => {
     addDemoRecord('agriculture', 'HealthRecords', record)
+    if (addTransaction && Number(record.costRWF) > 0) {
+      addTransaction({
+        architectureId: 'agriculture',
+        title: `Vet Care: ${record.diagnosis || 'Treatment'} (${record.targetName || record.targetRef || 'Livestock'})`,
+        type: 'out',
+        category: 'Veterinary & Health',
+        amountRWF: Number(record.costRWF),
+        account: 'Cash / MoMo'
+      })
+    }
 
     // Also link to animal or batch history
     if (record.targetType === 'individual') {

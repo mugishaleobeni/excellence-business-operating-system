@@ -16,7 +16,7 @@ import {
 import { useExbos } from '../../../../context/ExbosContext'
 
 export default function RecordMixedSaleModal({ isOpen, onClose }) {
-  const { demoWorkspaces, addDemoRecord, updateDemoRecord } = useExbos()
+  const { demoWorkspaces, addDemoRecord, updateDemoRecord, addTransaction } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const catalog = hybridWorkspace.records?.HybridItems || []
 
@@ -131,6 +131,16 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
 
     // 1. Add Mixed Sale record
     addDemoRecord('hybrid', 'MixedSales', newSale)
+    if (addTransaction && totals.totalAmount > 0 && paymentMethod !== 'Unpaid / Customer Debt') {
+      addTransaction({
+        architectureId: 'hybrid',
+        title: `Mixed Sale ${invoiceNumber} (${newSale.customerName})`,
+        type: 'in',
+        category: 'Hybrid Mixed Sale',
+        amountRWF: totals.totalAmount,
+        account: paymentMethod
+      })
+    }
 
     // 2. Decrement physical stock for items with trackStock === true
     cartItems.forEach((it) => {

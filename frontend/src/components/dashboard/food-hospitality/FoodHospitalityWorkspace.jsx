@@ -26,27 +26,23 @@ export default function FoodHospitalityWorkspace({
 
   const menuItems = useMemo(() => {
     const list = records['MenuItems']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.menuItems || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const kitchenOrders = useMemo(() => {
     const list = records['KitchenOrders']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.kitchenOrders || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const rooms = useMemo(() => {
     const list = records['Rooms']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.rooms || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const guestFolios = useMemo(() => {
     const list = records['GuestFolios']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.guestFolios || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   // Routing Logic
   const isKOTView =

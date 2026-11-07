@@ -9,15 +9,17 @@ class TransactionCreateSchema(BaseModel):
 
     id: Optional[str] = None
     architectureId: str = Field(default="make-and-sell")
-    type: Literal["INFLOW", "OUTFLOW"] = Field(default="INFLOW")
+    type: Optional[str] = Field(default="INFLOW")
     category: str = Field(default="Sales", min_length=1, max_length=100)
-    title: str = Field(..., min_length=1, max_length=250)
-    amountRWF: float = Field(..., ge=0)
-    paymentMethod: str = Field(default="MTN MoMo")
-    status: str = Field(default="Completed")
+    title: str = Field(default="Financial Transaction", max_length=250)
+    amountRWF: float = Field(default=0, ge=0)
+    paymentMethod: Optional[str] = Field(default="MTN MoMo")
+    account: Optional[str] = Field(default=None)
+    status: Optional[str] = Field(default="Completed")
     customerOrSupplier: Optional[str] = Field(default="")
     notes: Optional[str] = Field(default="")
     timestamp: Optional[str] = None
+    date: Optional[str] = None
     editHistory: list[dict[str, Any]] = Field(default_factory=list)
 
 

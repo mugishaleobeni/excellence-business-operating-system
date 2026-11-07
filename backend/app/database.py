@@ -113,8 +113,27 @@ def ensure_indexes(db: Database) -> None:
         [("id", ASCENDING)], unique=True, name="idx_transactions_id_unique"
     )
     db.transactions.create_index(
+        [("scopeKey", ASCENDING), ("architectureId", ASCENDING), ("timestamp", DESCENDING)],
+        name="idx_transactions_scope_arch_time",
+    )
+    db.transactions.create_index(
         [("architectureId", ASCENDING), ("timestamp", DESCENDING)],
         name="idx_transactions_arch_time",
+    )
+
+    db.module_records.create_index(
+        [
+            ("scopeKey", ASCENDING),
+            ("architectureId", ASCENDING),
+            ("bucket", ASCENDING),
+            ("id", ASCENDING),
+        ],
+        unique=True,
+        name="idx_module_records_lookup",
+    )
+    db.module_records.create_index(
+        [("architectureId", ASCENDING), ("bucket", ASCENDING)],
+        name="idx_module_records_arch_bucket",
     )
 
     db.platform_config.create_index(

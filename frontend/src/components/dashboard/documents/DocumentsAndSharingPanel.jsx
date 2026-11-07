@@ -24,7 +24,7 @@ export default function DocumentsAndSharingPanel({
   activePage = 'Overview',
   activeArchId = 'buy-and-sell'
 }) {
-  const { user, hideFinancials, demoWorkspaces = {} } = useExbos()
+  const { user, hideFinancials, demoWorkspaces = {}, updateDemoWorkspace } = useExbos()
 
   const workspace = demoWorkspaces?.[activeArchId] || {}
   const records = workspace.records || {}
@@ -53,147 +53,39 @@ export default function DocumentsAndSharingPanel({
     }
   })
 
-  // Sent History State (persisted)
-  const [sentHistory, setSentHistory] = useState(() => {
-    try {
-      const saved = localStorage.getItem('exbos_sent_history')
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return [
-      {
-        id: 'SH-101',
-        documentId: 'INV-001',
-        documentTitle: 'Commercial Tax Invoice #INV-001',
-        recipient: 'Jean',
-        contact: '+250 788 123 456',
-        method: 'WhatsApp',
-        status: 'Opened Externally',
-        date: 'Nov 3, 2026',
-        timestamp: '2026-11-03 14:15',
-        link: 'https://exbos.rw/d/sec-inv-001-k49f'
-      },
-      {
-        id: 'SH-102',
-        documentId: 'REC-002',
-        documentTitle: 'Official Payment Receipt #REC-002',
-        recipient: 'Alice',
-        contact: 'alice@enterprises.rw',
-        method: 'Email',
-        status: 'Sent',
-        date: 'Nov 3, 2026',
-        timestamp: '2026-11-03 11:30',
-        link: 'https://exbos.rw/d/sec-rec-002-98aa'
-      },
-      {
-        id: 'SH-103',
-        documentId: 'QT-003',
-        documentTitle: 'Formal Sales Quotation #QT-003',
-        recipient: 'Eric',
-        contact: 'https://exbos.rw/d/sec-qt-003-71bc',
-        method: 'Share Link',
-        status: 'Link Created',
-        date: 'Nov 2, 2026',
-        timestamp: '2026-11-02 16:45',
-        link: 'https://exbos.rw/d/sec-qt-003-71bc'
-      }
-    ]
-  })
+  // Sent History & Documents Store (backed by workspace.records in MongoDB)
+  const documents = Array.isArray(records['Documents']) ? records['Documents'] : []
+  const sentHistory = Array.isArray(records['SentHistory']) ? records['SentHistory'] : []
 
-  // Documents Store (persisted)
-  const [documents, setDocuments] = useState(() => {
+  const setDocuments = (updater) => {
+    const nextDocs = typeof updater === 'function' ? updater(documents) : updater
     try {
-      const saved = localStorage.getItem('exbos_business_documents')
-      if (saved) return JSON.parse(saved)
+      localStorage.setItem('exbos_business_documents', JSON.stringify(nextDocs))
     } catch {}
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          Documents: nextDocs
+        }
+      })
+    }
+  }
 
-    // Initial default documents matching Section 2 & 8 of specification
-    return [
-      {
-        id: 'INV-001',
-        type: 'Invoice',
-        title: 'Commercial Tax Invoice #INV-001',
-        recipientName: 'Jean',
-        recipientPhone: '+250 788 123 456',
-        recipientEmail: 'jean@kigalitrade.rw',
-        amount: 20000,
-        paidAmount: 10000,
-        outstandingAmount: 10000,
-        date: '2026-11-03',
-        dueDate: '2026-11-10',
-        status: 'Partial',
-        items: [
-          { name: 'Rice (Super Grade)', quantity: 10, unit: 'kg', unitPrice: 2000, total: 20000 }
-        ],
-        notes: 'Deposit received. Outstanding balance due by Nov 10, 2026.'
-      },
-      {
-        id: 'REC-002',
-        type: 'Receipt',
-        title: 'Official Payment Receipt #REC-002',
-        recipientName: 'Alice',
-        recipientPhone: '+250 788 654 321',
-        recipientEmail: 'alice@enterprises.rw',
-        amount: 15000,
-        paidAmount: 15000,
-        outstandingAmount: 0,
-        date: '2026-11-03',
-        status: 'Paid',
-        items: [
-          { name: 'Sugar', quantity: 5, unit: 'kg', unitPrice: 3000, total: 15000 }
-        ],
-        notes: 'Paid in full via MTN MoMo Business.'
-      },
-      {
-        id: 'QT-003',
-        type: 'Quotation',
-        title: 'Sales Quotation #QT-003',
-        recipientName: 'Eric',
-        recipientPhone: '+250 788 987 654',
-        recipientEmail: 'eric@inyange.rw',
-        amount: 150000,
-        paidAmount: 0,
-        outstandingAmount: 150000,
-        date: '2026-11-02',
-        validUntil: '2026-11-20',
-        status: 'Draft',
-        items: [
-          { name: 'Construction Materials Bundle', quantity: 1, unit: 'lot', unitPrice: 150000, total: 150000 }
-        ],
-        notes: 'Valid for 18 calendar days. Excludes transport to site.'
-      },
-      {
-        id: 'PO-004',
-        type: 'Purchase Order',
-        title: 'Supplier Purchase Order #PO-004',
-        recipientName: 'Supplier A',
-        recipientPhone: '+250 788 333 444',
-        recipientEmail: 'orders@suppliera.rw',
-        amount: 300000,
-        paidAmount: 0,
-        outstandingAmount: 300000,
-        date: '2026-11-01',
-        deliveryDate: '2026-11-08',
-        status: 'Sent',
-        items: [
-          { name: 'Beans (Grade 1)', quantity: 200, unit: 'kg', unitPrice: 1500, total: 300000 }
-        ],
-        notes: 'Deliver to Nyarugenge central warehouse bay 3.'
-      }
-    ]
-  })
-
-  // Persist documents & sent history
-  useEffect(() => {
+  const setSentHistory = (updater) => {
+    const nextHistory = typeof updater === 'function' ? updater(sentHistory) : updater
     try {
-      localStorage.setItem('exbos_business_documents', JSON.stringify(documents))
+      localStorage.setItem('exbos_sent_history', JSON.stringify(nextHistory))
     } catch {}
-  }, [documents])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('exbos_sent_history', JSON.stringify(sentHistory))
-    } catch {}
-  }, [sentHistory])
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          SentHistory: nextHistory
+        }
+      })
+    }
+  }
 
   // Modals state
   const [createModalOpen, setCreateModalOpen] = useState(false)
@@ -212,43 +104,53 @@ export default function DocumentsAndSharingPanel({
   }
 
   const handleDocumentSentSuccess = (sentEntry) => {
-    setSentHistory((prev) => [sentEntry, ...prev])
-    // Update document status if draft
-    setDocuments((prev) =>
-      prev.map((d) => {
-        if (d.id === sentEntry.documentId && d.status === 'Draft') {
-          return { ...d, status: 'Sent' }
+    const nextHistory = [sentEntry, ...sentHistory]
+    const nextDocs = documents.map((d) => {
+      if (d.id === sentEntry.documentId && d.status === 'Draft') {
+        return { ...d, status: 'Sent' }
+      }
+      return d
+    })
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          Documents: nextDocs,
+          SentHistory: nextHistory
         }
-        return d
       })
-    )
+    }
     showToast(`✓ Document #${sentEntry.documentId} shared via ${sentEntry.method}. Logged in Sent History.`)
   }
 
   const handleReminderSent = ({ invoiceId, recipient, method }) => {
-    setDocuments((prev) =>
-      prev.map((d) => {
-        if (d.id === invoiceId) {
-          return { ...d, lastReminderSentAt: new Date().toISOString() }
+    const nextDocs = documents.map((d) => {
+      if (d.id === invoiceId) {
+        return { ...d, lastReminderSentAt: new Date().toISOString() }
+      }
+      return d
+    })
+    const reminderEntry = {
+      id: `SH-${Date.now().toString().slice(-4)}`,
+      documentId: invoiceId,
+      documentTitle: `Payment Reminder #${invoiceId}`,
+      recipient,
+      contact: method,
+      method,
+      status: 'Opened Externally',
+      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      link: `https://exbos.rw/d/sec-${invoiceId.toLowerCase()}`
+    }
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          Documents: nextDocs,
+          SentHistory: [reminderEntry, ...sentHistory]
         }
-        return d
       })
-    )
-    setSentHistory((prev) => [
-      {
-        id: `SH-${Date.now().toString().slice(-4)}`,
-        documentId: invoiceId,
-        documentTitle: `Payment Reminder #${invoiceId}`,
-        recipient,
-        contact: method,
-        method,
-        status: 'Opened Externally',
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        link: `https://exbos.rw/d/sec-${invoiceId.toLowerCase()}`
-      },
-      ...prev
-    ])
+    }
     showToast(`✓ Payment reminder sent to ${recipient}. Accidental duplicate prevention active for 24h.`)
   }
 

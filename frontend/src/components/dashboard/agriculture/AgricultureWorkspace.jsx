@@ -17,40 +17,34 @@ export default function AgricultureWorkspace({
   activePage = 'Animal Register',
   onSwitchPage = () => {}
 }) {
-  const { demoWorkspaces, agricultureTrade = 'pigs' } = useExbos()
-  const currentPreset = AGRICULTURE_PRESETS[agricultureTrade] || AGRICULTURE_PRESETS.pigs
+  const { demoWorkspaces, hideFinancials = false } = useExbos()
   const workspace = demoWorkspaces?.['agriculture'] || {}
   const records = workspace.records || {}
 
   const animals = useMemo(() => {
     const list = records['Animals']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.animals || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const batches = useMemo(() => {
     const list = records['Batches']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.batches || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const feeds = useMemo(() => {
     const list = records['Feeds']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.feeds || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const gestations = useMemo(() => {
     const list = records['Gestations']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.gestations || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   const production = useMemo(() => {
     const list = records['Production']
-    if (Array.isArray(list) && list.length > 0) return list
-    return currentPreset.production || []
-  }, [records, currentPreset])
+    return Array.isArray(list) ? list : []
+  }, [records])
 
   // Routing Logic
   const isFeedView = activePage === 'Feed Management' || activePage === 'Daily Feed Tracking'

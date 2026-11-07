@@ -1,13 +1,19 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Users, UserPlus, Shield, Check, Lock, Sparkles, Trash2, Mail, Phone } from 'lucide-react'
+import { useExbos } from '../../../context/ExbosContext'
 
 export default function TeamPermissionsView({
   user = {},
   currentArch = {},
   addToast
 }) {
-  const [teamMembers, setTeamMembers] = useState([
-    {
+  const { demoWorkspaces, updateDemoWorkspace } = useExbos()
+  const activeArchId = currentArch?.id || user?.architectureId || 'buy-and-sell'
+  const workspace = demoWorkspaces?.[activeArchId] || {}
+  const records = workspace.records || {}
+
+  const defaultOwner = useMemo(
+    () => ({
       id: 'USR-1',
       name: user.name || 'Business Owner',
       email: user.email || 'owner@exbos.rw',
@@ -15,26 +21,15 @@ export default function TeamPermissionsView({
       role: 'Owner (Full Access)',
       status: 'Active',
       permissions: ['Manage Finances', 'Approve Purchases', 'Manage Inventory', 'Add Users']
-    },
-    {
-      id: 'USR-2',
-      name: 'Claudine Mukamana',
-      email: 'claudine@exbos.rw',
-      phone: '+250 788 334 112',
-      role: 'Manager / Supervisor',
-      status: 'Active',
-      permissions: ['Record Sales', 'Manage Inventory', 'View Reports']
-    },
-    {
-      id: 'USR-3',
-      name: 'Eric Nshimiyimana',
-      email: 'eric@exbos.rw',
-      phone: '+250 783 991 005',
-      role: 'Cashier & POS Operator',
-      status: 'Active',
-      permissions: ['Record Sales', 'Issue Receipts']
-    }
-  ])
+    }),
+    [user.name, user.email, user.phone]
+  )
+
+  const teamMembers = useMemo(() => {
+    const saved = records['TeamMembers']
+    if (Array.isArray(saved) && saved.length > 0) return saved
+    return [defaultOwner]
+  }, [records, defaultOwner])
 
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [inviteName, setInviteName] = useState('')
@@ -58,7 +53,15 @@ export default function TeamPermissionsView({
           : ['Record Sales', 'Issue Receipts']
     }
 
-    setTeamMembers([...teamMembers, newMember])
+    const nextMembers = [...teamMembers, newMember]
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          TeamMembers: nextMembers
+        }
+      })
+    }
     setShowInviteModal(false)
     setInviteName('')
     setInviteEmail('')
@@ -73,7 +76,15 @@ export default function TeamPermissionsView({
   }
 
   const handleDeleteMember = (id) => {
-    setTeamMembers(teamMembers.filter((m) => m.id !== id))
+    const nextMembers = teamMembers.filter((m) => m.id !== id)
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...records,
+          TeamMembers: nextMembers
+        }
+      })
+    }
     if (addToast) {
       addToast({
         type: 'info',

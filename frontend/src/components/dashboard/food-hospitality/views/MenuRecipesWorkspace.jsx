@@ -38,6 +38,25 @@ export default function MenuRecipesWorkspace() {
 
   const handleSaveDish = (dish) => {
     addDemoRecord('food-and-hospitality', 'MenuItems', dish)
+    if (Array.isArray(dish.ingredients)) {
+      dish.ingredients.forEach((ing) => {
+        if (!ing.name) return
+        const exists = ingredientsList.some(
+          (existing) => existing.name?.toLowerCase() === ing.name.toLowerCase()
+        )
+        if (!exists) {
+          addDemoRecord('food-and-hospitality', 'Ingredients', {
+            id: `ING-${Date.now().toString().slice(-4)}-${Math.floor(10 + Math.random() * 89)}`,
+            name: ing.name,
+            unit: ing.unit || 'kg',
+            currentStock: 20,
+            reorderLevel: 5,
+            unitCostRWF: Number(ing.costRWF) || 0,
+            category: 'Pantry & Kitchen'
+          })
+        }
+      })
+    }
   }
 
   const confirmDelete = () => {

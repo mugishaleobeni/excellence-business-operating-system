@@ -24,11 +24,11 @@ export default function HybridCatalogWorkspace({
   activePage = 'All Products',
   onSwitchPage = () => {}
 }) {
-  const { demoWorkspaces, hybridTrade, updateDemoRecord, deleteDemoRecord } = useExbos()
+  const { demoWorkspaces, hybridTrade, addDemoRecord, updateDemoRecord, deleteDemoRecord } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
   const rawCatalog = hybridWorkspace.records?.HybridItems
-  const catalog = Array.isArray(rawCatalog) && rawCatalog.length > 0 ? rawCatalog : (preset.items || [])
+  const catalog = Array.isArray(rawCatalog) ? rawCatalog : []
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activityFilter, setActivityFilter] = useState('all')
@@ -371,7 +371,11 @@ export default function HybridCatalogWorkspace({
       </div>
 
       {/* Add Modal */}
-      <AddHybridItemModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      <AddHybridItemModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSaveHybridItem={(item) => addDemoRecord('hybrid', 'HybridItems', item)}
+      />
 
       {/* Delete Confirmation */}
       {deleteTarget && (

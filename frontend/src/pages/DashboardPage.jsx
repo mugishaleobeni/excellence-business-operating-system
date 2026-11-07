@@ -22,6 +22,7 @@ export default function DashboardPage() {
     toggleTheme,
     hideFinancials,
     user,
+    updateUserProfile,
     logout,
     architectures = [],
     transactions = [],
@@ -163,13 +164,10 @@ export default function DashboardPage() {
   // Active Demo Workspace & User Identity for Current Architecture
   const activeDemoWorkspace = demoWorkspaces?.[activeArchId] || {}
   const demoMetrics = activeDemoWorkspace.metrics || {}
-  const isUserMatchingArch = user && user.architectureId === activeArchId
-  const activeOwnerName = isUserMatchingArch
-    ? user.name
-    : activeDemoWorkspace.ownerName || `${currentArch.shortName || 'BOS'} Business Owner`
-  const activeBusinessName = isUserMatchingArch
-    ? user.businessName
-    : activeDemoWorkspace.businessName || `${currentArch.shortName || 'ExBOS'} Enterprise`
+  const activeOwnerName =
+    user?.name || activeDemoWorkspace.ownerName || `${currentArch.shortName || 'BOS'} Business Owner`
+  const activeBusinessName =
+    user?.businessName || activeDemoWorkspace.businessName || `${currentArch.shortName || 'ExBOS'} Enterprise`
   const activeInitials =
     activeBusinessName
       .split(' ')
@@ -310,6 +308,13 @@ export default function DashboardPage() {
           setActivePage={setActivePage}
           activeModule={activeModule}
           currentArch={currentArch}
+          architectures={architectures}
+          onSwitchArch={(newArchId) => {
+            handleArchSwitch(newArchId)
+            if (updateUserProfile) {
+              updateUserProfile({ architectureId: newArchId })
+            }
+          }}
         />
 
         {/* PANEL C: MAIN CONTENT WORKSPACE */}

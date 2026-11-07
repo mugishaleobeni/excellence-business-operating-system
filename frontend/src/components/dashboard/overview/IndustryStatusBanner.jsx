@@ -28,17 +28,11 @@ export default function IndustryStatusBanner({
     const workspace = demoWorkspaces?.['services'] || {}
     const records = workspace.records || {}
 
-    const jobs = Array.isArray(records['Jobs']) && records['Jobs'].length > 0
-      ? records['Jobs']
-      : currentPreset.jobs || []
+    const jobs = Array.isArray(records['Jobs']) ? records['Jobs'] : []
 
-    const staff = Array.isArray(records['Staff']) && records['Staff'].length > 0
-      ? records['Staff']
-      : currentPreset.staff || []
+    const staff = Array.isArray(records['Staff']) ? records['Staff'] : []
 
-    const consumables = Array.isArray(records['Consumables']) && records['Consumables'].length > 0
-      ? records['Consumables']
-      : currentPreset.consumables || []
+    const consumables = Array.isArray(records['Consumables']) ? records['Consumables'] : []
 
     const activeJobs = jobs.filter((j) => j.status === 'Booked' || j.status === 'In Progress')
     const completedJobs = jobs.filter((j) => j.status === 'Completed')

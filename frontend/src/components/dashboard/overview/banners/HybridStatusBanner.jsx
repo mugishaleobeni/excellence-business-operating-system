@@ -20,13 +20,13 @@ export default function HybridStatusBanner({
   const workspace = demoWorkspaces?.['hybrid'] || {}
   const records = workspace.records || {}
 
-  const hybridItems = Array.isArray(records['HybridItems']) && records['HybridItems'].length > 0
+  const hybridItems = Array.isArray(records['HybridItems'])
     ? records['HybridItems']
-    : currentPreset.items || []
+    : []
 
-  const mixedSales = Array.isArray(records['MixedSales']) && records['MixedSales'].length > 0
+  const mixedSales = Array.isArray(records['MixedSales'])
     ? records['MixedSales']
-    : currentPreset.mixedSales || []
+    : []
 
   // Active activities count
   const activeActivitiesCount = useMemo(() => {
@@ -39,12 +39,12 @@ export default function HybridStatusBanner({
     const totalRev = mixedSales.reduce((sum, s) => sum + (Number(s.totalAmountRWF) || 0), 0)
     const totalCost = mixedSales.reduce((sum, s) => sum + (Number(s.totalCostRWF) || 0), 0)
     const totalProfit = totalRev - totalCost
-    const margin = totalRev > 0 ? ((totalProfit / totalRev) * 100).toFixed(1) : '43.8'
+    const margin = totalRev > 0 ? ((totalProfit / totalRev) * 100).toFixed(1) : '0.0'
 
     return {
-      totalRev: totalRev > 0 ? totalRev : 3790000,
-      totalProfit: totalProfit > 0 ? totalProfit : 2030000,
-      margin: totalRev > 0 ? margin : '53.6',
+      totalRev,
+      totalProfit,
+      margin,
       salesCount: mixedSales.length
     }
   }, [mixedSales])

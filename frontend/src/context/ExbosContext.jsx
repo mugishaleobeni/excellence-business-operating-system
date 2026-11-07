@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react'
 import {
   SIX_ARCHITECTURES,
   DEFAULT_PRICING_PLANS,
@@ -13,6 +13,50 @@ import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPreset
 import { exbosApi, getAuthHeaders, resolveStorageUrl } from '../utils/apiClient'
 
 const ExbosContext = createContext(null)
+
+export const ALL_RECORD_BUCKETS = [
+  'Sales',
+  'Purchases',
+  'Inventory',
+  'Products',
+  'Production',
+  'Customers',
+  'Suppliers',
+  'Expenses',
+  'Services',
+  'Consumables',
+  'Staff',
+  'Jobs',
+  'ServiceJobs',
+  'Categories',
+  'RawMaterials',
+  'Recipes',
+  'Animals',
+  'Batches',
+  'Feeds',
+  'FeedingLogs',
+  'Gestations',
+  'HealthRecords',
+  'MenuItems',
+  'KitchenOrders',
+  'Ingredients',
+  'Rooms',
+  'GuestFolios',
+  'WasteLogs',
+  'HybridItems',
+  'MixedSales',
+  'Documents',
+  'SentHistory',
+  'TeamMembers'
+]
+
+export const createEmptyRecordBuckets = () => {
+  const buckets = {}
+  ALL_RECORD_BUCKETS.forEach((b) => {
+    buckets[b] = []
+  })
+  return buckets
+}
 
 /**
  * Generates clean zero-base workspaces across all 6 architectures.
@@ -42,35 +86,7 @@ export const createCleanWorkspaces = () => {
         attentionHeadline: 'Ready for entries · All systems live',
         survivalMonths: 0
       },
-      records: {
-        Sales: [],
-        Purchases: [],
-        Inventory: [],
-        Production: [],
-        Customers: [],
-        Suppliers: [],
-        Expenses: [],
-        Services: [],
-        Consumables: [],
-        Staff: [],
-        Jobs: [],
-        Categories: [],
-        RawMaterials: [],
-        Recipes: [],
-        Animals: [],
-        Batches: [],
-        Feeds: [],
-        Gestations: [],
-        HealthRecords: [],
-        MenuItems: [],
-        KitchenOrders: [],
-        Ingredients: [],
-        Rooms: [],
-        GuestFolios: [],
-        WasteLogs: [],
-        HybridItems: [],
-        MixedSales: []
-      }
+      records: createEmptyRecordBuckets()
     }
   })
   return zeroWorkspaces
@@ -84,17 +100,27 @@ export function sanitizeUserWorkspaces(data) {
   const clean = createCleanWorkspaces()
   if (!data || typeof data !== 'object') return clean
 
-  const isDemoRecord = (item) => {
-    if (!item) return false
+  const isLegacySeedRecord = (item) => {
+    if (!item || typeof item !== 'object') return false
     const id = String(item.id || '')
-    if (/^(PRD|INV|SAL|PUR|CUS|SUP|EXP)-[1-6]0[1-9]$/.test(id)) return true
-    const demoTitles = [
-      'cimerwa cement', 'sadolin paint', 'twyford ceramic', 'brioche loaves',
-      'wedding tier cake', 'azania wheat flour', 'unsalted dairy butter',
-      'tunga pig feed', 'copper cables', 'epoxy adhesive', 'samsung a55'
+    const knownSeedIds = [
+      'SALE-101', 'PURCH-301', 'PURCH-302', 'CUST-001', 'CUST-002',
+      'SUP-001', 'SUP-002', 'EXP-201', 'JOB-201', 'JOB-202', 'JOB-203', 'JOB-204',
+      'HYB-001', 'HYB-002', 'HYB-003', 'HYB-004', 'HYB-005', 'HYB-006'
     ]
-    const titleLower = String(item.title || item.name || '').toLowerCase()
-    return demoTitles.some((d) => titleLower.includes(d))
+    if (knownSeedIds.includes(id)) return true
+    if (/^(PRD|INV|SAL|PUR|CUS|SUP|EXP)-[1-6]0[1-9]$/.test(id)) return true
+    const seedTitles = [
+      'cimerwa cement', 'sadolin paint', 'twyford ceramic', 'brioche loaves',
+      'wedding tier cake', 'azania wheat flour', 'azania premium wheat flour',
+      'unsalted dairy butter', 'tunga pig feed', 'copper cables', 'epoxy adhesive',
+      'samsung a55', 'supermarket a (kigali heights)', 'sawa city supermarket',
+      'bakhresa grain milling', 'kabuye sugar works', 'standard sandwich loaf',
+      'workshop rent', 'kitenge fabric', 'sewing thread', 'men tailored suit',
+      'ankara evening dress', 'sow mama', 'grilled tilapia', 'screen assembly'
+    ]
+    const textToScan = `${item.title || ''} ${item.name || ''} ${item.customer || ''} ${item.supplier || ''} ${item.productName || ''} ${item.materialName || ''}`.toLowerCase()
+    return seedTitles.some((d) => textToScan.includes(d))
   }
 
   SIX_ARCHITECTURES.forEach((arch) => {
@@ -107,41 +133,13 @@ export function sanitizeUserWorkspaces(data) {
           ...clean[arch.id].metrics,
           ...(archData.metrics || {})
         },
-        records: {
-          Sales: [],
-          Purchases: [],
-          Inventory: [],
-          Production: [],
-          Customers: [],
-          Suppliers: [],
-          Expenses: [],
-          Services: [],
-          Consumables: [],
-          Staff: [],
-          Jobs: [],
-          Categories: [],
-          RawMaterials: [],
-          Recipes: [],
-          Animals: [],
-          Batches: [],
-          Feeds: [],
-          Gestations: [],
-          HealthRecords: [],
-          MenuItems: [],
-          KitchenOrders: [],
-          Ingredients: [],
-          Rooms: [],
-          GuestFolios: [],
-          WasteLogs: [],
-          HybridItems: [],
-          MixedSales: []
-        }
+        records: createEmptyRecordBuckets()
       }
 
       if (archData.records && typeof archData.records === 'object') {
-        Object.keys(clean[arch.id].records).forEach((mod) => {
+        Object.keys(archData.records).forEach((mod) => {
           const list = Array.isArray(archData.records[mod]) ? archData.records[mod] : []
-          clean[arch.id].records[mod] = list.filter((item) => !isDemoRecord(item))
+          clean[arch.id].records[mod] = list.filter((item) => !isLegacySeedRecord(item))
         })
       }
     }
@@ -175,6 +173,27 @@ export function sanitizeUserTransactions(rawTxList) {
 }
 
 export function ExbosProvider({ children }) {
+  // One-time browser storage purge to remove any stale demo or cached records from prior sessions
+  try {
+    if (localStorage.getItem('exbos_clean_prod_v5') !== 'true') {
+      const staleKeys = [
+        'exbos_demo_workspaces',
+        'exbos_workspaces_v2',
+        'exbos_transactions',
+        'exbos_businesses',
+        'exbos_saved_analyses',
+        'exbos_broadcast',
+        'exbos_business_documents',
+        'exbos_sent_history',
+        'exbos_active_arch'
+      ]
+      staleKeys.forEach((k) => localStorage.removeItem(k))
+      localStorage.setItem('exbos_clean_prod_v5', 'true')
+    }
+  } catch {
+    /* ignore storage errors */
+  }
+
   const [theme, setTheme] = useState('light')
   const [language, setLanguage] = useState(() => localStorage.getItem('exbos_lang') || 'en')
   const [hideFinancials, setHideFinancials] = useState(() => {
@@ -492,7 +511,9 @@ export function ExbosProvider({ children }) {
     }))
   }
 
-  const [demoWorkspaces, setDemoWorkspaces] = useState(() => {
+  const isHydratedRef = useRef(false)
+
+  const [workspaces, setWorkspaces] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_workspaces_v2')
       if (saved) return sanitizeUserWorkspaces(JSON.parse(saved))
@@ -505,54 +526,64 @@ export function ExbosProvider({ children }) {
   // Load stored data from Flask + MongoDB Atlas backend on mount and when user changes
   useEffect(() => {
     let isMounted = true
+    isHydratedRef.current = false
     const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
     fetch(resolveStorageUrl(scopeParam), {
       headers: getAuthHeaders()
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((serverData) => {
-        if (!isMounted || !serverData) return
-        if (serverData.workspaces && typeof serverData.workspaces === 'object') {
-          const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
-          setDemoWorkspaces(sanitized)
-        }
-        if (Array.isArray(serverData.transactions)) {
-          setTransactions(sanitizeUserTransactions(serverData.transactions))
-        }
-        if (Array.isArray(serverData.businesses)) {
-          setBusinesses(serverData.businesses.filter((b) => !['BIZ-1001', 'BIZ-1002', 'BIZ-1003'].includes(b.id)))
-        }
-        if (Array.isArray(serverData.savedAnalyses)) {
-          setSavedAnalyses(serverData.savedAnalyses)
-        }
-        if (Array.isArray(serverData.exportHistory)) {
-          setExportHistory(serverData.exportHistory)
-        }
-        if (serverData.integrations && typeof serverData.integrations === 'object') {
-          setIntegrations(serverData.integrations)
-        }
-        if (serverData.superAdminBroadcast !== undefined) {
-          setSuperAdminBroadcast(serverData.superAdminBroadcast)
+        if (!isMounted) return
+        if (serverData) {
+          if (serverData.workspaces && typeof serverData.workspaces === 'object') {
+            const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
+            setWorkspaces(sanitized)
+          }
+          if (Array.isArray(serverData.transactions)) {
+            setTransactions(sanitizeUserTransactions(serverData.transactions))
+          }
+          if (Array.isArray(serverData.businesses)) {
+            setBusinesses(serverData.businesses.filter((b) => !['BIZ-1001', 'BIZ-1002', 'BIZ-1003'].includes(b.id)))
+          }
+          if (Array.isArray(serverData.savedAnalyses)) {
+            setSavedAnalyses(serverData.savedAnalyses)
+          }
+          if (Array.isArray(serverData.exportHistory)) {
+            setExportHistory(serverData.exportHistory)
+          }
+          if (serverData.integrations && typeof serverData.integrations === 'object') {
+            setIntegrations(serverData.integrations)
+          }
+          if (serverData.superAdminBroadcast !== undefined) {
+            setSuperAdminBroadcast(serverData.superAdminBroadcast)
+          }
         }
       })
       .catch((err) => {
         console.debug('Server storage fetch notice:', err)
+      })
+      .finally(() => {
+        if (isMounted) {
+          isHydratedRef.current = true
+        }
       })
     return () => {
       isMounted = false
     }
   }, [user?.email])
 
-  // Persist live user data to both localStorage and Flask + MongoDB Atlas backend
+  // Persist live user data to both localStorage and Flask + MongoDB Atlas backend (only after hydration)
   useEffect(() => {
     try {
-      localStorage.setItem('exbos_workspaces_v2', JSON.stringify(demoWorkspaces))
+      localStorage.setItem('exbos_workspaces_v2', JSON.stringify(workspaces))
       localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
     } catch {}
 
+    if (!isHydratedRef.current) return
+
     const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
     const payload = JSON.stringify({
-      workspaces: demoWorkspaces,
+      workspaces,
       transactions,
       user,
       businesses,
@@ -568,7 +599,7 @@ export function ExbosProvider({ children }) {
       headers: getAuthHeaders(),
       body: payload
     }).catch(() => {})
-  }, [demoWorkspaces, transactions, user, businesses, savedAnalyses, integrations, exportHistory, superAdminBroadcast])
+  }, [workspaces, transactions, user, businesses, savedAnalyses, integrations, exportHistory, superAdminBroadcast])
 
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
 
@@ -581,32 +612,43 @@ export function ExbosProvider({ children }) {
     }
   }
 
-  const updateDemoWorkspace = (archId, updates) => {
-    const targetArch = archId || 'buy-and-sell'
-    setDemoWorkspaces((prev) => {
+  const updateWorkspace = (archId, updates) => {
+    const targetArch = archId || user?.architectureId || 'buy-and-sell'
+    isHydratedRef.current = true
+    setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
+      const mergedRecords = {
+        ...base.records,
+        ...(updates.records || {})
+      }
+      const nextWorkspace = {
+        ...base,
+        ...updates,
+        metrics: {
+          ...base.metrics,
+          ...(updates.metrics || {})
+        },
+        records: mergedRecords
+      }
+      // Immediately persist workspace update to MongoDB backend
+      exbosApi.patchWorkspace(targetArch, {
+        ...updates,
+        metrics: nextWorkspace.metrics,
+        records: updates.records ? mergedRecords : undefined
+      })
       return {
         ...prev,
-        [targetArch]: {
-          ...base,
-          ...updates,
-          metrics: {
-            ...base.metrics,
-            ...(updates.metrics || {})
-          },
-          records: {
-            ...base.records,
-            ...(updates.records || {})
-          }
-        }
+        [targetArch]: nextWorkspace
       }
     })
   }
 
-  const addDemoRecord = (archId, moduleName, newItem) => {
-    const targetArch = archId || 'buy-and-sell'
-    const recordId = `${moduleName.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
+  const addRecord = (archId, moduleName, newItem) => {
+    const targetArch = archId || user?.architectureId || 'buy-and-sell'
+    isHydratedRef.current = true
+    const recordId =
+      newItem?.id || `${moduleName.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
     const todayStr = new Date().toISOString().slice(0, 10)
     const entry = {
       id: recordId,
@@ -614,30 +656,40 @@ export function ExbosProvider({ children }) {
       ...newItem
     }
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
       const existingList = base.records?.[moduleName] || []
       const m = { ...base.metrics }
-      const amt = Number(newItem.amountRWF) || 0
-      const unitCost = Number(newItem.unitCostRWF ?? newItem.purchasePriceRWF) || 0
-      const sellPrice = Number(newItem.sellingPriceRWF) || 0
-      const qty = Number(newItem.quantity) || 1
-      const owed = Number(newItem.balanceOwedRWF ?? newItem.amountRWF) || 0
+      const amt = Number(
+        newItem.amountRWF ??
+          newItem.totalAmountRWF ??
+          newItem.totalFolioRWF ??
+          newItem.sellingPriceRWF ??
+          newItem.purchasePriceRWF ??
+          newItem.priceRWF ??
+          newItem.costRWF ??
+          0
+      )
+      const unitCost = Number(newItem.unitCostRWF ?? newItem.purchasePriceRWF ?? newItem.costRWF) || 0
+      const sellPrice = Number(newItem.sellingPriceRWF ?? newItem.priceRWF) || 0
+      const qty = Number(newItem.quantity ?? newItem.stock) || 1
+      const owed = Number(newItem.balanceOwedRWF ?? newItem.remainingAmountRWF ?? 0)
 
-      if (moduleName === 'Sales' && amt > 0) {
+      if (['Sales', 'Jobs', 'ServiceJobs', 'KitchenOrders', 'GuestFolios', 'MixedSales'].includes(moduleName) && amt > 0) {
         m.monthlyRevenueRWF += amt
         m.spendableRWF += amt
         m.todayMoneyInRWF += amt
         const profit = Number(newItem.profitRWF) || Math.round(amt * 0.35)
         m.netProfitRWF += profit
         m.todayProfitRWF += profit
-      } else if (moduleName === 'Purchases' && amt > 0) {
+      } else if (['Purchases', 'Expenses', 'Feeds', 'FeedingLogs', 'HealthRecords'].includes(moduleName) && amt > 0) {
         m.todayCostsRWF += amt
-        if (Number(newItem.remainingAmountRWF) > 0) {
-          m.iOweSuppliersRWF += Number(newItem.remainingAmountRWF)
+        m.spendableRWF = Math.max(0, m.spendableRWF - amt)
+        if (owed > 0) {
+          m.iOweSuppliersRWF += owed
         }
-      } else if (moduleName === 'Inventory') {
+      } else if (['Inventory', 'Products', 'RawMaterials', 'Consumables', 'Ingredients', 'HybridItems'].includes(moduleName)) {
         const addedVal = (unitCost || sellPrice) * (qty || 1)
         m.stockValueRWF += addedVal
       } else if (moduleName === 'Production') {
@@ -657,7 +709,7 @@ export function ExbosProvider({ children }) {
           metrics: m,
           records: {
             ...base.records,
-            [moduleName]: [entry, ...existingList]
+            [moduleName]: [entry, ...existingList.filter((r) => r.id !== entry.id)]
           }
         }
       }
@@ -690,10 +742,11 @@ export function ExbosProvider({ children }) {
     return entry
   }
 
-  const deleteDemoRecord = (archId, moduleName, recordId) => {
-    const targetArch = archId || 'buy-and-sell'
+  const deleteRecord = (archId, moduleName, recordId) => {
+    const targetArch = archId || user?.architectureId || 'buy-and-sell'
+    isHydratedRef.current = true
     exbosApi.deleteModuleRecord(targetArch, moduleName, recordId)
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
       if (!base) return prev
@@ -711,20 +764,19 @@ export function ExbosProvider({ children }) {
     })
   }
 
-  const updateDemoRecord = (archId, moduleName, recordId, updatedFields) => {
-    const targetArch = archId || 'buy-and-sell'
+  const updateRecord = (archId, moduleName, recordId, updatedFields) => {
+    const targetArch = archId || user?.architectureId || 'buy-and-sell'
+    isHydratedRef.current = true
     exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
       if (!base) return prev
       const currentList = base.records?.[moduleName] || []
-      const updatedList = currentList.map((r) => {
-        if (r.id === recordId) {
-          return { ...r, ...updatedFields }
-        }
-        return r
-      })
+      const exists = currentList.some((r) => r.id === recordId)
+      const updatedList = exists
+        ? currentList.map((r) => (r.id === recordId ? { ...r, ...updatedFields } : r))
+        : [{ id: recordId, ...updatedFields }, ...currentList]
       return {
         ...prev,
         [targetArch]: {
@@ -738,15 +790,16 @@ export function ExbosProvider({ children }) {
     })
   }
 
-  const resetDemoData = () => {
+  const resetWorkspaceData = () => {
     const clean = createCleanWorkspaces()
-    setDemoWorkspaces(clean)
+    setWorkspaces(clean)
     setTransactions([])
     try {
-      localStorage.setItem('exbos_demo_workspaces', JSON.stringify(clean))
+      localStorage.setItem('exbos_workspaces_v2', JSON.stringify(clean))
       localStorage.removeItem('exbos_transactions')
     } catch {}
-    fetch(resolveStorageUrl('/reset'), { method: 'POST', headers: getAuthHeaders() }).catch(() => {})
+    const scopeParam = user?.email ? `/reset?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : '/reset'
+    fetch(resolveStorageUrl(scopeParam), { method: 'POST', headers: getAuthHeaders() }).catch(() => {})
   }
 
   const applyMakeSellTrade = (tradeKey) => {
@@ -757,7 +810,7 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_make_sell_trade', tradeKey)
     } catch {}
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const base = prev['make-and-sell'] || {}
       return {
         ...prev,
@@ -791,7 +844,7 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_services_trade', tradeKey)
     } catch {}
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const base = prev['services'] || {}
       return {
         ...prev,
@@ -825,7 +878,7 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_agriculture_trade', tradeKey)
     } catch {}
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const base = prev['agriculture'] || {}
       return {
         ...prev,
@@ -861,7 +914,7 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_food_trade', tradeKey)
     } catch {}
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const base = prev['food-and-hospitality'] || {}
       return {
         ...prev,
@@ -904,7 +957,7 @@ export function ExbosProvider({ children }) {
       } catch {}
     }
 
-    setDemoWorkspaces((prev) => {
+    setWorkspaces((prev) => {
       const base = prev['hybrid'] || {}
       return {
         ...prev,
@@ -943,10 +996,14 @@ export function ExbosProvider({ children }) {
       if (access_token) {
         localStorage.setItem('exbos_access_token', access_token)
       }
+      if (backendUser?.architectureId) {
+        localStorage.setItem('exbos_active_arch', backendUser.architectureId)
+      }
     } catch {}
 
     if (backendWorkspaces && typeof backendWorkspaces === 'object') {
-      setDemoWorkspaces(sanitizeUserWorkspaces(backendWorkspaces))
+      isHydratedRef.current = true
+      setWorkspaces(sanitizeUserWorkspaces(backendWorkspaces))
     }
 
     setUser(backendUser)
@@ -959,7 +1016,7 @@ export function ExbosProvider({ children }) {
     setUser((prev) => {
       const next = updatedUser || { ...(prev || {}), ...updates }
       const archId = next.architectureId || 'buy-and-sell'
-      updateDemoWorkspace(archId, {
+      updateWorkspace(archId, {
         ownerName: next.name,
         businessName: next.businessName,
         email: next.email,
@@ -1006,13 +1063,20 @@ export function ExbosProvider({ children }) {
       if (access_token) {
         localStorage.setItem('exbos_access_token', access_token)
       }
+      const assignedArch = createdUser?.architectureId || archId
+      if (assignedArch) {
+        localStorage.setItem('exbos_active_arch', assignedArch)
+        localStorage.removeItem(`exbos_active_module_${assignedArch}`)
+        localStorage.removeItem(`exbos_active_page_${assignedArch}`)
+      }
     } catch {}
 
     if (createdBiz) {
       setBusinesses((prev) => [createdBiz, ...prev.filter((b) => b.id !== createdBiz.id)])
     }
     if (createdWorkspaces && typeof createdWorkspaces === 'object') {
-      setDemoWorkspaces(sanitizeUserWorkspaces(createdWorkspaces))
+      isHydratedRef.current = true
+      setWorkspaces(sanitizeUserWorkspaces(createdWorkspaces))
     }
 
     setUser(createdUser)
@@ -1028,6 +1092,7 @@ export function ExbosProvider({ children }) {
       localStorage.removeItem('exbos_access_token')
       localStorage.removeItem('exbos_user')
       localStorage.removeItem('exbos_workspaces_v2')
+      localStorage.removeItem('exbos_active_arch')
     } catch {}
   }
 
@@ -1038,14 +1103,16 @@ export function ExbosProvider({ children }) {
     } else if (typeof arg1 === 'object' && arg1 !== null) {
       tx = arg1
     }
+    isHydratedRef.current = true
     const record = {
-      id: `TX-${Math.floor(1000 + Math.random() * 9000)}`,
+      id: tx.id || `TX-${Math.floor(1000 + Math.random() * 9000)}`,
       architectureId: tx.architectureId || user?.architectureId || 'buy-and-sell',
       title: tx.title || (tx.type === 'out' ? 'Business Expense' : 'Direct Sale'),
       type: tx.type || 'in',
       category: tx.category || 'Sales Revenue',
       amountRWF: Number(tx.amountRWF ?? tx.amount ?? 0),
       account: tx.account || tx.channel || 'Cash in Hand (Main Till)',
+      paymentMethod: tx.paymentMethod || tx.account || tx.channel || 'Cash in Hand (Main Till)',
       createdAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
       source: tx.source || 'Dashboard',
       createdBy: user ? `${user.name} (${user.role})` : 'Business Owner',
@@ -1054,7 +1121,11 @@ export function ExbosProvider({ children }) {
       status: 'Posted',
       editHistory: []
     }
-    setTransactions((prev) => [record, ...prev])
+    setTransactions((prev) => [record, ...prev.filter((item) => item.id !== record.id)])
+    exbosApi.createTransaction({
+      ...record,
+      type: record.type === 'out' || record.type === 'OUTFLOW' ? 'OUTFLOW' : 'INFLOW'
+    })
     return record
   }
 
@@ -1173,13 +1244,19 @@ export function ExbosProvider({ children }) {
         setIntegrations,
         exportHistory,
         setExportHistory,
-        demoWorkspaces,
-        updateDemoWorkspace,
-        addDemoRecord,
-        updateDemoRecord,
-        deleteDemoRecord,
+        workspaces,
+        updateWorkspace,
+        addRecord,
+        updateRecord,
+        deleteRecord,
+        resetWorkspaceData,
+        demoWorkspaces: workspaces,
+        updateDemoWorkspace: updateWorkspace,
+        addDemoRecord: addRecord,
+        updateDemoRecord: updateRecord,
+        deleteDemoRecord: deleteRecord,
+        resetDemoData: resetWorkspaceData,
         updateUserProfile,
-        resetDemoData,
         makeSellTrade,
         setMakeSellTrade,
         applyMakeSellTrade,

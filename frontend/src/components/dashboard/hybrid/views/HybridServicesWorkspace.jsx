@@ -24,11 +24,11 @@ export default function HybridServicesWorkspace({
   activePage = 'Service Catalogue',
   onSwitchPage = () => {}
 }) {
-  const { demoWorkspaces, hybridTrade, deleteDemoRecord, updateDemoWorkspace, addToast } = useExbos()
+  const { demoWorkspaces, hybridTrade, addDemoRecord, deleteDemoRecord, updateDemoWorkspace, addToast } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
   const rawCatalog = hybridWorkspace.records?.HybridItems
-  const catalog = Array.isArray(rawCatalog) && rawCatalog.length > 0 ? rawCatalog : (preset.items || [])
+  const catalog = Array.isArray(rawCatalog) ? rawCatalog : []
   const isJobScheduleView = activePage === 'Job Schedule'
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -37,15 +37,10 @@ export default function HybridServicesWorkspace({
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
-  const defaultJobs = useMemo(() => [
-    { id: 'JOB-201', ticketNumber: 'TKT-201', customerName: 'Jean Bosco Habimana', customerPhone: '+250 788 412 901', serviceTitle: 'Screen & Digitizer Replacement', technician: 'David K. (Senior Tech)', promisedDate: 'Today, 4:30 PM', estimatedAmountRWF: 45000, partsRequired: 'OLED Display Panel', status: 'In Progress' },
-    { id: 'JOB-202', ticketNumber: 'TKT-202', customerName: 'Marie Claire Uwamahoro', customerPhone: '+250 783 119 402', serviceTitle: 'Motherboard Micro-Soldering', technician: 'Alex M.', promisedDate: 'Tomorrow, 11:00 AM', estimatedAmountRWF: 65000, partsRequired: 'Power IC Chip (Awaiting)', status: 'Pending Parts' },
-    { id: 'JOB-203', ticketNumber: 'TKT-203', customerName: 'Eric Mugisha', customerPhone: '+250 785 890 231', serviceTitle: 'Firmware Flash & Diagnostics', technician: 'David K. (Senior Tech)', promisedDate: 'Today, 2:00 PM', estimatedAmountRWF: 25000, partsRequired: 'None (Labor Only)', status: 'Ready for Pickup' },
-    { id: 'JOB-204', ticketNumber: 'TKT-204', customerName: 'Aline Umutoni', customerPhone: '+250 782 455 190', serviceTitle: 'Battery Replacement & Cleaning', technician: 'Alex M.', promisedDate: 'Yesterday', estimatedAmountRWF: 35000, partsRequired: 'High Capacity Battery', status: 'Completed' }
-  ], [])
-
-  const savedJobs = hybridWorkspace.records?.ServiceJobs
-  const [jobsList, setJobsList] = useState(() => (Array.isArray(savedJobs) && savedJobs.length > 0 ? savedJobs : defaultJobs))
+  const jobsList = useMemo(() => {
+    const savedJobs = hybridWorkspace.records?.ServiceJobs
+    return Array.isArray(savedJobs) ? savedJobs : []
+  }, [hybridWorkspace.records])
 
   const services = useMemo(() => {
     return catalog.filter((it) => {
@@ -74,7 +69,6 @@ export default function HybridServicesWorkspace({
 
   const handleUpdateJobStatus = (jobId, newStatus) => {
     const updated = jobsList.map((j) => (j.id === jobId ? { ...j, status: newStatus } : j))
-    setJobsList(updated)
     updateDemoWorkspace && updateDemoWorkspace('hybrid', { records: { ...(hybridWorkspace.records || {}), ServiceJobs: updated } })
     addToast && addToast({ type: 'success', title: 'Ticket Updated', message: `Job ${jobId} status marked as "${newStatus}".` })
   }
@@ -399,7 +393,12 @@ export default function HybridServicesWorkspace({
       )}
 
       {/* Add Modal */}
-      <AddHybridItemModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} initialActivity="service" />
+      <AddHybridItemModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        initialActivity="service"
+        onSaveHybridItem={(item) => addDemoRecord('hybrid', 'HybridItems', item)}
+      />
 
       {/* Quick Sale Checkout Modal */}
       <RecordMixedSaleModal isOpen={isSaleModalOpen} onClose={() => setIsSaleModalOpen(false)} />

@@ -44,7 +44,7 @@ class ApplyPresetSchema(BaseModel):
 
 class ModuleRecordCreateSchema(BaseModel):
     """
-    Pydantic v2 schema for creating a record inside any of the 27 module record buckets
+    Pydantic v2 schema for creating a record inside any of the 33 module record buckets
     (Sales, Purchases, Inventory, Production, Animals, MenuItems, HybridItems, MixedSales, etc.).
     Allows dynamic domain fields via extra='allow'.
     """
@@ -52,11 +52,11 @@ class ModuleRecordCreateSchema(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: Optional[str] = None
-    title: Optional[str] = Field(default="Untitled Record", max_length=250)
-    name: Optional[str] = Field(default=None, max_length=250)
+    title: Optional[str] = Field(default=None, max_length=350)
+    name: Optional[str] = Field(default=None, max_length=350)
     subtitle: Optional[str] = Field(default="")
-    amountRWF: float = Field(default=0)
-    status: str = Field(default="Completed")
+    amountRWF: Optional[float] = Field(default=0)
+    status: Optional[str] = Field(default="Completed")
     paymentMethod: Optional[str] = Field(default="Cash / MoMo")
     date: Optional[str] = None
 
@@ -66,6 +66,7 @@ class ModuleRecordUpdateSchema(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
+    id: Optional[str] = None
     title: Optional[str] = None
     name: Optional[str] = None
     subtitle: Optional[str] = None

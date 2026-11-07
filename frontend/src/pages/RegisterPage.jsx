@@ -321,7 +321,7 @@ export default function RegisterPage() {
     }
     setSubmitting(true)
     try {
-      await registerNewBusiness({
+      const createdUser = await registerNewBusiness({
         fullName: form.fullName.trim(),
         email: form.email.trim().toLowerCase(),
         phone: form.phone,
@@ -338,10 +338,14 @@ export default function RegisterPage() {
         startingMonthlyRevenueRWF: form.demoMonthlyRevenueRWF,
         primaryItem: form.demoPrimaryItem
       })
+      const targetArch = createdUser?.architectureId || form.architectureId || 'buy-and-sell'
+      try {
+        localStorage.setItem('exbos_active_arch', targetArch)
+      } catch {}
       if (returnTo === 'calculator' || pendingCalculator) {
         navigate('/business-tools')
       } else {
-        navigate(`/dashboard?arch=${form.architectureId}`)
+        navigate(`/dashboard?arch=${targetArch}&module=Overview&page=Dashboard`)
       }
     } catch (err) {
       showToast(err.message || 'Could not complete registration.', 'Registration Failed')

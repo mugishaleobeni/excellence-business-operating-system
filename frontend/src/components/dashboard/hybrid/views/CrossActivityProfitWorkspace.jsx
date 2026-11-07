@@ -50,14 +50,6 @@ export default function CrossActivityProfitWorkspace() {
           }
         })
       })
-    } else if (preset.profitMatrix) {
-      // Use preset baseline if no live sales logged yet
-      retailRev = preset.profitMatrix.retail?.revenueRWF || 0
-      retailCost = preset.profitMatrix.retail?.costRWF || 0
-      serviceRev = preset.profitMatrix.service?.revenueRWF || 0
-      serviceCost = preset.profitMatrix.service?.costRWF || 0
-      foodRev = preset.profitMatrix.food?.revenueRWF || 0
-      foodCost = preset.profitMatrix.food?.costRWF || 0
     }
 
     const calcStream = (id, name, rev, cost, icon, color) => {

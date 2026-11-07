@@ -56,6 +56,27 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
   }
 }
 
+function getActiveScopeQuery() {
+  try {
+    const saved = localStorage.getItem('exbos_user')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed?.email) {
+        return `?scopeKey=${encodeURIComponent(String(parsed.email).toLowerCase())}`
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return ''
+}
+
+function withScope(path) {
+  const scopeQuery = getActiveScopeQuery()
+  if (!scopeQuery) return path
+  return path.includes('?') ? `${path}&${scopeQuery.slice(1)}` : `${path}${scopeQuery}`
+}
+
 export const exbosApi = {
   health: () => apiRequest('/health'),
   sendVerification: (payload) =>
@@ -71,25 +92,25 @@ export const exbosApi = {
   resetPassword: (payload) =>
     apiRequest('/auth/reset-password', { method: 'POST', body: payload }),
   patchWorkspace: (archId, payload) =>
-    apiRequest(`/workspaces/${archId}`, { method: 'PATCH', body: payload }),
+    apiRequest(withScope(`/workspaces/${archId}`), { method: 'PATCH', body: payload }),
   addModuleRecord: (archId, moduleName, payload) =>
-    apiRequest(`/workspaces/${archId}/records/${moduleName}`, {
+    apiRequest(withScope(`/workspaces/${archId}/records/${moduleName}`), {
       method: 'POST',
       body: payload
     }),
   updateModuleRecord: (archId, moduleName, recordId, payload) =>
-    apiRequest(`/workspaces/${archId}/records/${moduleName}/${recordId}`, {
+    apiRequest(withScope(`/workspaces/${archId}/records/${moduleName}/${recordId}`), {
       method: 'PATCH',
       body: payload
     }),
   deleteModuleRecord: (archId, moduleName, recordId) =>
-    apiRequest(`/workspaces/${archId}/records/${moduleName}/${recordId}`, {
+    apiRequest(withScope(`/workspaces/${archId}/records/${moduleName}/${recordId}`), {
       method: 'DELETE'
     }),
   createTransaction: (payload) =>
-    apiRequest('/transactions', { method: 'POST', body: payload }),
+    apiRequest(withScope('/transactions'), { method: 'POST', body: payload }),
   editTransaction: (txId, payload) =>
-    apiRequest(`/transactions/${txId}`, { method: 'PATCH', body: payload }),
+    apiRequest(withScope(`/transactions/${txId}`), { method: 'PATCH', body: payload }),
   saveAnalysis: (payload) =>
     apiRequest('/tools/analyses', { method: 'POST', body: payload })
 }

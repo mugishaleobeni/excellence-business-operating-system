@@ -14,6 +14,7 @@ MODULE_RECORD_BUCKETS: list[str] = [
     "Sales",
     "Purchases",
     "Inventory",
+    "Products",
     "Production",
     "Customers",
     "Suppliers",
@@ -22,12 +23,14 @@ MODULE_RECORD_BUCKETS: list[str] = [
     "Consumables",
     "Staff",
     "Jobs",
+    "ServiceJobs",
     "Categories",
     "RawMaterials",
     "Recipes",
     "Animals",
     "Batches",
     "Feeds",
+    "FeedingLogs",
     "Gestations",
     "HealthRecords",
     "MenuItems",
@@ -38,6 +41,9 @@ MODULE_RECORD_BUCKETS: list[str] = [
     "WasteLogs",
     "HybridItems",
     "MixedSales",
+    "Documents",
+    "SentHistory",
+    "TeamMembers",
 ]
 
 

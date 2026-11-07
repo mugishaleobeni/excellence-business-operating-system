@@ -584,6 +584,10 @@ export default function InteractiveModulePanel({
   })
 
   useEffect(() => {
+    if (Array.isArray(recordsMap['Categories']) && recordsMap['Categories'].length > 0) {
+      setCategoriesList(recordsMap['Categories'])
+      return
+    }
     try {
       const saved = localStorage.getItem(`exbos_categories_${activeArchId}`)
       if (saved) {
@@ -594,7 +598,7 @@ export default function InteractiveModulePanel({
     } catch {
       setCategoriesList(DEFAULT_CATEGORIES)
     }
-  }, [activeArchId, DEFAULT_CATEGORIES])
+  }, [activeArchId, DEFAULT_CATEGORIES, recordsMap])
 
   const saveCategoriesList = (newList) => {
     setCategoriesList(newList)
@@ -602,6 +606,14 @@ export default function InteractiveModulePanel({
       localStorage.setItem(`exbos_categories_${activeArchId}`, JSON.stringify(newList))
     } catch (err) {
       console.error('Failed to save categories', err)
+    }
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, {
+        records: {
+          ...recordsMap,
+          Categories: newList
+        }
+      })
     }
   }
 

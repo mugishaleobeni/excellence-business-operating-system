@@ -181,7 +181,7 @@ export default function DiningTablesWorkspace() {
         menuItems={menuList}
         rooms={[]}
         onSaveOrder={(newOrder) => {
-          updateDemoRecord('food-and-hospitality', 'KitchenOrders', newOrder.id, newOrder)
+          addDemoRecord('food-and-hospitality', 'KitchenOrders', newOrder)
         }}
       />
     </div>

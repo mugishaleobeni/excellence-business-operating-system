@@ -50,6 +50,11 @@ export default function LoginPage({ isForgotPassword = false }) {
         email: email.trim().toLowerCase(),
         password
       })
+      const targetArch = authenticatedUser.architectureId || 'buy-and-sell'
+      try {
+        localStorage.setItem('exbos_active_arch', targetArch)
+      } catch {}
+
       addToast({
         type: 'success',
         title: 'Signed In',
@@ -63,7 +68,7 @@ export default function LoginPage({ isForgotPassword = false }) {
       } else if (returnTo === 'calculator' || pendingCalculator) {
         navigate('/business-tools')
       } else {
-        navigate(`/dashboard?arch=${authenticatedUser.architectureId || 'buy-and-sell'}`)
+        navigate(`/dashboard?arch=${targetArch}&module=Overview&page=Dashboard`)
       }
     } catch (err) {
       setErrorMsg(err.message || 'Invalid email or password.')

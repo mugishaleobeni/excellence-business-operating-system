@@ -28,6 +28,110 @@ def _resolve_scope_key() -> str:
     )
 
 
+def _extract_record_title(raw_dump: dict, module_name: str) -> str:
+    for key in (
+        "title",
+        "name",
+        "productName",
+        "item",
+        "serviceName",
+        "customerName",
+        "supplierName",
+        "guestName",
+        "diagnosis",
+        "roomNumber",
+        "ticketNumber",
+        "invoiceNumber",
+        "feedName",
+        "damName",
+        "category",
+    ):
+        val = raw_dump.get(key)
+        if val and str(val).strip():
+            return str(val).strip()[:350]
+    return f"{module_name} Entry"
+
+
+def _extract_record_amount(raw_dump: dict) -> float:
+    for key in (
+        "amountRWF",
+        "totalAmountRWF",
+        "totalFolioRWF",
+        "sellingPriceRWF",
+        "purchasePriceRWF",
+        "priceRWF",
+        "costRWF",
+        "estimatedCostRWF",
+        "ratePerNightRWF",
+        "totalValueRWF",
+        "amount",
+    ):
+        val = raw_dump.get(key)
+        if val is not None and val != "":
+            try:
+                num = float(val)
+                if num > 0:
+                    return num
+            except (TypeError, ValueError):
+                continue
+    return 0.0
+
+
+def _sync_bucket_to_module_records(
+    db, scope_key: str, arch_id: str, bucket_name: str, records_list: list, now_iso: str
+) -> None:
+    """
+    Mirror every record in a workspace bucket into the top-level `db.module_records`
+    collection so every record across all 6 architectures can be inspected and queried
+    directly by `scopeKey`, `architectureId`, and `bucket`.
+    """
+    if not isinstance(records_list, list):
+        return
+    keep_ids: list[str] = []
+    for idx, item in enumerate(records_list):
+        if not isinstance(item, dict):
+            continue
+        rec_id = str(item.get("id") or f"REC-{arch_id}-{bucket_name}-{idx}")
+        keep_ids.append(rec_id)
+        doc = {
+            **item,
+            "id": rec_id,
+            "scopeKey": scope_key,
+            "architectureId": arch_id,
+            "bucket": bucket_name,
+            "updated_at": now_iso,
+        }
+        doc.pop("_id", None)
+        db.module_records.update_one(
+            {
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "bucket": bucket_name,
+                "id": rec_id,
+            },
+            {"$set": doc},
+            upsert=True,
+        )
+    # Remove any records from db.module_records that were deleted from the bucket
+    if keep_ids:
+        db.module_records.delete_many(
+            {
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "bucket": bucket_name,
+                "id": {"$nin": keep_ids},
+            }
+        )
+    else:
+        db.module_records.delete_many(
+            {
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "bucket": bucket_name,
+            }
+        )
+
+
 def _load_or_init_workspace(db, arch_id: str, scope_key: str = "default") -> dict:
     doc = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id})
     if doc:
@@ -101,6 +205,17 @@ def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
     _load_or_init_workspace(db, arch_id, scope_key)
     updates = validated_data.model_dump(exclude_none=True)
     updates["updated_at"] = now_iso
+
+    if isinstance(updates.get("records"), dict):
+        ws_existing = _load_or_init_workspace(db, arch_id, scope_key)
+        merged_records = ws_existing.get("records", create_empty_record_buckets())
+        for bucket_key, bucket_items in updates["records"].items():
+            if isinstance(bucket_items, list):
+                merged_records[bucket_key] = bucket_items
+                _sync_bucket_to_module_records(
+                    db, scope_key, arch_id, bucket_key, bucket_items, now_iso
+                )
+        updates["records"] = merged_records
 
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
@@ -224,28 +339,54 @@ def create_module_record(
     raw_dump = validated_data.model_dump(exclude_none=True)
 
     rec_id = str(raw_dump.get("id") or f"REC-{now_ms}")
-    title = (
-        raw_dump.get("title")
-        or raw_dump.get("name")
-        or f"{module_name} Entry"
-    )
-    amount = float(raw_dump.get("amountRWF") or 0)
+    title = _extract_record_title(raw_dump, module_name)
+    amount = _extract_record_amount(raw_dump)
     status = str(raw_dump.get("status") or "Completed")
 
     record_doc = {
         **raw_dump,
         "id": rec_id,
+        "architectureId": arch_id,
+        "bucket": module_name,
         "title": title,
         "amountRWF": amount,
         "status": status,
         "date": raw_dump.get("date") or now.strftime("%Y-%m-%d %H:%M"),
-        "createdAt": now_iso,
+        "createdAt": raw_dump.get("createdAt") or now_iso,
     }
 
     records_map = ws.get("records", create_empty_record_buckets())
     bucket_list = records_map.get(module_name, [])
-    bucket_list.insert(0, record_doc)
+    # Upsert if record with same ID already exists in bucket_list
+    existing_idx = next(
+        (i for i, item in enumerate(bucket_list) if str(item.get("id")) == rec_id),
+        None,
+    )
+    if existing_idx is not None:
+        bucket_list[existing_idx] = {**bucket_list[existing_idx], **record_doc}
+    else:
+        bucket_list.insert(0, record_doc)
     records_map[module_name] = bucket_list
+
+    # Mirror into top-level db.module_records collection
+    db.module_records.update_one(
+        {
+            "scopeKey": scope_key,
+            "architectureId": arch_id,
+            "bucket": module_name,
+            "id": rec_id,
+        },
+        {
+            "$set": {
+                **record_doc,
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "bucket": module_name,
+                "updated_at": now_iso,
+            }
+        },
+        upsert=True,
+    )
 
     # Compute automatic workspace KPI updates and ledger transaction side-effects
     spendable = float(ws.get("spendableRWF", 0))
@@ -259,9 +400,9 @@ def create_module_record(
     i_owe = float(ws.get("iOweSuppliersRWF", 0))
 
     created_tx = None
-    inflow_buckets = {"Sales", "Jobs", "KitchenOrders", "GuestFolios", "MixedSales"}
-    outflow_buckets = {"Purchases", "Expenses", "Feeds", "HealthRecords"}
-    stock_buckets = {"Inventory", "RawMaterials", "Consumables", "Ingredients", "HybridItems"}
+    inflow_buckets = {"Sales", "Jobs", "ServiceJobs", "KitchenOrders", "GuestFolios", "MixedSales"}
+    outflow_buckets = {"Purchases", "Expenses", "Feeds", "FeedingLogs", "HealthRecords"}
+    stock_buckets = {"Inventory", "Products", "RawMaterials", "Consumables", "Ingredients", "HybridItems"}
 
     if module_name in inflow_buckets and amount > 0:
         is_credit = status.lower() in {"credit", "unpaid", "pending", "owed"}
@@ -276,7 +417,8 @@ def create_module_record(
         today_profit += profit_margin
 
         created_tx = {
-            "id": f"TX-{now_ms}",
+            "id": f"TX-{rec_id}",
+            "scopeKey": scope_key,
             "architectureId": arch_id,
             "type": "INFLOW",
             "category": module_name,
@@ -286,8 +428,12 @@ def create_module_record(
             "status": status,
             "timestamp": now_iso,
             "editHistory": [],
+            "created_at": now_iso,
+            "updated_at": now_iso,
         }
-        db.transactions.insert_one({**created_tx})
+        db.transactions.update_one(
+            {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
+        )
 
     elif module_name in outflow_buckets and amount > 0:
         is_credit = status.lower() in {"credit", "unpaid", "owed"}
@@ -302,7 +448,8 @@ def create_module_record(
             stock_val += amount
 
         created_tx = {
-            "id": f"TX-{now_ms}",
+            "id": f"TX-{rec_id}",
+            "scopeKey": scope_key,
             "architectureId": arch_id,
             "type": "OUTFLOW",
             "category": module_name,
@@ -312,8 +459,12 @@ def create_module_record(
             "status": status,
             "timestamp": now_iso,
             "editHistory": [],
+            "created_at": now_iso,
+            "updated_at": now_iso,
         }
-        db.transactions.insert_one({**created_tx})
+        db.transactions.update_one(
+            {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
+        )
 
     elif module_name in stock_buckets and amount > 0:
         stock_val += amount
@@ -382,14 +533,41 @@ def update_module_record(
             break
 
     if updated_item is None:
-        return error_response(
-            f"Record '{record_id}' not found in '{module_name}'.", status_code=404
-        )
+        # Upsert if not yet present in bucket_list so optimistic frontend updates never fail
+        updated_item = {
+            **patch_fields,
+            "id": str(record_id),
+            "architectureId": arch_id,
+            "bucket": module_name,
+            "title": _extract_record_title(patch_fields, module_name),
+            "amountRWF": _extract_record_amount(patch_fields),
+            "updatedAt": now_iso,
+        }
+        bucket_list.insert(0, updated_item)
 
     records_map[module_name] = bucket_list
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": {"records": records_map, "updated_at": now_iso}},
+    )
+    db.module_records.update_one(
+        {
+            "scopeKey": scope_key,
+            "architectureId": arch_id,
+            "bucket": module_name,
+            "id": str(record_id),
+        },
+        {
+            "$set": {
+                **updated_item,
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "bucket": module_name,
+                "id": str(record_id),
+                "updated_at": now_iso,
+            }
+        },
+        upsert=True,
     )
     return success_response(data=updated_item, message="Record updated successfully.")
 
@@ -415,15 +593,19 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
     bucket_list = records_map.get(module_name, [])
 
     new_list = [item for item in bucket_list if str(item.get("id")) != str(record_id)]
-    if len(new_list) == len(bucket_list):
-        return error_response(
-            f"Record '{record_id}' not found in '{module_name}'.", status_code=404
-        )
 
     records_map[module_name] = new_list
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": {"records": records_map, "updated_at": now_iso}},
+    )
+    db.module_records.delete_one(
+        {
+            "scopeKey": scope_key,
+            "architectureId": arch_id,
+            "bucket": module_name,
+            "id": str(record_id),
+        }
     )
     return success_response(message=f"Record '{record_id}' deleted from '{module_name}'.")
 

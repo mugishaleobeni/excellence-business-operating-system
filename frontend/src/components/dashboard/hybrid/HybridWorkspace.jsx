@@ -27,14 +27,14 @@ export default function HybridWorkspace({
   activePage = 'All Products',
   onSwitchPage = () => {}
 }) {
-  const { hybridTrade, demoWorkspaces } = useExbos()
+  const { hybridTrade, demoWorkspaces, addDemoRecord } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
 
   const rawItems = hybridWorkspace.records?.HybridItems
-  const items = Array.isArray(rawItems) && rawItems.length > 0 ? rawItems : (preset.items || [])
+  const items = Array.isArray(rawItems) ? rawItems : []
   const rawSales = hybridWorkspace.records?.MixedSales
-  const mixedSales = Array.isArray(rawSales) && rawSales.length > 0 ? rawSales : (preset.mixedSales || [])
+  const mixedSales = Array.isArray(rawSales) ? rawSales : []
 
   // Determine initial tab from sidebar navigation
   const getTabFromProps = (mod, pg) => {
@@ -198,6 +198,7 @@ export default function HybridWorkspace({
       <AddHybridItemModal
         isOpen={isAddItemOpen}
         onClose={() => setIsAddItemOpen(false)}
+        onSaveHybridItem={(item) => addDemoRecord('hybrid', 'HybridItems', item)}
       />
 
       <RecordMixedSaleModal

@@ -39,6 +39,7 @@ export default function ProductionWorkspace({
   rawMaterials = [],
   finishedGoods = [],
   onUpdateBatches = null,
+  onUpdateRecipes = null,
   onUpdateRawMaterials = null,
   onUpdateFinishedGoods = null,
   onOpenCreatePurchase = null,
@@ -339,7 +340,10 @@ export default function ProductionWorkspace({
       costPerUnitRWF: 180
     }
 
-    // In a full app, recipes would update in state or context
+    if (onUpdateRecipes) {
+      onUpdateRecipes([newRecipe, ...recipes])
+    }
+
     if (addToast) {
       addToast({
         type: 'success',
