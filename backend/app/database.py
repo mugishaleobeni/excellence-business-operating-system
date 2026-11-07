@@ -58,10 +58,12 @@ def init_db(app) -> Database:
 
     client_kwargs: dict[str, Any] = {
         "maxPoolSize": app.config.get("MONGO_MAX_POOL_SIZE", 50),
-        "minPoolSize": app.config.get("MONGO_MIN_POOL_SIZE", 10),
-        "serverSelectionTimeoutMS": app.config.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", 5000),
-        "connectTimeoutMS": 5000,
+        "minPoolSize": app.config.get("MONGO_MIN_POOL_SIZE", 1),
+        "serverSelectionTimeoutMS": app.config.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", 15000),
+        "connectTimeoutMS": app.config.get("MONGO_CONNECT_TIMEOUT_MS", 15000),
+        "socketTimeoutMS": app.config.get("MONGO_SOCKET_TIMEOUT_MS", 20000),
         "retryWrites": True,
+        "retryReads": True,
     }
     if is_srv:
         client_kwargs["tls"] = True

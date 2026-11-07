@@ -621,7 +621,7 @@ function serverStoragePlugin() {
       path: req.url,
       method: req.method,
       headers: { ...req.headers, host: `127.0.0.1:${backendPort}` },
-      timeout: 2500,
+      timeout: 15000,
     }
 
     const proxyReq = http.request(options, (proxyRes) => {

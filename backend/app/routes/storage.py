@@ -103,7 +103,7 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
-    now_ms = validated_data.savedAt or int(datetime.now(timezone.utc).timestamp() * 1000)
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     scope_key = request.args.get("scopeKey", "default")
 
     # 1. Persist workspaces

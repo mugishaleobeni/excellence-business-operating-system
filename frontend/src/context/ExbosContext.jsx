@@ -10,6 +10,7 @@ import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePr
 import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
 import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
 import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
+import { exbosApi } from '../utils/apiClient'
 
 const ExbosContext = createContext(null)
 
@@ -963,6 +964,22 @@ export function ExbosProvider({ children }) {
 
     setUser(loggedIn)
 
+    exbosApi
+      .login({
+        email: loggedIn.email,
+        name: loggedIn.name,
+        businessName: loggedIn.businessName,
+        architectureId: archId,
+        role: loggedIn.role
+      })
+      .then((res) => {
+        if (res.ok && res.data?.data?.access_token) {
+          try {
+            localStorage.setItem('exbos_access_token', res.data.data.access_token)
+          } catch {}
+        }
+      })
+
     updateDemoWorkspace(archId, {
       ownerName: loggedIn.name,
       businessName: loggedIn.businessName,
@@ -1010,6 +1027,32 @@ export function ExbosProvider({ children }) {
       auditNote: 'Registered in Interactive Demo Mode.'
     }
     setBusinesses((prev) => [newBiz, ...prev])
+
+    exbosApi
+      .register({
+        fullName: payload.fullName || 'Business Founder',
+        email: payload.email || 'owner@exbos.rw',
+        phone: payload.phone || '+250 788 000 000',
+        password: payload.password || 'ExbosPass2026!',
+        architectureId: archId,
+        businessName: payload.businessName || 'New ExBOS Business',
+        businessCategory: payload.businessCategory || 'Operations',
+        country: payload.country || 'Rwanda',
+        location: payload.location || 'Kigali, Rwanda',
+        currency: payload.currency || 'RWF',
+        language: payload.language || 'en',
+        planTier: payload.planTier || 'Growth Plan',
+        demoSpendableRWF: Number(payload.demoSpendableRWF) || 0,
+        demoMonthlyRevenueRWF: Number(payload.demoMonthlyRevenueRWF) || 0,
+        demoPrimaryItem: payload.demoPrimaryItem || null
+      })
+      .then((res) => {
+        if (res.ok && res.data?.data?.access_token) {
+          try {
+            localStorage.setItem('exbos_access_token', res.data.data.access_token)
+          } catch {}
+        }
+      })
 
     // Update the target architecture's demo workspace with the exact user-entered demo metrics & first item
     const customMetrics = {}
@@ -1063,6 +1106,9 @@ export function ExbosProvider({ children }) {
 
   const logout = () => {
     setUser(null)
+    try {
+      localStorage.removeItem('exbos_access_token')
+    } catch {}
   }
 
   const addTransaction = (arg1, arg2) => {
@@ -1094,6 +1140,14 @@ export function ExbosProvider({ children }) {
 
   // Section 6.15 Controlled Transaction Edit preserving original creation metadata & audit history
   const editTransactionWithAudit = (txId, updates, reason) => {
+    const editorName = user ? `${user.name} (${user.role})` : 'Authorized Administrator'
+    exbosApi.editTransaction(txId, {
+      amountRWF: updates.amountRWF !== undefined ? Number(updates.amountRWF) : undefined,
+      title: updates.title,
+      status: updates.status || 'Corrected',
+      reason: reason || 'Authorized adjustment',
+      editor: editorName
+    })
     setTransactions((prev) =>
       prev.map((tx) => {
         if (tx.id !== txId) return tx

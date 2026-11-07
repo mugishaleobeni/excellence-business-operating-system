@@ -89,5 +89,5 @@ class StorageSnapshotSchema(BaseModel):
     savedAnalyses: Optional[list[dict[str, Any]]] = None
     integrations: Optional[dict[str, Any]] = None
     exportHistory: Optional[list[dict[str, Any]]] = None
-    savedAt: Optional[int] = None
+    savedAt: Optional[int | str] = None
 
