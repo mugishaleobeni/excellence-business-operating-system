@@ -38,9 +38,7 @@ class RegisterBusinessSchema(BaseModel):
     currency: str = Field(default="RWF")
     language: str = Field(default="en")
     planTier: str = Field(default="Growth Plan")
-    enabledActivities: list[str] = Field(
-        default_factory=lambda: ["buy-and-sell", "services"]
-    )
+    enabledActivities: Optional[list[str]] = Field(default=None)
     startingSpendableRWF: float = Field(default=0, ge=0)
     startingMonthlyRevenueRWF: float = Field(default=0, ge=0)
     primaryItem: Optional[str] = Field(default=None)

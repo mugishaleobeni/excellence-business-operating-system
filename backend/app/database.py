@@ -152,31 +152,62 @@ def ensure_indexes(db: Database) -> None:
 
 def seed_initial_collections(db: Database) -> None:
     """
-    Ensure clean zero-base workspaces and platform config keys exist in MongoDB,
-    and purge any legacy hardcoded demo business records (BIZ-1001, BIZ-1002, BIZ-1003).
+    Ensure clean platform config keys exist in MongoDB, and purge any legacy
+    or demo business records, demo transactions, and unused default workspaces.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Remove any legacy demo tenant businesses if present
-    db.businesses.delete_many({"id": {"$in": ["BIZ-1001", "BIZ-1002", "BIZ-1003"]}})
+    # 1. Permanently purge any legacy or demo tenant businesses if present
+    db.businesses.delete_many(
+        {
+            "$or": [
+                {"id": {"$regex": "^BIZ-10[0-9]{2}$"}},
+                {"status": {"$regex": "Demo", "$options": "i"}},
+                {
+                    "auditNote": {
+                        "$regex": "Demo|Guided 7-Step Setup|14-day Gold|Forever Free|Annual enterprise",
+                        "$options": "i",
+                    }
+                },
+                {
+                    "email": {
+                        "$in": [
+                            "founder@exbosbusiness.rw",
+                            "jp@kigaliprime.rw",
+                            "patrick@millebistro.rw",
+                            "diane@luminastudio.rw",
+                            "pacifique@techpulse.rw",
+                        ]
+                    }
+                },
+            ]
+        }
+    )
 
-    # 1. Ensure clean zero-base workspaces for global scope ("default")
-    default_workspaces = get_default_workspaces()
-    for arch_id, ws_payload in default_workspaces.items():
-        existing = db.workspaces.find_one(
-            {"scopeKey": "default", "architectureId": arch_id}
-        )
-        if not existing:
-            doc = {
-                **ws_payload,
-                "scopeKey": "default",
-                "architectureId": arch_id,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            }
-            db.workspaces.insert_one(doc)
+    # 2. Purge any legacy demo transactions and unused 'default' scope workspaces
+    db.transactions.delete_many(
+        {
+            "$or": [
+                {"createdBy": {"$regex": "Demo", "$options": "i"}},
+                {
+                    "id": {
+                        "$in": [
+                            "TX-2148",
+                            "TX-3823",
+                            "TX-9004",
+                            "TX-9003",
+                            "TX-9002",
+                            "TX-9001",
+                        ]
+                    }
+                },
+            ]
+        }
+    )
+    db.workspaces.delete_many({"scopeKey": "default"})
+    db.module_records.delete_many({"scopeKey": "default"})
 
-    # 2. Seed platform_config keys with clean empty arrays/states
+    # 3. Seed platform_config keys with clean empty arrays/states
     config_seeds = {
         "pricing_plans": DEFAULT_PRICING_PLANS,
         "platinum_program": DEFAULT_PLATINUM_PROGRAM,

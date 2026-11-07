@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint
 from flask_jwt_extended import (
@@ -5,6 +6,7 @@ from flask_jwt_extended import (
     create_refresh_token,
     get_jwt_identity,
     jwt_required,
+    verify_jwt_in_request,
 )
 from app.database import get_db, serialize_doc
 from app.schemas.auth_schemas import (
@@ -26,7 +28,17 @@ from app.utils.mailer import send_gmail_email
 from app.utils.responses import error_response, success_response, validate_json
 from app.utils.security import generate_numeric_code, hash_password, verify_password
 
+logger = logging.getLogger("app.persistence")
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
+
+
+def _safe_jwt_email() -> str | None:
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        return ident.lower() if isinstance(ident, str) and ident else None
+    except Exception:
+        return None
 
 
 def _strip_sensitive_user_fields(user_doc: dict) -> dict:
@@ -198,6 +210,12 @@ def register_business(validated_data: RegisterBusinessSchema):
         or ""
     ).strip()
 
+    enabled_activities = (
+        validated_data.enabledActivities
+        if validated_data.enabledActivities
+        else [validated_data.architectureId]
+    )
+
     user_doc = {
         "id": user_id,
         "name": validated_data.fullName,
@@ -216,7 +234,7 @@ def register_business(validated_data: RegisterBusinessSchema):
         "plan": validated_data.planTier,
         "planTier": validated_data.planTier,
         "billingType": billing_type,
-        "enabledActivities": validated_data.enabledActivities,
+        "enabledActivities": enabled_activities,
         "verified": True,
         "created_at": now_iso,
         "updated_at": now_iso,
@@ -243,74 +261,76 @@ def register_business(validated_data: RegisterBusinessSchema):
         "created_at": now_iso,
         "updated_at": now_iso,
     }
+    db.businesses.delete_many({"email": email_lower})
     db.businesses.insert_one(biz_doc)
 
-    # Initialize all 6 workspaces for this user's scopeKey (email_lower)
+    # Initialize ONLY the registered architecture workspace for this user's scopeKey
     default_workspaces = get_default_workspaces()
-    for arch_id, base_ws in default_workspaces.items():
-        is_selected = arch_id == validated_data.architectureId
-        records = create_empty_record_buckets()
-        if is_selected and first_item:
-            records["Inventory"] = [
-                {
-                    "id": f"INV-{now_ms}",
-                    "title": first_item,
-                    "subPage": "Opening Inventory",
-                    "unitCostRWF": 0,
-                    "sellingPriceRWF": 0,
-                    "quantity": 1,
-                    "amountRWF": 0,
-                    "date": now_iso[:10],
-                    "status": "In Stock",
-                }
-            ]
+    arch_id = validated_data.architectureId
+    base_ws = default_workspaces.get(arch_id, {})
+    records = create_empty_record_buckets()
+    if first_item:
+        records["Inventory"] = [
+            {
+                "id": f"INV-{now_ms}",
+                "title": first_item,
+                "subPage": "Opening Inventory",
+                "unitCostRWF": 0,
+                "sellingPriceRWF": 0,
+                "quantity": 1,
+                "amountRWF": 0,
+                "date": now_iso[:10],
+                "status": "In Stock",
+            }
+        ]
 
-        metrics = create_zero_metrics()
-        if is_selected:
-            metrics["spendableRWF"] = start_spendable
-            metrics["monthlyRevenueRWF"] = start_rev
-            metrics["netProfitRWF"] = start_profit
+    metrics = create_zero_metrics()
+    metrics["spendableRWF"] = start_spendable
+    metrics["monthlyRevenueRWF"] = start_rev
+    metrics["netProfitRWF"] = start_profit
 
-        ws_doc = {
-            **base_ws,
-            "scopeKey": email_lower,
-            "architectureId": arch_id,
-            "ownerName": validated_data.fullName if is_selected else "",
-            "businessName": validated_data.businessName
-            if is_selected
-            else base_ws.get("businessName", ""),
-            "email": email_lower if is_selected else "",
-            "phone": validated_data.phone if is_selected else "",
-            "location": validated_data.location if is_selected else "",
-            "category": validated_data.businessCategory or base_ws.get("category", ""),
-            "spendableRWF": metrics["spendableRWF"],
-            "monthlyRevenueRWF": metrics["monthlyRevenueRWF"],
-            "netProfitRWF": metrics["netProfitRWF"],
-            "primaryItem": first_item,
-            "enabledActivities": validated_data.enabledActivities,
-            "metrics": metrics,
-            "records": records,
-            "updated_at": now_iso,
-        }
-        db.workspaces.update_one(
-            {"scopeKey": email_lower, "architectureId": arch_id},
-            {"$set": ws_doc},
-            upsert=True,
-        )
-        # Also sync the global default workspace for the registered architecture
-        if is_selected:
-            default_copy = {**ws_doc, "scopeKey": "default"}
-            db.workspaces.update_one(
-                {"scopeKey": "default", "architectureId": arch_id},
-                {"$set": default_copy},
-                upsert=True,
-            )
+    ws_doc = {
+        **base_ws,
+        "scopeKey": email_lower,
+        "architectureId": arch_id,
+        "ownerName": validated_data.fullName,
+        "businessName": validated_data.businessName,
+        "email": email_lower,
+        "phone": validated_data.phone,
+        "location": validated_data.location,
+        "category": validated_data.businessCategory or base_ws.get("category", ""),
+        "spendableRWF": metrics["spendableRWF"],
+        "monthlyRevenueRWF": metrics["monthlyRevenueRWF"],
+        "netProfitRWF": metrics["netProfitRWF"],
+        "primaryItem": first_item,
+        "enabledActivities": enabled_activities,
+        "metrics": metrics,
+        "records": records,
+        "updated_at": now_iso,
+    }
+    db.workspaces.delete_many(
+        {"scopeKey": email_lower, "architectureId": {"$ne": arch_id}}
+    )
+    db.workspaces.update_one(
+        {"scopeKey": email_lower, "architectureId": arch_id},
+        {"$set": ws_doc},
+        upsert=True,
+    )
 
     clean_user = _strip_sensitive_user_fields(user_doc)
     db.platform_config.update_one(
         {"key": "active_user_snapshot"},
         {"$set": {"key": "active_user_snapshot", "value": clean_user, "updated_at": now_iso}},
         upsert=True,
+    )
+
+    logger.info(
+        "Registered business '%s' (%s) for user %s | architectureId=%s | enabledActivities=%s",
+        validated_data.businessName,
+        biz_id,
+        email_lower,
+        arch_id,
+        enabled_activities,
     )
 
     access_token = create_access_token(identity=email_lower)
@@ -356,8 +376,13 @@ def login_user(validated_data: LoginSchema):
         )
 
     updates = {"updated_at": now_iso}
-    if validated_data.architectureId and validated_data.architectureId in ARCHITECTURE_IDS:
-        updates["architectureId"] = validated_data.architectureId
+    user_arch = user_doc.get("architectureId") or "buy-and-sell"
+    if user_arch != "hybrid" and user_doc.get("enabledActivities") == ["buy-and-sell", "services"]:
+        updates["enabledActivities"] = [user_arch]
+        db.workspaces.update_many(
+            {"scopeKey": email_lower},
+            {"$set": {"enabledActivities": [user_arch]}},
+        )
     db.users.update_one({"_id": user_doc["_id"]}, {"$set": updates})
     user_doc.update(updates)
 
@@ -366,6 +391,13 @@ def login_user(validated_data: LoginSchema):
         {"key": "active_user_snapshot"},
         {"$set": {"key": "active_user_snapshot", "value": clean_user, "updated_at": now_iso}},
         upsert=True,
+    )
+
+    logger.info(
+        "User signed in: %s | architectureId=%s | enabledActivities=%s",
+        email_lower,
+        user_doc.get("architectureId"),
+        user_doc.get("enabledActivities"),
     )
 
     access_token = create_access_token(identity=email_lower)
@@ -398,14 +430,13 @@ def refresh_access_token():
 
 
 @auth_bp.route("/me", methods=["GET"])
-@jwt_required(optional=True)
 def get_current_user():
     """Return the currently authenticated user profile."""
     db = get_db()
-    identity = get_jwt_identity()
+    identity = _safe_jwt_email()
 
     if identity:
-        user_doc = db.users.find_one({"email": identity.lower()})
+        user_doc = db.users.find_one({"email": identity})
         if user_doc:
             return success_response(data={"user": _strip_sensitive_user_fields(user_doc)})
 
@@ -413,12 +444,11 @@ def get_current_user():
 
 
 @auth_bp.route("/me", methods=["PATCH"])
-@jwt_required(optional=True)
 @validate_json(UpdateProfileSchema)
 def update_current_user(validated_data: UpdateProfileSchema):
     """Update the current user's profile and active business settings."""
     db = get_db()
-    identity = get_jwt_identity()
+    identity = _safe_jwt_email()
     now_iso = datetime.now(timezone.utc).isoformat()
 
     update_fields = validated_data.model_dump(exclude_none=True)
@@ -426,9 +456,15 @@ def update_current_user(validated_data: UpdateProfileSchema):
 
     user_doc = None
     if identity:
-        user_doc = db.users.find_one({"email": identity.lower()})
+        user_doc = db.users.find_one({"email": identity})
     if not user_doc and update_fields.get("email"):
         user_doc = db.users.find_one({"email": update_fields["email"].lower()})
+    if not user_doc:
+        active_snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+        if active_snap and isinstance(active_snap.get("value"), dict):
+            snap_email = (active_snap["value"].get("email") or "").lower()
+            if snap_email:
+                user_doc = db.users.find_one({"email": snap_email})
 
     if not user_doc:
         return error_response("Authenticated user account not found.", status_code=404)
@@ -443,6 +479,7 @@ def update_current_user(validated_data: UpdateProfileSchema):
         upsert=True,
     )
 
+    logger.info("Updated user profile for %s", user_doc.get("email"))
     return success_response(
         data={"user": clean_user},
         message="User profile updated successfully.",

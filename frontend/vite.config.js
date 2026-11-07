@@ -673,32 +673,12 @@ function serverStoragePlugin() {
             proxyToFlask(req, res, () => {
               if (url === '/api/storage' && req.method === 'GET') {
                 res.setHeader('Content-Type', 'application/json')
-                if (fs.existsSync(storageFilePath)) {
-                  try {
-                    const data = fs.readFileSync(storageFilePath, 'utf-8')
-                    res.end(data && data.trim() ? data : '{}')
-                    return
-                  } catch (e) {
-                    res.end('{}')
-                    return
-                  }
-                }
                 res.end('{}')
                 return
               }
               if (url === '/api/storage' && req.method === 'POST') {
-                try {
-                  if (!fs.existsSync(dataDir)) {
-                    fs.mkdirSync(dataDir, { recursive: true })
-                  }
-                  fs.writeFileSync(storageFilePath, body, 'utf-8')
-                  res.setHeader('Content-Type', 'application/json')
-                  res.end(JSON.stringify({ success: true, timestamp: Date.now() }))
-                } catch (e) {
-                  res.statusCode = 500
-                  res.setHeader('Content-Type', 'application/json')
-                  res.end(JSON.stringify({ error: e.message }))
-                }
+                res.setHeader('Content-Type', 'application/json')
+                res.end(JSON.stringify({ success: true, timestamp: Date.now() }))
                 return
               }
               if (url === '/api/storage/reset' && req.method === 'POST') {

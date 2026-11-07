@@ -32,20 +32,25 @@ export default function ProductModal({
   const streamRef = useRef(null);
 
   useEffect(() => {
+    const resolveCatName = (val) => {
+      if (!val) return "General";
+      if (typeof val === "string") return val;
+      return val.name || val.title || val.label || "General";
+    };
     if (editRow) {
       setTitle(editRow.title || editRow.name || "");
       setProductSku(editRow.sku || editRow.barcode || "");
-      setProductCategory(editRow.category || "General");
+      setProductCategory(resolveCatName(editRow.category));
       setProductUnit(editRow.unit || "piece");
       setProductPurchasePrice(editRow.purchasePriceRWF ? String(editRow.purchasePriceRWF) : "");
       setProductSellingPrice(editRow.sellingPriceRWF ? String(editRow.sellingPriceRWF) : "");
       setProductCurrentStock(editRow.quantity !== undefined ? String(editRow.quantity) : "0");
       setProductLowStockAlert(editRow.lowStockAlert !== undefined ? String(editRow.lowStockAlert) : "5");
       setProductIsApproximateQty(Boolean(editRow.isApproximateQty));
-    } else {
+    } else if (isOpen) {
       setTitle("");
       setProductSku("");
-      setProductCategory(categoryOptions[0] || "General");
+      setProductCategory(resolveCatName(categoryOptions[0]));
       setProductUnit("piece");
       setProductPurchasePrice("");
       setProductSellingPrice("");
@@ -53,7 +58,7 @@ export default function ProductModal({
       setProductLowStockAlert("5");
       setProductIsApproximateQty(false);
     }
-  }, [editRow, isOpen, categoryOptions]);
+  }, [editRow, isOpen]);
 
   const startCameraScan = async () => {
     setCameraError("");
@@ -120,7 +125,7 @@ export default function ProductModal({
       id: editRow ? editRow.id : `PROD-${Date.now().toString().slice(-4)}`,
       title: title.trim(),
       subPage: activePage,
-      category: productCategory,
+      category: typeof productCategory === "object" ? (productCategory?.name || "General") : (productCategory || "General"),
       sku: generatedSku,
       barcode: generatedSku,
       unit: productUnit,

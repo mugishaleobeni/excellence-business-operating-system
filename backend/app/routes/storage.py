@@ -1,22 +1,53 @@
+import logging
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.routes.workspaces import _sync_bucket_to_module_records
 from app.schemas.workspace_schemas import StorageSnapshotSchema
 from app.seed_defaults import (
-    DEFAULT_BUSINESSES,
     DEFAULT_INTEGRATIONS,
     DEFAULT_PLATINUM_PROGRAM,
     DEFAULT_PRICING_PLANS,
-    DEFAULT_USER,
     MODULE_RECORD_BUCKETS,
     create_empty_record_buckets,
     get_default_workspaces,
 )
 from app.utils.responses import validate_json
 
+logger = logging.getLogger("app.persistence")
 storage_bp = Blueprint("storage", __name__, url_prefix="/api/storage")
+
+
+def _resolve_scope_key(db, fallback_user: dict | None = None) -> str:
+    arg_scope = (request.args.get("scopeKey") or "").strip().lower()
+    if arg_scope and arg_scope != "default":
+        return arg_scope
+
+    try:
+        verify_jwt_in_request(optional=True)
+        jwt_email = get_jwt_identity()
+        if isinstance(jwt_email, str) and jwt_email.strip():
+            return jwt_email.strip().lower()
+    except Exception:
+        pass
+
+    if isinstance(fallback_user, dict):
+        u_email = (fallback_user.get("email") or "").strip().lower()
+        if u_email:
+            return u_email
+
+    snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+    if snap and isinstance(snap.get("value"), dict):
+        snap_email = (snap["value"].get("email") or "").strip().lower()
+        if snap_email:
+            return snap_email
+
+    latest_user = db.users.find_one({}, sort=[("created_at", -1)])
+    if latest_user and latest_user.get("email"):
+        return str(latest_user["email"]).strip().lower()
+
+    return "default"
 
 
 def _get_config_val(db, key: str, default):
@@ -36,19 +67,13 @@ def _set_config_val(db, key: str, value, now_iso: str) -> None:
 
 @storage_bp.route("", methods=["GET"])
 @storage_bp.route("/", methods=["GET"])
-@jwt_required(optional=True)
 def get_storage_snapshot():
     """
     Hydrate full application state for ExbosContext.jsx on initial load.
     Reads directly from MongoDB collections (workspaces, transactions, businesses, platform_config).
     """
     db = get_db()
-    jwt_email = get_jwt_identity()
-    scope_key = (
-        request.args.get("scopeKey")
-        or (jwt_email.lower() if jwt_email else None)
-        or "default"
-    )
+    scope_key = _resolve_scope_key(db)
 
     # 1. Assemble all 6 architecture workspaces
     workspaces_map = get_default_workspaces()
@@ -112,29 +137,30 @@ def get_storage_snapshot():
 
 @storage_bp.route("", methods=["POST"])
 @storage_bp.route("/", methods=["POST"])
-@jwt_required(optional=True)
 @validate_json(StorageSnapshotSchema)
 def save_storage_snapshot(validated_data: StorageSnapshotSchema):
     """
     Persist the debounced state snapshot from ExbosContext.jsx into MongoDB collections.
+    Note: Tenant businesses (`db.businesses`) are managed exclusively by `/api/v1/auth/register`
+    and `/api/v1/admin/businesses` so browser snapshots can never re-insert deleted or demo businesses.
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
     now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
-    jwt_email = get_jwt_identity()
-    user_email = (
-        (validated_data.user or {}).get("email", "").lower()
-        if isinstance(validated_data.user, dict)
-        else ""
-    )
-    scope_key = (
-        request.args.get("scopeKey")
-        or (jwt_email.lower() if jwt_email else None)
-        or user_email
-        or "default"
-    )
+    scope_key = _resolve_scope_key(db, fallback_user=validated_data.user)
 
-    # 1. Persist workspaces (safeguarding against unhydrated empty state overwrites)
+    if scope_key == "default":
+        return jsonify({"success": True, "skipped": "no_authenticated_scope", "timestamp": now_ms}), 200
+
+    user_arch = None
+    if isinstance(validated_data.user, dict):
+        user_arch = validated_data.user.get("architectureId")
+    if not user_arch:
+        u_doc = db.users.find_one({"email": scope_key})
+        if u_doc:
+            user_arch = u_doc.get("architectureId")
+
+    # 1. Persist workspaces (only for the user's active architecture or workspaces with records)
     if validated_data.workspaces and isinstance(validated_data.workspaces, dict):
         for arch_id, ws_data in validated_data.workspaces.items():
             if not isinstance(ws_data, dict):
@@ -143,15 +169,18 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                 {"scopeKey": scope_key, "architectureId": arch_id}
             )
             incoming_records = ws_data.get("records")
+            has_any_records = isinstance(incoming_records, dict) and any(
+                isinstance(v, list) and len(v) > 0 for v in incoming_records.values()
+            )
+            if arch_id != user_arch and not existing_ws and not has_any_records:
+                continue
+
             if isinstance(incoming_records, dict) and existing_ws:
                 existing_records = existing_ws.get("records") or {}
                 merged_records = dict(existing_records)
                 for bucket_name, bucket_items in incoming_records.items():
                     if not isinstance(bucket_items, list):
                         continue
-                    # Only accept incoming bucket if non-empty OR existing bucket was already empty
-                    # (explicit deletions go through DELETE /api/v1/workspaces/<arch>/records/<bucket>/<id>
-                    # or PATCH /api/v1/workspaces/<arch>)
                     if len(bucket_items) > 0 or len(existing_records.get(bucket_name) or []) == 0:
                         merged_records[bucket_name] = bucket_items
                         if len(bucket_items) > 0:
@@ -166,6 +195,10 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                             db, scope_key, arch_id, bucket_name, bucket_items, now_iso
                         )
 
+            # Ensure enabledActivities matches the user's architecture unless hybrid
+            if arch_id != "hybrid" and ws_data.get("enabledActivities") == ["buy-and-sell", "services"]:
+                ws_data["enabledActivities"] = [arch_id]
+
             payload = {
                 **ws_data,
                 "architectureId": arch_id,
@@ -179,12 +212,22 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                 upsert=True,
             )
 
-    # 2. Persist transactions
+    # 2. Persist non-demo transactions
     if validated_data.transactions is not None:
         for tx in validated_data.transactions:
             if not isinstance(tx, dict):
                 continue
+            created_by = str(tx.get("createdBy") or "")
             tx_id = str(tx.get("id") or f"TX-{now_ms}")
+            if "demo" in created_by.lower() or tx_id in {
+                "TX-2148",
+                "TX-3823",
+                "TX-9004",
+                "TX-9003",
+                "TX-9002",
+                "TX-9001",
+            }:
+                continue
             tx_payload = {
                 **tx,
                 "id": tx_id,
@@ -198,21 +241,7 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                 upsert=True,
             )
 
-    # 3. Persist businesses
-    if validated_data.businesses is not None:
-        for biz in validated_data.businesses:
-            if not isinstance(biz, dict):
-                continue
-            biz_id = str(biz.get("id") or f"BIZ-{now_ms}")
-            biz_payload = {**biz, "id": biz_id, "updated_at": now_iso}
-            biz_payload.pop("_id", None)
-            db.businesses.update_one(
-                {"id": biz_id},
-                {"$set": biz_payload},
-                upsert=True,
-            )
-
-    # 4. Persist user snapshot & platform configs
+    # 3. Persist user snapshot & platform configs (NEVER upsert db.businesses from client localStorage)
     if validated_data.user is not None:
         _set_config_val(db, "active_user_snapshot", validated_data.user, now_iso)
     if validated_data.pricingPlans is not None:
@@ -234,20 +263,14 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
 
 
 @storage_bp.route("/reset", methods=["POST"])
-@jwt_required(optional=True)
 def reset_storage_snapshot():
     """
-    Reset all 6 architecture workspaces and ledger transactions to a clean zero-base state.
+    Reset the user's architecture workspace and ledger transactions to a clean zero-base state.
     Matches ExbosContext.jsx resetWorkspaceData().
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
-    jwt_email = get_jwt_identity()
-    scope_key = (
-        request.args.get("scopeKey")
-        or (jwt_email.lower() if jwt_email else None)
-        or "default"
-    )
+    scope_key = _resolve_scope_key(db)
 
     default_workspaces = get_default_workspaces()
     for arch_id, ws_payload in default_workspaces.items():

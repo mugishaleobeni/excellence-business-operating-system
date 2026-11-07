@@ -26,7 +26,7 @@ class WorkspacePatchSchema(BaseModel):
     activeFoodPresetId: Optional[str] = None
     activeHybridPresetId: Optional[str] = None
     enabledActivities: Optional[list[str]] = None
-    records: Optional[dict[str, list[dict[str, Any]]]] = None
+    records: Optional[dict[str, list[Any]]] = None
 
 
 class ApplyPresetSchema(BaseModel):
@@ -39,7 +39,7 @@ class ApplyPresetSchema(BaseModel):
     primaryItem: Optional[str] = None
     attentionHeadline: Optional[str] = None
     enabledActivities: Optional[list[str]] = None
-    seedRecords: Optional[dict[str, list[dict[str, Any]]]] = None
+    seedRecords: Optional[dict[str, list[Any]]] = None
 
 
 class ModuleRecordCreateSchema(BaseModel):

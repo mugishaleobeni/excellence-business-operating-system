@@ -175,7 +175,7 @@ export function sanitizeUserTransactions(rawTxList) {
 export function ExbosProvider({ children }) {
   // One-time browser storage purge to remove any stale demo or cached records from prior sessions
   try {
-    if (localStorage.getItem('exbos_clean_prod_v5') !== 'true') {
+    if (localStorage.getItem('exbos_clean_prod_v6') !== 'true') {
       const staleKeys = [
         'exbos_demo_workspaces',
         'exbos_workspaces_v2',
@@ -188,7 +188,7 @@ export function ExbosProvider({ children }) {
         'exbos_active_arch'
       ]
       staleKeys.forEach((k) => localStorage.removeItem(k))
-      localStorage.setItem('exbos_clean_prod_v5', 'true')
+      localStorage.setItem('exbos_clean_prod_v6', 'true')
     }
   } catch {
     /* ignore storage errors */
@@ -543,7 +543,13 @@ export function ExbosProvider({ children }) {
             setTransactions(sanitizeUserTransactions(serverData.transactions))
           }
           if (Array.isArray(serverData.businesses)) {
-            setBusinesses(serverData.businesses.filter((b) => !['BIZ-1001', 'BIZ-1002', 'BIZ-1003'].includes(b.id)))
+            setBusinesses(
+              serverData.businesses.filter(
+                (b) =>
+                  !/^BIZ-10[0-9]{2}$/.test(String(b?.id || '')) &&
+                  !String(b?.status || '').toLowerCase().includes('demo')
+              )
+            )
           }
           if (Array.isArray(serverData.savedAnalyses)) {
             setSavedAnalyses(serverData.savedAnalyses)
@@ -774,6 +780,13 @@ export function ExbosProvider({ children }) {
       if (!base) return prev
       const currentList = base.records?.[moduleName] || []
       const exists = currentList.some((r) => r.id === recordId)
+      const hasIdentity = Boolean(
+        updatedFields?.title ||
+          updatedFields?.name ||
+          updatedFields?.productName ||
+          updatedFields?.serviceName
+      )
+      if (!exists && !hasIdentity) return prev
       const updatedList = exists
         ? currentList.map((r) => (r.id === recordId ? { ...r, ...updatedFields } : r))
         : [{ id: recordId, ...updatedFields }, ...currentList]
@@ -996,6 +1009,9 @@ export function ExbosProvider({ children }) {
       if (access_token) {
         localStorage.setItem('exbos_access_token', access_token)
       }
+      if (backendUser) {
+        localStorage.setItem('exbos_user', JSON.stringify(backendUser))
+      }
       if (backendUser?.architectureId) {
         localStorage.setItem('exbos_active_arch', backendUser.architectureId)
       }
@@ -1036,6 +1052,9 @@ export function ExbosProvider({ children }) {
       phone: payload.phone || '+250 788 000 000',
       password: payload.password,
       architectureId: archId,
+      enabledActivities: Array.isArray(payload.enabledActivities) && payload.enabledActivities.length > 0
+        ? payload.enabledActivities
+        : [archId],
       businessName: (payload.businessName || '').trim(),
       businessCategory: payload.businessCategory || 'Operations',
       country: payload.country || 'Rwanda',
@@ -1062,6 +1081,9 @@ export function ExbosProvider({ children }) {
     try {
       if (access_token) {
         localStorage.setItem('exbos_access_token', access_token)
+      }
+      if (createdUser) {
+        localStorage.setItem('exbos_user', JSON.stringify(createdUser))
       }
       const assignedArch = createdUser?.architectureId || archId
       if (assignedArch) {

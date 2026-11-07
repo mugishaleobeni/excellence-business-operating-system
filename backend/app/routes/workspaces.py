@@ -1,6 +1,7 @@
+import logging
 from datetime import datetime, timezone
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.schemas.workspace_schemas import (
     ApplyPresetSchema,
@@ -16,16 +17,34 @@ from app.seed_defaults import (
 )
 from app.utils.responses import error_response, success_response, validate_json
 
+logger = logging.getLogger("app.persistence")
 workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/api/v1/workspaces")
 
 
-def _resolve_scope_key() -> str:
-    jwt_email = get_jwt_identity()
-    return (
-        request.args.get("scopeKey")
-        or (jwt_email.lower() if jwt_email else None)
-        or "default"
-    )
+def _resolve_scope_key(db=None) -> str:
+    arg_scope = (request.args.get("scopeKey") or "").strip().lower()
+    if arg_scope and arg_scope != "default":
+        return arg_scope
+
+    try:
+        verify_jwt_in_request(optional=True)
+        jwt_email = get_jwt_identity()
+        if isinstance(jwt_email, str) and jwt_email.strip():
+            return jwt_email.strip().lower()
+    except Exception:
+        pass
+
+    if db is not None:
+        snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+        if snap and isinstance(snap.get("value"), dict):
+            snap_email = (snap["value"].get("email") or "").strip().lower()
+            if snap_email:
+                return snap_email
+        latest_user = db.users.find_one({}, sort=[("created_at", -1)])
+        if latest_user and latest_user.get("email"):
+            return str(latest_user["email"]).strip().lower()
+
+    return arg_scope or "default"
 
 
 def _extract_record_title(raw_dump: dict, module_name: str) -> str:
@@ -132,7 +151,9 @@ def _sync_bucket_to_module_records(
         )
 
 
-def _load_or_init_workspace(db, arch_id: str, scope_key: str = "default") -> dict:
+def _load_or_init_workspace(
+    db, arch_id: str, scope_key: str = "default", persist_if_missing: bool = False
+) -> dict:
     doc = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id})
     if doc:
         clean = serialize_doc(doc)
@@ -149,23 +170,24 @@ def _load_or_init_workspace(db, arch_id: str, scope_key: str = "default") -> dic
         **default_ws,
         "scopeKey": scope_key,
         "architectureId": arch_id,
+        "enabledActivities": [arch_id],
         "created_at": now_iso,
         "updated_at": now_iso,
     }
-    db.workspaces.insert_one(new_doc)
+    if persist_if_missing and scope_key != "default":
+        db.workspaces.insert_one(new_doc)
     return serialize_doc(new_doc)
 
 
 @workspaces_bp.route("", methods=["GET"])
 @workspaces_bp.route("/", methods=["GET"])
-@jwt_required(optional=True)
 def list_workspaces():
-    """Return all 6 architecture workspaces."""
+    """Return all 6 architecture workspaces without inserting empty unused workspaces."""
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     result = {}
     for arch_id in ARCHITECTURE_IDS:
-        ws = _load_or_init_workspace(db, arch_id, scope_key)
+        ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
         ws.pop("_id", None)
         ws.pop("scopeKey", None)
         result[arch_id] = ws
@@ -173,7 +195,6 @@ def list_workspaces():
 
 
 @workspaces_bp.route("/<string:arch_id>", methods=["GET"])
-@jwt_required(optional=True)
 def get_workspace(arch_id: str):
     """Return a single architecture workspace by ID."""
     if arch_id not in ARCHITECTURE_IDS:
@@ -182,15 +203,14 @@ def get_workspace(arch_id: str):
             status_code=404,
         )
     db = get_db()
-    scope_key = _resolve_scope_key()
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    scope_key = _resolve_scope_key(db)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
     ws.pop("_id", None)
     ws.pop("scopeKey", None)
     return success_response(data=ws)
 
 
 @workspaces_bp.route("/<string:arch_id>", methods=["PATCH"])
-@jwt_required(optional=True)
 @validate_json(WorkspacePatchSchema)
 def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
     """Update workspace KPIs, headlines, or active trade presets."""
@@ -199,15 +219,16 @@ def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
             error=f"Unknown architecture '{arch_id}'.", status_code=404
         )
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    _load_or_init_workspace(db, arch_id, scope_key)
+    ws_existing = _load_or_init_workspace(
+        db, arch_id, scope_key, persist_if_missing=True
+    )
     updates = validated_data.model_dump(exclude_none=True)
     updates["updated_at"] = now_iso
 
     if isinstance(updates.get("records"), dict):
-        ws_existing = _load_or_init_workspace(db, arch_id, scope_key)
         merged_records = ws_existing.get("records", create_empty_record_buckets())
         for bucket_key, bucket_items in updates["records"].items():
             if isinstance(bucket_items, list):
@@ -220,15 +241,23 @@ def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": updates},
+        upsert=True,
     )
-    updated_ws = _load_or_init_workspace(db, arch_id, scope_key)
+    logger.info(
+        "PATCH workspace [%s] for scopeKey=%s | updated keys=%s",
+        arch_id,
+        scope_key,
+        list(updates.keys()),
+    )
+    updated_ws = _load_or_init_workspace(
+        db, arch_id, scope_key, persist_if_missing=False
+    )
     updated_ws.pop("_id", None)
     updated_ws.pop("scopeKey", None)
     return success_response(data=updated_ws, message="Workspace updated successfully.")
 
 
 @workspaces_bp.route("/<string:arch_id>/preset", methods=["POST"])
-@jwt_required(optional=True)
 @validate_json(ApplyPresetSchema)
 def apply_workspace_preset(arch_id: str, validated_data: ApplyPresetSchema):
     """
@@ -240,10 +269,10 @@ def apply_workspace_preset(arch_id: str, validated_data: ApplyPresetSchema):
             error=f"Unknown architecture '{arch_id}'.", status_code=404
         )
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     preset_field_map = {
         "make-and-sell": "activeTradePresetId",
         "services": "activeServicePresetId",
@@ -276,8 +305,11 @@ def apply_workspace_preset(arch_id: str, validated_data: ApplyPresetSchema):
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": updates},
+        upsert=True,
     )
-    updated_ws = _load_or_init_workspace(db, arch_id, scope_key)
+    updated_ws = _load_or_init_workspace(
+        db, arch_id, scope_key, persist_if_missing=False
+    )
     updated_ws.pop("_id", None)
     updated_ws.pop("scopeKey", None)
     return success_response(
@@ -289,7 +321,6 @@ def apply_workspace_preset(arch_id: str, validated_data: ApplyPresetSchema):
 @workspaces_bp.route(
     "/<string:arch_id>/records/<string:module_name>", methods=["GET"]
 )
-@jwt_required(optional=True)
 def list_module_records(arch_id: str, module_name: str):
     """Return all records inside a specific module bucket for an architecture."""
     if arch_id not in ARCHITECTURE_IDS:
@@ -302,8 +333,8 @@ def list_module_records(arch_id: str, module_name: str):
             status_code=400,
         )
     db = get_db()
-    scope_key = _resolve_scope_key()
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    scope_key = _resolve_scope_key(db)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
     records = ws.get("records", {}).get(module_name, [])
     return success_response(data=records)
 
@@ -311,14 +342,13 @@ def list_module_records(arch_id: str, module_name: str):
 @workspaces_bp.route(
     "/<string:arch_id>/records/<string:module_name>", methods=["POST"]
 )
-@jwt_required(optional=True)
 @validate_json(ModuleRecordCreateSchema)
 def create_module_record(
     arch_id: str, module_name: str, validated_data: ModuleRecordCreateSchema
 ):
     """
-    Append a record to any of the 27 module record buckets and compute automatic
-    KPI metric deltas and financial ledger transactions (matching addDemoRecord in ExbosContext.jsx).
+    Append a record to any of the 33 module record buckets and compute automatic
+    KPI metric deltas and financial ledger transactions.
     """
     if arch_id not in ARCHITECTURE_IDS:
         return error_response(
@@ -330,12 +360,12 @@ def create_module_record(
         )
 
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
 
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     raw_dump = validated_data.model_dump(exclude_none=True)
 
     rec_id = str(raw_dump.get("id") or f"REC-{now_ms}")
@@ -485,6 +515,17 @@ def create_module_record(
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": ws_updates},
+        upsert=True,
+    )
+
+    logger.info(
+        "SAVED RECORD -> arch=%s | bucket=%s | id=%s | title='%s' | amountRWF=%s | scopeKey=%s",
+        arch_id,
+        module_name,
+        rec_id,
+        title,
+        amount,
+        scope_key,
     )
 
     return success_response(
@@ -502,7 +543,6 @@ def create_module_record(
     "/<string:arch_id>/records/<string:module_name>/<string:record_id>",
     methods=["PATCH"],
 )
-@jwt_required(optional=True)
 @validate_json(ModuleRecordUpdateSchema)
 def update_module_record(
     arch_id: str,
@@ -517,10 +557,10 @@ def update_module_record(
         return error_response(f"Invalid module bucket '{module_name}'.", status_code=400)
 
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     records_map = ws.get("records", create_empty_record_buckets())
     bucket_list = records_map.get(module_name, [])
 
@@ -533,7 +573,17 @@ def update_module_record(
             break
 
     if updated_item is None:
-        # Upsert if not yet present in bucket_list so optimistic frontend updates never fail
+        # Only upsert if the payload includes a descriptive title/name;
+        # ignore partial stock-sync patches directed to a bucket that doesn't hold this item.
+        has_identity = any(
+            patch_fields.get(k)
+            for k in ("title", "name", "productName", "serviceName", "customerName", "supplierName")
+        )
+        if not has_identity:
+            return success_response(
+                data={"id": str(record_id), "skipped": True},
+                message="Record not in target bucket; skipped partial patch.",
+            )
         updated_item = {
             **patch_fields,
             "id": str(record_id),
@@ -549,6 +599,7 @@ def update_module_record(
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": {"records": records_map, "updated_at": now_iso}},
+        upsert=True,
     )
     db.module_records.update_one(
         {
@@ -569,6 +620,13 @@ def update_module_record(
         },
         upsert=True,
     )
+    logger.info(
+        "UPDATED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
+        arch_id,
+        module_name,
+        record_id,
+        scope_key,
+    )
     return success_response(data=updated_item, message="Record updated successfully.")
 
 
@@ -576,7 +634,6 @@ def update_module_record(
     "/<string:arch_id>/records/<string:module_name>/<string:record_id>",
     methods=["DELETE"],
 )
-@jwt_required(optional=True)
 def delete_module_record(arch_id: str, module_name: str, record_id: str):
     """Delete a record from a module bucket."""
     if arch_id not in ARCHITECTURE_IDS:
@@ -585,10 +642,10 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         return error_response(f"Invalid module bucket '{module_name}'.", status_code=400)
 
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    ws = _load_or_init_workspace(db, arch_id, scope_key)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     records_map = ws.get("records", create_empty_record_buckets())
     bucket_list = records_map.get(module_name, [])
 
@@ -598,6 +655,7 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": {"records": records_map, "updated_at": now_iso}},
+        upsert=True,
     )
     db.module_records.delete_one(
         {
@@ -606,6 +664,13 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
             "bucket": module_name,
             "id": str(record_id),
         }
+    )
+    logger.info(
+        "DELETED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
+        arch_id,
+        module_name,
+        record_id,
+        scope_key,
     )
     return success_response(message=f"Record '{record_id}' deleted from '{module_name}'.")
 

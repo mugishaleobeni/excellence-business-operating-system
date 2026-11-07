@@ -24,9 +24,14 @@ export default function GenericRecordModal({
   const [account, setAccount] = useState("Cash");
 
   useEffect(() => {
+    const resolveCatName = (val) => {
+      if (!val) return "General";
+      if (typeof val === "string") return val;
+      return val.name || val.title || val.label || "General";
+    };
     if (editRow) {
       setTitle(editRow.title || editRow.name || "");
-      setCategoryTag(editRow.category || (categoryOptions[0] || "General"));
+      setCategoryTag(resolveCatName(editRow.category || categoryOptions[0]));
       setAmountRWF(editRow.amountRWF !== undefined ? String(editRow.amountRWF) : (editRow.amount ? String(editRow.amount) : ""));
       setQuantity(editRow.quantity !== undefined ? String(editRow.quantity) : "1");
       setUnitCostRWF(editRow.unitCostRWF !== undefined ? String(editRow.unitCostRWF) : "");
@@ -34,9 +39,9 @@ export default function GenericRecordModal({
       setParty(editRow.party || editRow.supplier || editRow.customer || "");
       setStatusVal(editRow.status || "Completed");
       setAccount(editRow.account || "Cash");
-    } else {
+    } else if (isOpen) {
       setTitle("");
-      setCategoryTag(categoryOptions[0] || "General");
+      setCategoryTag(resolveCatName(categoryOptions[0]));
       setAmountRWF("");
       setQuantity("1");
       setUnitCostRWF("");
@@ -45,7 +50,7 @@ export default function GenericRecordModal({
       setStatusVal(activeModule === "Purchases" ? "Paid" : "Completed");
       setAccount("Cash");
     }
-  }, [editRow, isOpen, categoryOptions, activeModule]);
+  }, [editRow, isOpen, activeModule]);
 
   if (!isOpen) return null;
 

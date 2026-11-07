@@ -1,6 +1,7 @@
+import logging
 from datetime import datetime, timezone
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.schemas.transaction_schemas import (
     TransactionAuditEditSchema,
@@ -8,18 +9,36 @@ from app.schemas.transaction_schemas import (
 )
 from app.utils.responses import error_response, success_response, validate_json
 
+logger = logging.getLogger("app.persistence")
 transactions_bp = Blueprint(
     "transactions", __name__, url_prefix="/api/v1/transactions"
 )
 
 
-def _resolve_scope_key() -> str:
-    jwt_email = get_jwt_identity()
-    return (
-        request.args.get("scopeKey")
-        or (jwt_email.lower() if jwt_email else None)
-        or "default"
-    )
+def _resolve_scope_key(db=None) -> str:
+    arg_scope = (request.args.get("scopeKey") or "").strip().lower()
+    if arg_scope and arg_scope != "default":
+        return arg_scope
+
+    try:
+        verify_jwt_in_request(optional=True)
+        jwt_email = get_jwt_identity()
+        if isinstance(jwt_email, str) and jwt_email.strip():
+            return jwt_email.strip().lower()
+    except Exception:
+        pass
+
+    if db is not None:
+        snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+        if snap and isinstance(snap.get("value"), dict):
+            snap_email = (snap["value"].get("email") or "").strip().lower()
+            if snap_email:
+                return snap_email
+        latest_user = db.users.find_one({}, sort=[("created_at", -1)])
+        if latest_user and latest_user.get("email"):
+            return str(latest_user["email"]).strip().lower()
+
+    return arg_scope or "default"
 
 
 def _normalize_tx_type(raw_type: str | None) -> str:
@@ -33,13 +52,12 @@ def _normalize_tx_type(raw_type: str | None) -> str:
 
 @transactions_bp.route("", methods=["GET"])
 @transactions_bp.route("/", methods=["GET"])
-@jwt_required(optional=True)
 def list_transactions():
     """
     List financial ledger transactions with optional filtering by architectureId and type.
     """
     db = get_db()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
     arch_id = request.args.get("architectureId")
     tx_type = request.args.get("type")
     limit = min(int(request.args.get("limit", "200")), 1000)
@@ -63,7 +81,6 @@ def list_transactions():
 
 @transactions_bp.route("", methods=["POST"])
 @transactions_bp.route("/", methods=["POST"])
-@jwt_required(optional=True)
 @validate_json(TransactionCreateSchema)
 def create_transaction(validated_data: TransactionCreateSchema):
     """
@@ -74,7 +91,7 @@ def create_transaction(validated_data: TransactionCreateSchema):
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
 
     raw_dump = validated_data.model_dump(exclude_none=True)
     tx_id = str(raw_dump.get("id") or f"TX-{now_ms}")
@@ -103,6 +120,15 @@ def create_transaction(validated_data: TransactionCreateSchema):
         "updated_at": now_iso,
     }
     db.transactions.update_one({"id": tx_id}, {"$set": tx_doc}, upsert=True)
+    logger.info(
+        "SAVED TRANSACTION -> id=%s | arch=%s | type=%s | title='%s' | amountRWF=%s | scopeKey=%s",
+        tx_id,
+        arch_id,
+        tx_type,
+        tx_doc.get("title"),
+        amount,
+        scope_key,
+    )
 
     # Synchronize workspace cashflow metrics
     ws_doc = db.workspaces.find_one(
@@ -154,7 +180,6 @@ def create_transaction(validated_data: TransactionCreateSchema):
 
 
 @transactions_bp.route("/<string:tx_id>", methods=["PATCH"])
-@jwt_required(optional=True)
 @validate_json(TransactionAuditEditSchema)
 def edit_transaction_with_audit(
     tx_id: str, validated_data: TransactionAuditEditSchema
@@ -166,7 +191,7 @@ def edit_transaction_with_audit(
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
-    scope_key = _resolve_scope_key()
+    scope_key = _resolve_scope_key(db)
 
     tx_doc = db.transactions.find_one({"id": tx_id})
     if not tx_doc:
