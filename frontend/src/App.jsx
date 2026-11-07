@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { ExbosProvider } from './context/ExbosContext'
 import LandingPage from './pages/LandingPage'
@@ -7,6 +7,7 @@ import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import SuperAdminPage from './pages/SuperAdminPage'
 import GlobalToastContainer from './components/common/GlobalToastContainer'
+import PreloaderScreen from './components/common/PreloaderScreen'
 import {
   FeaturesPage,
   BusinessModelsIndexPage,
@@ -18,8 +19,11 @@ import {
 } from './pages/SeoPublicPages'
 
 export default function App() {
+  const [loading, setLoading] = useState(true)
+
   return (
     <ExbosProvider>
+      {loading && <PreloaderScreen onComplete={() => setLoading(false)} />}
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           {/* Public Marketing & SEO Routes (Section 4 SEO Page Architecture) */}
