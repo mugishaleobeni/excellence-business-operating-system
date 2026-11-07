@@ -20,9 +20,10 @@ class BaseConfig:
         days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES_DAYS", "30"))
     )
 
-    MONGO_URI: str = os.getenv(
-        "MONGO_URI",
-        "mongodb+srv://username:password@cluster0.mongodb.net/exbos_db?retryWrites=true&w=majority",
+    MONGO_URI: str = (
+        os.getenv("MONGODB_URI")
+        or os.getenv("MONGO_URI")
+        or "mongodb+srv://username:password@cluster0.mongodb.net/exbos_db?retryWrites=true&w=majority"
     )
     MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "exbos_db")
     MONGO_MAX_POOL_SIZE: int = int(os.getenv("MONGO_MAX_POOL_SIZE", "50"))
@@ -30,6 +31,9 @@ class BaseConfig:
     MONGO_SERVER_SELECTION_TIMEOUT_MS: int = int(
         os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")
     )
+
+    GMAIL_ADDRESS: str = os.getenv("GMAIL_ADDRESS", "")
+    GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
 
     CORS_ORIGINS: list[str] = [
         origin.strip()

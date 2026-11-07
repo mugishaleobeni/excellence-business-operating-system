@@ -15,6 +15,7 @@ from app.schemas.auth_schemas import (
     UpdateProfileSchema,
 )
 from app.seed_defaults import DEFAULT_USER, get_default_workspaces
+from app.utils.mailer import send_gmail_email
 from app.utils.responses import error_response, success_response, validate_json
 from app.utils.security import generate_numeric_code, hash_password, verify_password
 
@@ -307,8 +308,28 @@ def forgot_password(validated_data: ForgotPasswordSchema):
         }
     )
 
+    email_sent = send_gmail_email(
+        to_email=email_lower,
+        subject="ExBOS Password Reset Verification Code",
+        text_body=f"Your ExBOS password reset code is: {code} (valid for 15 minutes).",
+        html_body=(
+            f"<div style='font-family:sans-serif;padding:24px;background:#03091F;color:#ffffff;border-radius:12px;'>"
+            f"<h2 style='color:#218DFF;margin-top:0;'>ExBOS Security Verification</h2>"
+            f"<p>Use the 6-digit verification code below to reset your password:</p>"
+            f"<div style='font-size:28px;font-weight:bold;letter-spacing:6px;padding:14px 20px;"
+            f"background:#071544;border:1px solid #218DFF;border-radius:8px;display:inline-block;'>{code}</div>"
+            f"<p style='color:#94a3b8;font-size:12px;margin-top:16px;'>This code expires in 15 minutes.</p>"
+            f"</div>"
+        ),
+    )
+
     return success_response(
-        data={"email": email_lower, "resetCode": code, "expiresInMinutes": 15},
+        data={
+            "email": email_lower,
+            "resetCode": code,
+            "emailSent": email_sent,
+            "expiresInMinutes": 15,
+        },
         message="Password reset verification code generated.",
     )
 
