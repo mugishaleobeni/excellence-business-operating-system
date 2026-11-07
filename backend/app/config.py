@@ -1,0 +1,69 @@
+import os
+from datetime import timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class BaseConfig:
+    """Base configuration shared across all environments."""
+
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "exbos-default-secret-key-2026")
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "exbos-default-jwt-secret-key-2026")
+    JWT_TOKEN_LOCATION: list[str] = ["headers"]
+    JWT_HEADER_NAME: str = "Authorization"
+    JWT_HEADER_TYPE: str = "Bearer"
+    JWT_ACCESS_TOKEN_EXPIRES: timedelta = timedelta(
+        minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES_MINUTES", "1440"))
+    )
+    JWT_REFRESH_TOKEN_EXPIRES: timedelta = timedelta(
+        days=int(os.getenv("JWT_REFRESH_TOKEN_EXPIRES_DAYS", "30"))
+    )
+
+    MONGO_URI: str = os.getenv(
+        "MONGO_URI",
+        "mongodb+srv://username:password@cluster0.mongodb.net/exbos_db?retryWrites=true&w=majority",
+    )
+    MONGO_DB_NAME: str = os.getenv("MONGO_DB_NAME", "exbos_db")
+    MONGO_MAX_POOL_SIZE: int = int(os.getenv("MONGO_MAX_POOL_SIZE", "50"))
+    MONGO_MIN_POOL_SIZE: int = int(os.getenv("MONGO_MIN_POOL_SIZE", "10"))
+    MONGO_SERVER_SELECTION_TIMEOUT_MS: int = int(
+        os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")
+    )
+
+    CORS_ORIGINS: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173"
+        ).split(",")
+        if origin.strip()
+    ]
+
+    JSON_SORT_KEYS: bool = False
+
+
+class DevelopmentConfig(BaseConfig):
+    """Development environment configuration."""
+
+    DEBUG: bool = True
+    TESTING: bool = False
+
+
+class ProductionConfig(BaseConfig):
+    """Production environment configuration."""
+
+    DEBUG: bool = False
+    TESTING: bool = False
+
+
+CONFIG_MAP = {
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+    "default": DevelopmentConfig,
+}
+
+
+def get_config() -> type[BaseConfig]:
+    env = os.getenv("FLASK_ENV", "development").lower()
+    return CONFIG_MAP.get(env, DevelopmentConfig)
+

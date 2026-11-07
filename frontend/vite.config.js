@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import fs from 'fs'
+import http from 'http'
 import path from 'path'
 
 import { fileURLToPath } from 'url'
@@ -604,68 +605,112 @@ function liquidSapphireTailwindPlugin() {
 }
 
 /**
- * Server-Backed Persistence Middleware for ExBOS
- * Persists all user-entered transactions, records, and workspaces directly to disk
- * on the Vite React server at src/data/server-storage.json so data persists across browser refreshes.
+ * Server-Backed Persistence & Flask + MongoDB Proxy Middleware for ExBOS
+ * Proxies /api/v1/* and /api/storage* requests to the Flask + MongoDB backend on port 5000,
+ * with automatic local file fallback at src/data/server-storage.json if Flask is offline.
  */
 function serverStoragePlugin() {
   const dataDir = path.resolve(__dirname, 'src/data')
   const storageFilePath = path.resolve(dataDir, 'server-storage.json')
+  const backendPort = Number(process.env.VITE_BACKEND_PORT || 5000)
+
+  function proxyToFlask(req, res, fallbackFn) {
+    const options = {
+      hostname: '127.0.0.1',
+      port: backendPort,
+      path: req.url,
+      method: req.method,
+      headers: { ...req.headers, host: `127.0.0.1:${backendPort}` },
+      timeout: 2500,
+    }
+
+    const proxyReq = http.request(options, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode || 200, proxyRes.headers)
+      proxyRes.pipe(res, { end: true })
+    })
+
+    proxyReq.on('error', () => {
+      fallbackFn()
+    })
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy()
+      fallbackFn()
+    })
+
+    if (req._BufferedBody !== undefined) {
+      proxyReq.write(req._BufferedBody)
+      proxyReq.end()
+    } else {
+      req.pipe(proxyReq, { end: true })
+    }
+  }
 
   return {
     name: 'server-storage-api',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = req.url ? req.url.split('?')[0] : ''
-        if (url === '/api/storage') {
-          if (req.method === 'GET') {
+
+        if (url.startsWith('/api/v1')) {
+          proxyToFlask(req, res, () => {
+            res.statusCode = 503
             res.setHeader('Content-Type', 'application/json')
-            if (fs.existsSync(storageFilePath)) {
-              try {
-                const data = fs.readFileSync(storageFilePath, 'utf-8')
-                res.end(data && data.trim() ? data : '{}')
-                return
-              } catch (e) {
+            res.end(JSON.stringify({ success: false, error: 'Flask backend offline on port ' + backendPort }))
+          })
+          return
+        }
+
+        if (url === '/api/storage' || url === '/api/storage/reset') {
+          let body = ''
+          req.on('data', chunk => { body += chunk })
+          req.on('end', () => {
+            req._BufferedBody = body
+            proxyToFlask(req, res, () => {
+              if (url === '/api/storage' && req.method === 'GET') {
+                res.setHeader('Content-Type', 'application/json')
+                if (fs.existsSync(storageFilePath)) {
+                  try {
+                    const data = fs.readFileSync(storageFilePath, 'utf-8')
+                    res.end(data && data.trim() ? data : '{}')
+                    return
+                  } catch (e) {
+                    res.end('{}')
+                    return
+                  }
+                }
                 res.end('{}')
                 return
               }
-            } else {
-              res.end('{}')
-              return
-            }
-          }
-          if (req.method === 'POST') {
-            let body = ''
-            req.on('data', chunk => { body += chunk })
-            req.on('end', () => {
-              try {
-                if (!fs.existsSync(dataDir)) {
-                  fs.mkdirSync(dataDir, { recursive: true })
+              if (url === '/api/storage' && req.method === 'POST') {
+                try {
+                  if (!fs.existsSync(dataDir)) {
+                    fs.mkdirSync(dataDir, { recursive: true })
+                  }
+                  fs.writeFileSync(storageFilePath, body, 'utf-8')
+                  res.setHeader('Content-Type', 'application/json')
+                  res.end(JSON.stringify({ success: true, timestamp: Date.now() }))
+                } catch (e) {
+                  res.statusCode = 500
+                  res.setHeader('Content-Type', 'application/json')
+                  res.end(JSON.stringify({ error: e.message }))
                 }
-                fs.writeFileSync(storageFilePath, body, 'utf-8')
-                res.setHeader('Content-Type', 'application/json')
-                res.end(JSON.stringify({ success: true, timestamp: Date.now() }))
-              } catch (e) {
-                res.statusCode = 500
-                res.setHeader('Content-Type', 'application/json')
-                res.end(JSON.stringify({ error: e.message }))
+                return
+              }
+              if (url === '/api/storage/reset' && req.method === 'POST') {
+                try {
+                  if (fs.existsSync(storageFilePath)) {
+                    fs.unlinkSync(storageFilePath)
+                  }
+                  res.setHeader('Content-Type', 'application/json')
+                  res.end(JSON.stringify({ success: true, reset: true }))
+                } catch (e) {
+                  res.statusCode = 500
+                  res.setHeader('Content-Type', 'application/json')
+                  res.end(JSON.stringify({ error: e.message }))
+                }
               }
             })
-            return
-          }
-        }
-        if (url === '/api/storage/reset' && req.method === 'POST') {
-          try {
-            if (fs.existsSync(storageFilePath)) {
-              fs.unlinkSync(storageFilePath)
-            }
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ success: true, reset: true }))
-          } catch (e) {
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: e.message }))
-          }
+          })
           return
         }
         next()
