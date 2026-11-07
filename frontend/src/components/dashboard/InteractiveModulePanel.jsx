@@ -73,6 +73,10 @@ import ServicesWorkspace from "./services/ServicesWorkspace"
 import AgricultureWorkspace from "./agriculture/AgricultureWorkspace"
 import FoodHospitalityWorkspace from "./food-hospitality/FoodHospitalityWorkspace"
 import HybridWorkspace from "./hybrid/HybridWorkspace"
+import AlertsAndDeadStockView from "./views/AlertsAndDeadStockView"
+import TeamPermissionsView from "./settings/TeamPermissionsView"
+import SubscriptionBillingView from "./settings/SubscriptionBillingView"
+import BusinessActivitiesSettingsView from "./settings/BusinessActivitiesSettingsView"
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
@@ -212,6 +216,22 @@ export default function InteractiveModulePanel({
       })
     }
 
+    // Filter Finished Goods vs Raw Materials for Stock modules
+    if (activePage === 'Finished Goods') {
+      list = list.filter((item) => {
+        const cat = String(item.category || '').toLowerCase()
+        const type = String(item.type || '').toLowerCase()
+        return !cat.includes('raw') && !type.includes('raw') && !item.isRawMaterial
+      })
+    }
+    if (activePage === 'Raw Materials') {
+      list = list.filter((item) => {
+        const cat = String(item.category || '').toLowerCase()
+        const type = String(item.type || '').toLowerCase()
+        return cat.includes('raw') || type.includes('raw') || item.isRawMaterial === true
+      })
+    }
+
     // When on Low Stock subpage, filter strictly to low stock products needing reorder
     if (activePage === 'Low Stock') {
       list = list.filter((item) => {
@@ -239,7 +259,7 @@ export default function InteractiveModulePanel({
     }
 
     // When on Supplier Amounts Owed, filter strictly to suppliers with outstanding payables
-    if (activeModule === 'Suppliers' && (activePage === 'Amounts Owed' || activePage === 'Supplier Balances')) {
+    if (activeModule === 'Suppliers' && (activePage === 'Amounts Owed' || activePage === 'Supplier Balances' || activePage === 'Vendor Balances')) {
       list = list.filter((item) => {
         const owed = Number(item.amountRWF ?? item.balanceOwedRWF) || 0
         return owed > 0 || String(item.status || '').toLowerCase().includes('owed')
@@ -936,7 +956,8 @@ export default function InteractiveModulePanel({
     activePage === 'Expense Categories' ||
     activePage === 'Service Categories' ||
     activePage === 'Budget Categories (Auto-Sorted)' ||
-    activePage === 'Categories & Activity Tags'
+    activePage === 'Categories & Activity Tags' ||
+    activePage === 'Cost Categories'
 
   const isProductForm =
     !editRow &&
@@ -1282,6 +1303,34 @@ export default function InteractiveModulePanel({
 
   // 1. Settings Module View
   if (activeModule === 'Settings') {
+    if (activePage === 'Team & Permissions') {
+      return (
+        <TeamPermissionsView
+          user={user}
+          currentArch={currentArch}
+          addToast={addToast}
+        />
+      )
+    }
+
+    if (activePage === 'Subscription') {
+      return (
+        <SubscriptionBillingView
+          user={user}
+          currentArch={currentArch}
+          addToast={addToast}
+        />
+      )
+    }
+
+    if (activePage === 'Business Activities (On/Off)') {
+      return (
+        <BusinessActivitiesSettingsView
+          addToast={addToast}
+        />
+      )
+    }
+
     return (
       <div className="space-y-6">
         <div className="exbos-glass-card p-6 sm:p-8 space-y-6">
@@ -1543,7 +1592,20 @@ export default function InteractiveModulePanel({
     )
   }
 
-  // 7. Standard Structured Table View across All Architectures
+  // 7. Dedicated Alerts & Dead Stock View
+  if (activeModule === 'Overview' && activePage === 'Alerts & Dead Stock') {
+    return (
+      <AlertsAndDeadStockView
+        inventory={recordsMap['Inventory'] || []}
+        sales={recordsMap['Sales'] || []}
+        hideFinancials={hideFinancials}
+        formatRWF={formatRWF}
+        onOpenReorder={(item) => handleOpenReorder(item)}
+      />
+    )
+  }
+
+  // 8. Standard Structured Table View across All Architectures
   return (
     <div className="space-y-6">
       {/* Dynamic Module KPI Overview Cards */}
@@ -1568,7 +1630,7 @@ export default function InteractiveModulePanel({
           }}
           onViewSale={(sale) => setDetailRow(sale)}
         />
-      ) : activeModule === 'Purchases' && activePage === 'Unpaid Purchases' ? (
+      ) : activeModule === 'Purchases' && (activePage === 'Unpaid Purchases' || activePage === 'Unpaid Orders') ? (
         <UnpaidPurchasesView
           currentArch={currentArch}
           purchases={records}

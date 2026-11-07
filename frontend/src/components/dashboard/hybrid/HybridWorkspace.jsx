@@ -27,8 +27,14 @@ export default function HybridWorkspace({
   activePage = 'All Products',
   onSwitchPage = () => {}
 }) {
-  const { hybridTrade } = useExbos()
+  const { hybridTrade, demoWorkspaces } = useExbos()
+  const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
   const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
+
+  const rawItems = hybridWorkspace.records?.HybridItems
+  const items = Array.isArray(rawItems) && rawItems.length > 0 ? rawItems : (preset.items || [])
+  const rawSales = hybridWorkspace.records?.MixedSales
+  const mixedSales = Array.isArray(rawSales) && rawSales.length > 0 ? rawSales : (preset.mixedSales || [])
 
   // Determine initial tab from sidebar navigation
   const getTabFromProps = (mod, pg) => {
@@ -113,7 +119,15 @@ export default function HybridWorkspace({
       )}
 
       {/* KPI Cards */}
-      <HybridKpiCards />
+      <HybridKpiCards
+        items={items}
+        mixedSales={mixedSales}
+        activeActivities={preset.activeActivities}
+        onNavigateTab={(mod, pg) => {
+          if (mod === 'Overview') setActiveTab('profit')
+          if (mod === 'Sales') setActiveTab('sales')
+        }}
+      />
 
       {/* Subnavigation Bar */}
       <div className="flex items-center gap-2 pb-2 overflow-x-auto">

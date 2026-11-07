@@ -15,6 +15,7 @@ import {
   ToggleRight
 } from 'lucide-react'
 import { useExbos } from '../../../../context/ExbosContext'
+import { HYBRID_PRESETS } from '../data/hybridPresets'
 import AddHybridItemModal from '../modals/AddHybridItemModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
 
@@ -23,9 +24,11 @@ export default function HybridCatalogWorkspace({
   activePage = 'All Products',
   onSwitchPage = () => {}
 }) {
-  const { demoWorkspaces, updateDemoRecord, deleteDemoRecord } = useExbos()
+  const { demoWorkspaces, hybridTrade, updateDemoRecord, deleteDemoRecord } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
-  const catalog = hybridWorkspace.records?.HybridItems || []
+  const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
+  const rawCatalog = hybridWorkspace.records?.HybridItems
+  const catalog = Array.isArray(rawCatalog) && rawCatalog.length > 0 ? rawCatalog : (preset.items || [])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [activityFilter, setActivityFilter] = useState('all')

@@ -14,6 +14,7 @@ import {
   Check
 } from 'lucide-react'
 import { useExbos } from '../../../../context/ExbosContext'
+import { HYBRID_PRESETS } from '../data/hybridPresets'
 import AddHybridItemModal from '../modals/AddHybridItemModal'
 import RecordMixedSaleModal from '../modals/RecordMixedSaleModal'
 import DeleteConfirmModal from '../../../common/DeleteConfirmModal'
@@ -23,9 +24,11 @@ export default function HybridServicesWorkspace({
   activePage = 'Service Catalogue',
   onSwitchPage = () => {}
 }) {
-  const { demoWorkspaces, deleteDemoRecord, updateDemoWorkspace, addToast } = useExbos()
+  const { demoWorkspaces, hybridTrade, deleteDemoRecord, updateDemoWorkspace, addToast } = useExbos()
   const hybridWorkspace = demoWorkspaces?.['hybrid'] || {}
-  const catalog = hybridWorkspace.records?.HybridItems || []
+  const preset = HYBRID_PRESETS[hybridTrade] || HYBRID_PRESETS.techRepair
+  const rawCatalog = hybridWorkspace.records?.HybridItems
+  const catalog = Array.isArray(rawCatalog) && rawCatalog.length > 0 ? rawCatalog : (preset.items || [])
   const isJobScheduleView = activePage === 'Job Schedule'
 
   const [searchQuery, setSearchQuery] = useState('')
