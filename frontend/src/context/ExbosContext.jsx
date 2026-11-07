@@ -216,18 +216,11 @@ export function ExbosProvider({ children }) {
   // Preselected Architecture for Registration Flow
   const [preselectedArchitecture, setPreselectedArchitecture] = useState('buy-and-sell')
 
-  // Saved Financial Tool Analyses
+  // Saved Financial Tool Analyses (Starts clean; populated from backend / user entries)
   const [savedAnalyses, setSavedAnalyses] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_saved_analyses')
-      return saved ? JSON.parse(saved) : [
-        {
-          id: 'AN-101',
-          toolName: 'Survival Budget Planner',
-          date: '2026-10-28',
-          summary: 'Monthly Fixed: 850,000 RWF → 6-Month Safety Budget: 5,100,000 RWF'
-        }
-      ]
+      return saved ? JSON.parse(saved) : []
     } catch {
       return []
     }
@@ -298,21 +291,11 @@ export function ExbosProvider({ children }) {
     }
   })
 
-  // Super Admin Platform Broadcast Advertisement
+  // Super Admin Platform Broadcast Advertisement (Starts clean; set via Super Admin)
   const [superAdminBroadcast, setSuperAdminBroadcast] = useState(() => {
     try {
       const saved = localStorage.getItem('exbos_broadcast')
-      return saved
-        ? JSON.parse(saved)
-        : {
-            id: 'ADV-01',
-            title: 'Scheduled Cloud Database Optimization',
-            message:
-              'Notice from PYLARIX Super Admin: Tomorrow night from 01:00 to 02:00 CAT, EXCELLENCE BOS will perform routine high-availability maintenance. All WhatsApp and Dashboard records remain protected.',
-            active: true,
-            createdAt: '2026-10-30 08:00',
-            author: 'Super Administrator'
-          }
+      return saved ? JSON.parse(saved) : null
     } catch {
       return null
     }
@@ -328,58 +311,30 @@ export function ExbosProvider({ children }) {
     }
   })
 
-  // Connected External Integrations State
+  // Connected External Integrations State (Starts clean; updated via backend / user settings)
   const [integrations, setIntegrations] = useState({
     gmail: {
-      connected: true,
-      email: 'finance@kigaliprime.rw',
-      lastSync: '2026-10-30 12:10',
-      sentCount: 48
+      connected: false,
+      email: '',
+      lastSync: null,
+      sentCount: 0
     },
     googleDrive: {
-      connected: true,
-      folderName: 'EXCELLENCE BOS Reports / 2026',
-      account: 'owner@kigaliprime.rw',
-      lastExport: '2026-10-30 11:50'
+      connected: false,
+      folderName: 'EXCELLENCE BOS Reports',
+      account: '',
+      lastExport: null
     },
     whatsapp: {
-      connected: true,
-      officialNumber: '+250 788 000 900 (EXCELLENCE BOS Verified)',
-      linkedBusinessPhone: '+250 788 412 890',
+      connected: false,
+      officialNumber: '',
+      linkedBusinessPhone: '',
       requireConfirmation: true
     }
   })
 
-  // Document Export History
-  const [exportHistory, setExportHistory] = useState([
-    {
-      id: 'EXP-301',
-      title: 'Monthly Profit, Cash & Debt Executive Report',
-      format: 'PDF',
-      period: 'October 2026',
-      destination: 'Google Drive (EXCELLENCE BOS Reports)',
-      timestamp: '2026-10-30 11:50',
-      status: 'Delivered'
-    },
-    {
-      id: 'EXP-302',
-      title: 'Inventory Landed Cost & Dead Stock Valuation',
-      format: 'XLSX',
-      period: 'Q4 2026',
-      destination: 'Direct Download',
-      timestamp: '2026-10-29 16:20',
-      status: 'Completed'
-    },
-    {
-      id: 'EXP-303',
-      title: 'Six-Month Business Survival & Feed Forecast',
-      format: 'DOCX',
-      period: 'Nov 2026 – Apr 2027',
-      destination: 'Gmail (aline@agukafarm.rw)',
-      timestamp: '2026-10-28 09:40',
-      status: 'Sent via Gmail'
-    }
-  ])
+  // Document Export History (Starts clean; populated as user exports reports)
+  const [exportHistory, setExportHistory] = useState([])
 
   // Sync theme with document root: Default to white (light) mode; allow dark mode only for logged-in users
   useEffect(() => {
@@ -556,7 +511,19 @@ export function ExbosProvider({ children }) {
           setUser(serverData.user)
         }
         if (Array.isArray(serverData.businesses)) {
-          setBusinesses(serverData.businesses)
+          setBusinesses(serverData.businesses.filter((b) => !['BIZ-1001', 'BIZ-1002', 'BIZ-1003'].includes(b.id)))
+        }
+        if (Array.isArray(serverData.savedAnalyses)) {
+          setSavedAnalyses(serverData.savedAnalyses)
+        }
+        if (Array.isArray(serverData.exportHistory)) {
+          setExportHistory(serverData.exportHistory)
+        }
+        if (serverData.integrations && typeof serverData.integrations === 'object') {
+          setIntegrations(serverData.integrations)
+        }
+        if (serverData.superAdminBroadcast !== undefined) {
+          setSuperAdminBroadcast(serverData.superAdminBroadcast)
         }
       })
       .catch((err) => {
@@ -579,6 +546,10 @@ export function ExbosProvider({ children }) {
       transactions,
       user,
       businesses,
+      savedAnalyses,
+      integrations,
+      exportHistory,
+      superAdminBroadcast,
       savedAt: new Date().toISOString()
     })
 
@@ -587,7 +558,7 @@ export function ExbosProvider({ children }) {
       headers: { 'Content-Type': 'application/json' },
       body: payload
     }).catch(() => {})
-  }, [demoWorkspaces, transactions, user, businesses])
+  }, [demoWorkspaces, transactions, user, businesses, savedAnalyses, integrations, exportHistory, superAdminBroadcast])
 
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
 
@@ -704,11 +675,14 @@ export function ExbosProvider({ children }) {
       })
     }
 
+    exbosApi.addModuleRecord(targetArch, moduleName, entry)
+
     return entry
   }
 
   const deleteDemoRecord = (archId, moduleName, recordId) => {
     const targetArch = archId || 'buy-and-sell'
+    exbosApi.deleteModuleRecord(targetArch, moduleName, recordId)
     setDemoWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
@@ -729,6 +703,7 @@ export function ExbosProvider({ children }) {
 
   const updateDemoRecord = (archId, moduleName, recordId, updatedFields) => {
     const targetArch = archId || 'buy-and-sell'
+    exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
     setDemoWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]

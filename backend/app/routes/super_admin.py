@@ -47,9 +47,6 @@ def list_businesses():
         clean.pop("_id", None)
         businesses.append(clean)
 
-    if not businesses and not query:
-        businesses = DEFAULT_BUSINESSES
-
     paid_mrr_rwf = sum(
         float(b.get("mrrRWF", 0))
         for b in businesses

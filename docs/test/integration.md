@@ -1,0 +1,1 @@
+./.venv/bin/python verify_integration.py

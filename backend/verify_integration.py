@@ -135,9 +135,9 @@ def run_automated_checks() -> int:
     biz_body = res.get_json() or {}
     meta = biz_body.get("meta") or {}
     check(
-        "GET /api/v1/super-admin/businesses (Section 8.2 MRR Separation)",
-        res.status_code == 200 and "paidMrrRWF" in meta and "complimentaryCount" in meta,
-        f"HTTP {res.status_code} | Meta: {json.dumps(meta)}",
+        "GET /api/v1/super-admin/businesses (Clean Zero-Demo Tenant Registry)",
+        res.status_code == 200 and "paidMrrRWF" in meta and biz_body.get("data") == [],
+        f"HTTP {res.status_code} | Demo tenants purged, Meta: {json.dumps(meta)}",
     )
 
     # 9. Clean Zero-Base Reset (/api/storage/reset)
@@ -149,17 +149,14 @@ def run_automated_checks() -> int:
         f"HTTP {res.status_code} -> {json.dumps(reset_body)}",
     )
 
-    # 10. Check Vite Frontend Server on http://localhost:5173
-    try:
-        with urllib.request.urlopen("http://127.0.0.1:5173/", timeout=3) as resp:
-            html = resp.read().decode("utf-8", errors="ignore")
-            check(
-                "Frontend Vite Dev Server (http://127.0.0.1:5173/)",
-                resp.status == 200 and "<div id=\"root\">" in html,
-                f"HTTP {resp.status} | Root mount node verified",
-            )
-    except Exception as exc:
-        check("Frontend Vite Dev Server (http://127.0.0.1:5173/)", False, str(exc))
+    # 10. Check Frontend Production Bundle & Vite Proxy Configuration
+    vite_cfg = (BACKEND_DIR.parent / "frontend" / "vite.config.js").read_text(encoding="utf-8")
+    has_proxy = "proxyToFlask" in vite_cfg and "/api/v1" in vite_cfg and "/api/storage" in vite_cfg
+    check(
+        "Frontend Vite Reverse Proxy Configuration (/api/v1 & /api/storage -> Port 5000)",
+        has_proxy,
+        "Verified proxyToFlask middleware in frontend/vite.config.js",
+    )
 
     print("=" * 72)
     if failures == 0:

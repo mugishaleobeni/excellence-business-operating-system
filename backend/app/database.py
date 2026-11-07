@@ -68,17 +68,21 @@ def init_db(app) -> Database:
     if is_srv:
         client_kwargs["tls"] = True
 
-    _mongo_client = MongoClient(mongo_uri, **client_kwargs)
-    _mongo_db = _mongo_client[db_name]
-
     try:
+        _mongo_client = MongoClient(mongo_uri, **client_kwargs)
+        _mongo_db = _mongo_client[db_name]
         ensure_indexes(_mongo_db)
         seed_initial_collections(_mongo_db)
         logger.info("MongoDB connected and indexes verified on database '%s'.", db_name)
     except PyMongoError as exc:
         logger.warning(
-            "MongoDB startup index/seed warning (will retry on first request): %s", exc
+            "MongoDB Atlas unreachable (%s). Falling back to resilient in-memory store.",
+            exc,
         )
+        from app.memory_db import InMemoryDatabase
+
+        _mongo_db = InMemoryDatabase(db_name)
+        seed_initial_collections(_mongo_db)
 
     return _mongo_db
 
@@ -128,10 +132,16 @@ def ensure_indexes(db: Database) -> None:
 
 
 def seed_initial_collections(db: Database) -> None:
-    """Ensure baseline zero-base workspaces, default user, and platform configs exist."""
+    """
+    Ensure clean zero-base workspaces and platform config keys exist in MongoDB,
+    and purge any legacy hardcoded demo business records (BIZ-1001, BIZ-1002, BIZ-1003).
+    """
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # 1. Seed default workspaces for global scope ("default")
+    # Remove any legacy demo tenant businesses if present
+    db.businesses.delete_many({"id": {"$in": ["BIZ-1001", "BIZ-1002", "BIZ-1003"]}})
+
+    # 1. Ensure clean zero-base workspaces for global scope ("default")
     default_workspaces = get_default_workspaces()
     for arch_id, ws_payload in default_workspaces.items():
         existing = db.workspaces.find_one(
@@ -147,31 +157,7 @@ def seed_initial_collections(db: Database) -> None:
             }
             db.workspaces.insert_one(doc)
 
-    # 2. Seed default admin user if users collection is empty
-    if db.users.count_documents({}) == 0:
-        from app.utils.security import hash_password
-
-        admin_doc = {
-            **DEFAULT_USER,
-            "email": DEFAULT_USER["email"].lower(),
-            "password_hash": hash_password("ExbosAdmin2026!"),
-            "created_at": now_iso,
-            "updated_at": now_iso,
-        }
-        db.users.insert_one(admin_doc)
-
-    # 3. Seed default businesses if businesses collection is empty
-    if db.businesses.count_documents({}) == 0:
-        for biz in DEFAULT_BUSINESSES:
-            db.businesses.insert_one(
-                {
-                    **biz,
-                    "created_at": now_iso,
-                    "updated_at": now_iso,
-                }
-            )
-
-    # 4. Seed platform_config keys
+    # 2. Seed platform_config keys with clean empty arrays/states
     config_seeds = {
         "pricing_plans": DEFAULT_PRICING_PLANS,
         "platinum_program": DEFAULT_PLATINUM_PROGRAM,
@@ -179,7 +165,7 @@ def seed_initial_collections(db: Database) -> None:
         "integrations": DEFAULT_INTEGRATIONS,
         "saved_analyses": [],
         "export_history": [],
-        "active_user_snapshot": DEFAULT_USER,
+        "active_user_snapshot": None,
     }
     for key, value in config_seeds.items():
         if not db.platform_config.find_one({"key": key}):

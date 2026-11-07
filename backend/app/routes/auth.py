@@ -182,12 +182,19 @@ def login_user(validated_data: LoginSchema):
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
         is_super = "admin" in email_lower or "pylarix" in email_lower
         user_doc = {
-            **DEFAULT_USER,
             "id": f"USR-{now_ms}",
             "email": email_lower,
             "name": validated_data.name or email_lower.split("@")[0].title(),
+            "phone": "+250 788 000 000",
             "businessName": validated_data.businessName or "ExBOS Enterprise Workspace",
             "architectureId": validated_data.architectureId or "make-and-sell",
+            "country": "Rwanda",
+            "location": "Kigali",
+            "currency": "RWF",
+            "language": "en",
+            "plan": "Growth Plan",
+            "billingType": "Paid",
+            "enabledActivities": ["buy-and-sell", "services"],
             "role": validated_data.role or ("SUPER_ADMIN" if is_super else "BUSINESS_OWNER"),
             "password_hash": hash_password(validated_data.password or "ExbosPass2026!"),
             "created_at": now_iso,
@@ -275,7 +282,7 @@ def update_current_user(validated_data: UpdateProfileSchema):
         user_doc.update(update_fields)
         clean_user = _strip_sensitive_user_fields(user_doc)
     else:
-        clean_user = {**DEFAULT_USER, **update_fields}
+        clean_user = {**(DEFAULT_USER or {}), **update_fields}
 
     db.platform_config.update_one(
         {"key": "active_user_snapshot"},

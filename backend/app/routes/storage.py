@@ -66,11 +66,9 @@ def get_storage_snapshot():
         clean_biz = serialize_doc(biz)
         clean_biz.pop("_id", None)
         businesses.append(clean_biz)
-    if not businesses:
-        businesses = DEFAULT_BUSINESSES
 
     # 4. Load active user snapshot and platform configurations
-    active_user = _get_config_val(db, "active_user_snapshot", DEFAULT_USER)
+    active_user = _get_config_val(db, "active_user_snapshot", None)
     pricing_plans = _get_config_val(db, "pricing_plans", DEFAULT_PRICING_PLANS)
     platinum_program = _get_config_val(db, "platinum_program", DEFAULT_PLATINUM_PROGRAM)
     super_admin_broadcast = _get_config_val(db, "super_admin_broadcast", None)
@@ -198,8 +196,10 @@ def reset_storage_snapshot():
         )
 
     db.transactions.delete_many({})
+    db.businesses.delete_many({"id": {"$in": ["BIZ-1001", "BIZ-1002", "BIZ-1003"]}})
     _set_config_val(db, "saved_analyses", [], now_iso)
     _set_config_val(db, "export_history", [], now_iso)
+    _set_config_val(db, "super_admin_broadcast", None, now_iso)
 
     return jsonify({"success": True, "reset": True}), 200
 
