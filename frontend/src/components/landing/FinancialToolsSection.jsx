@@ -466,7 +466,7 @@ export default function FinancialToolsSection() {
                 <h3 className="font-orbitron text-xs font-bold text-[#9EDCFF]/90 uppercase tracking-wider mt-5">
                   {cardData.title}
                 </h3>
-                <div className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-2.5">
+                <div className="font-orbitron text-xl sm:text-2xl xl:text-3xl font-extrabold text-white tracking-tight mt-2.5 break-words leading-tight">
                   {formatRWF(cardData.amount)}
                 </div>
                 <p className="text-xs sm:text-sm text-slate-300/85 mt-2 leading-relaxed font-normal line-clamp-2">
@@ -749,7 +749,7 @@ export default function FinancialToolsSection() {
                 <div className="text-xs uppercase tracking-wider text-[#9EDCFF]/80 font-medium">
                   {calculatedResult.primaryLabel}
                 </div>
-                <div className="font-orbitron text-3xl sm:text-4xl font-extrabold text-white mt-1">
+                <div className="font-orbitron text-2xl sm:text-3xl xl:text-4xl font-extrabold text-white mt-1 break-words leading-tight">
                   {formatRWF(calculatedResult.primaryAmount)}
                 </div>
                 <div className="text-xs italic text-[#9EDCFF] mt-1">

@@ -180,6 +180,36 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
     [activeArchId, activeModule, setSearchParams]
   )
 
+  // Atomic Module + Page (+ optional action) Navigation Handler
+  const navigateToModulePage = useCallback(
+    (mod, page, options = {}) => {
+      const targetNav = navMap[mod] || ['Dashboard']
+      const targetPage = page && targetNav.includes(page) ? page : targetNav[0] || 'Dashboard'
+
+      try {
+        localStorage.setItem(`exbos_active_module_${activeArchId}`, mod)
+        localStorage.setItem(`exbos_active_page_${activeArchId}`, targetPage)
+      } catch (e) {}
+
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('arch', activeArchId)
+          next.set('module', mod)
+          next.set('page', targetPage)
+          if (options.action) {
+            next.set('action', options.action)
+          } else {
+            next.delete('action')
+          }
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [activeArchId, navMap, setSearchParams]
+  )
+
   const setActiveArchId = useCallback(
     (newArchId) => {
       handleArchSwitch(newArchId)
@@ -205,6 +235,7 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
     activePage,
     setActivePage,
     handleArchSwitch,
-    handleModuleClick
+    handleModuleClick,
+    navigateToModulePage
   }
 }

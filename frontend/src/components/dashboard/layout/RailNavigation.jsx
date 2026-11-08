@@ -19,7 +19,7 @@ export default function RailNavigation({
   return (
     <nav
       aria-label="Primary Navigation Rail"
-      className="dashboard-rail exbos-glass-rail px-2.5 py-3 lg:py-4 flex lg:flex-col items-center justify-between lg:justify-start gap-2 overflow-x-auto z-30"
+      className="hidden lg:flex dashboard-rail exbos-glass-rail px-2.5 py-3 lg:py-4 flex-col items-center justify-start gap-2 overflow-x-auto z-30"
     >
       <Link
         to="/"

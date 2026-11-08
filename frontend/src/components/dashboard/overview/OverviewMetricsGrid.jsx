@@ -47,12 +47,12 @@ export default function OverviewMetricsGrid({
               </div>
             </div>
 
-            {/* Metric Value & Subtitle */}
-            <div className="space-y-1 my-3">
-              <div className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight truncate">
+            {/* Metric Value & Subtitle - fully visible, wrapping gracefully without truncation */}
+            <div className="space-y-1 my-3 min-w-0">
+              <div className="font-orbitron text-xl sm:text-2xl xl:text-3xl font-extrabold text-white tracking-tight break-words leading-tight">
                 {w.getValue()}
               </div>
-              <p className="text-xs text-slate-300 truncate">{w.getSubtitle()}</p>
+              <p className="text-xs text-slate-300 break-words mt-1 leading-relaxed">{w.getSubtitle()}</p>
             </div>
 
             {/* Footer Link / Action */}

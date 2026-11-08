@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { formatRWF } from '../../../utils/currencyWords'
 import { FINANCIAL_DATASETS } from '../data/financialDatasets'
 
@@ -10,6 +10,7 @@ export default function CashFlowCurveChart({
 }) {
   const [graphTimeframe, setGraphTimeframe] = useState('Months') // 'Days' | 'Weeks' | 'Months'
   const [activeCurveIndex, setActiveCurveIndex] = useState(5)
+  const svgRef = useRef(null)
 
   const activeArchDatasets =
     FINANCIAL_DATASETS[activeArchId] || FINANCIAL_DATASETS['buy-and-sell']
@@ -57,11 +58,11 @@ export default function CashFlowCurveChart({
   const currentChartData = computedChartData
 
   const svgWidth = 880
-  const svgHeight = 250
-  const paddingLeft = 56
-  const paddingRight = 28
-  const paddingTop = 36
-  const paddingBottom = 42
+  const svgHeight = 260
+  const paddingLeft = 52
+  const paddingRight = 24
+  const paddingTop = 32
+  const paddingBottom = 38
 
   // Calculate true max from active data and create clean rounded ceiling
   const rawMax = Math.max(
@@ -132,10 +133,26 @@ export default function CashFlowCurveChart({
   const tooltipTranslateX =
     xRatio > 0.75 ? '-92%' : xRatio < 0.22 ? '-8%' : '-50%'
 
+  // Touch scrubbing on mobile
+  const handleTouchScrub = (e) => {
+    if (!svgRef.current) return
+    const rect = svgRef.current.getBoundingClientRect()
+    const touch = e.touches[0]
+    if (!touch) return
+    const clientX = touch.clientX - rect.left
+    const ratio = Math.max(0, Math.min(1, clientX / rect.width))
+    const stepCount = currentChartData.length
+    const newIndex = Math.min(
+      stepCount - 1,
+      Math.max(0, Math.round(ratio * (stepCount - 1)))
+    )
+    setActiveCurveIndex(newIndex)
+  }
+
   return (
-    <div className="exbos-glass-card p-6 sm:p-7 space-y-6">
+    <div className="exbos-glass-card p-4 sm:p-7 space-y-4 sm:space-y-6">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-white/10 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-[#218DFF]/20 border border-[#218DFF]/40 text-[10px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
@@ -145,16 +162,16 @@ export default function CashFlowCurveChart({
               {currentArch?.number || '01'} · {currentArch?.name || 'Architecture'}
             </span>
           </div>
-          <h3 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
+          <h3 className="font-orbitron text-lg sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
             Cash Performance Curve
           </h3>
-          <p className="text-xs text-slate-300 mt-0.5">
+          <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
             Visualizing income elevation, true costs, and profit velocity over time.
           </p>
         </div>
 
         {/* Days / Weeks / Months Switcher Pill */}
-        <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-white/10 border border-white/15 self-start sm:self-auto">
+        <div className="flex items-center gap-1 p-1 rounded-2xl bg-white/10 border border-white/15 self-start sm:self-auto">
           {['Days', 'Weeks', 'Months'].map((tab) => {
             const isActive = graphTimeframe === tab
             return (
@@ -167,7 +184,7 @@ export default function CashFlowCurveChart({
                     tab === 'Days' ? 5 : tab === 'Weeks' ? 2 : 5
                   )
                 }}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                   isActive
                     ? 'exbos-glass-pill-active border-white/30 text-white shadow-sm'
                     : 'bg-transparent border-transparent text-slate-300 hover:text-white hover:bg-white/5'
@@ -180,11 +197,60 @@ export default function CashFlowCurveChart({
         </div>
       </div>
 
+      {/* MOBILE-ONLY Dedicated Summary Card (Placed neatly above chart so it never blocks the SVG) */}
+      <div className="sm:hidden rounded-2xl bg-[#06143b]/90 border border-[#218DFF]/40 p-3.5 backdrop-blur-md shadow-lg space-y-2.5">
+        <div className="flex items-center justify-between border-b border-white/10 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#218DFF] shadow-[0_0_8px_#218DFF]" />
+            <span className="text-xs font-orbitron font-bold text-white tracking-wide">
+              {activeData.label} Trajectory
+            </span>
+          </div>
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-bold text-[11px]">
+            {activeData.change || '+0%'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="w-2 h-2 rounded-full bg-[#218DFF]" />
+              <span className="text-[10px] text-slate-300 uppercase tracking-wider font-semibold">
+                Income
+              </span>
+            </div>
+            <div className="font-orbitron text-xs font-extrabold text-[#9EDCFF] break-words">
+              {formatRWF(activeData.income, hideFinancials)}
+            </div>
+          </div>
+
+          <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="w-2 h-2 rounded-full bg-rose-400" />
+              <span className="text-[10px] text-slate-300 uppercase tracking-wider font-semibold">
+                Expense
+              </span>
+            </div>
+            <div className="font-orbitron text-xs font-bold text-rose-300 break-words">
+              {formatRWF(activeData.expense, hideFinancials)}
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-[#1045CA]/20 border border-[#218DFF]/30 rounded-xl px-3 py-2 flex items-center justify-between">
+          <span className="text-[11px] text-slate-300 font-medium">Net Profit:</span>
+          <span className="font-orbitron text-xs font-extrabold text-emerald-400">
+            +{formatRWF(activeData.income - activeData.expense, hideFinancials)}
+          </span>
+        </div>
+      </div>
+
       {/* SVG Curve Canvas with Responsive Y-Axis */}
-      <div className="relative pt-6 pb-2 select-none w-full">
+      <div className="relative pt-2 sm:pt-6 pb-2 select-none w-full">
+        {/* DESKTOP-ONLY Floating Tooltip (Hidden on mobile to avoid obscuring chart) */}
         {activePoint && (
           <div
-            className="absolute z-30 flex flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
+            className="hidden sm:flex absolute z-30 flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
             style={{
               left: `${(activePoint.x / svgWidth) * 100}%`,
               top: `${Math.max(4, activePoint.y - 74)}px`,
@@ -222,11 +288,17 @@ export default function CashFlowCurveChart({
           </div>
         )}
 
-        <div className="w-full overflow-hidden">
+        {/* SVG Drawing Canvas with Touch Scrubbing */}
+        <div
+          ref={svgRef}
+          onTouchStart={handleTouchScrub}
+          onTouchMove={handleTouchScrub}
+          className="w-full overflow-hidden touch-pan-y"
+        >
           <svg
             viewBox={`0 0 ${svgWidth} ${svgHeight}`}
             preserveAspectRatio="xMidYMid meet"
-            className="w-full h-64 sm:h-80 overflow-visible"
+            className="w-full h-48 sm:h-72 overflow-visible"
           >
             <defs>
               <linearGradient id="sapphireWaveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -267,7 +339,7 @@ export default function CashFlowCurveChart({
                     strokeWidth={isBaseline ? '1.5' : '1'}
                   />
                   <text
-                    x={paddingLeft - 12}
+                    x={paddingLeft - 10}
                     y={yPos + 4}
                     textAnchor="end"
                     className={`font-orbitron text-[10px] sm:text-[11px] font-bold ${
@@ -320,15 +392,15 @@ export default function CashFlowCurveChart({
                 <circle
                   cx={activePoint.x}
                   cy={activePoint.y}
-                  r="8"
+                  r="7"
                   fill="#ffffff"
                   stroke="#218DFF"
-                  strokeWidth="4"
+                  strokeWidth="3.5"
                 />
                 <circle
                   cx={activePoint.x}
                   cy={activePoint.y}
-                  r="16"
+                  r="14"
                   fill="#218DFF"
                   fillOpacity="0.25"
                   className="animate-ping"
@@ -341,19 +413,19 @@ export default function CashFlowCurveChart({
                     r="5"
                     fill="#ffffff"
                     stroke="#f43f5e"
-                    strokeWidth="3"
+                    strokeWidth="2.5"
                   />
                 )}
               </>
             )}
 
-            {/* Interactive Hover Zones */}
+            {/* Interactive Hover / Tap Zones */}
             {incomeCurve.points.map((pt, i) => (
               <rect
                 key={i}
-                x={pt.x - 24}
+                x={pt.x - 28}
                 y="0"
-                width="48"
+                width="56"
                 height={svgHeight}
                 fill="transparent"
                 className="cursor-pointer"
@@ -386,11 +458,11 @@ export default function CashFlowCurveChart({
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <span className="font-orbitron text-[11px] font-bold tracking-wider">
+                <span className="font-orbitron text-[10px] sm:text-[11px] font-bold tracking-wider">
                   {d.label}
                 </span>
                 <span
-                  className={`text-[9px] font-mono transition-colors ${
+                  className={`text-[8px] sm:text-[9px] font-mono transition-colors ${
                     isCur ? 'text-[#9EDCFF] font-bold' : 'text-slate-400'
                   }`}
                 >
@@ -403,19 +475,19 @@ export default function CashFlowCurveChart({
       </div>
 
       {/* Footer Legend */}
-      <div className="pt-2 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-5">
+      <div className="pt-2 border-t border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 text-xs">
+        <div className="flex items-center gap-4 sm:gap-5">
           <div className="flex items-center gap-2">
             <span className="w-3.5 h-1.5 rounded-full bg-[#218DFF] shadow-sm inline-block" />
-            <span className="text-white font-semibold">Income Flow</span>
+            <span className="text-white font-semibold text-[11px] sm:text-xs">Income Flow</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-3.5 h-1.5 rounded-full bg-rose-400 shadow-sm inline-block" />
-            <span className="text-white font-semibold">Expenses &amp; Outflow</span>
+            <span className="text-white font-semibold text-[11px] sm:text-xs">Expenses &amp; Outflow</span>
           </div>
         </div>
 
-        <div className="text-slate-300 text-[11px]">
+        <div className="text-slate-300 text-[10px] sm:text-[11px]">
           Viewing {graphTimeframe.toLowerCase()} trajectory for{' '}
           <strong className="text-[#9EDCFF]">
             {currentArch?.name || 'Architecture'}
@@ -425,4 +497,5 @@ export default function CashFlowCurveChart({
     </div>
   )
 }
+
 

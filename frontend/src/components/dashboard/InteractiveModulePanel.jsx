@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from '../../utils/currencyWords'
 import LanguageDropdown from '../common/LanguageDropdown'
@@ -524,10 +525,27 @@ export default function InteractiveModulePanel({
   const purchaseRemainingAmount = Math.max(0, purchaseTotalAmount - purchasePaidNum)
 
   // New Record Modal State
+  const [searchParams, setSearchParams] = useSearchParams()
   const [modalOpen, setModalOpen] = useState(false)
   const [detailRow, setDetailRow] = useState(null)
   const [editRow, setEditRow] = useState(null)
   const [deleteConfirmItem, setDeleteConfirmItem] = useState(null)
+
+  // Auto-open modal when navigated with action=create (e.g. from Dashboard Overview quick actions)
+  useEffect(() => {
+    if (searchParams.get('action') === 'create') {
+      setEditRow(null)
+      setModalOpen(true)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('action')
+          return next
+        },
+        { replace: true }
+      )
+    }
+  }, [searchParams, setSearchParams])
 
   // Form fields
   const [title, setTitle] = useState('')
@@ -539,6 +557,20 @@ export default function InteractiveModulePanel({
   const [party, setParty] = useState('')
   const [statusVal, setStatusVal] = useState('Active')
   const [savedNotice, setSavedNotice] = useState('')
+
+  // Resolve clean entity singular name for labels and empty states
+  const resolvedEntityName = useMemo(() => {
+    if (activeModule === 'Products' || activeModule === 'Products & Stock' || activeModule === 'Farm Inventory' || activeModule === 'Ingredients & Stock') return 'Product'
+    if (activeModule === 'Sales') return 'Sale'
+    if (activeModule === 'Purchases') return 'Purchase'
+    if (activeModule === 'Customers') return 'Customer'
+    if (activeModule === 'Suppliers') return 'Supplier'
+    if (activeModule === 'Expenses') return 'Expense'
+    if (activeModule === 'Livestock') return 'Animal'
+    if (activeModule === 'Crops & Fields') return 'Field'
+    if (activeModule === 'Farm Inventory' && activePage === 'Farm Inputs') return 'Input'
+    return activePage.replace(/^All\s+/i, '').replace(/s$/i, '')
+  }, [activeModule, activePage])
 
   // Specialized Product Form Fields (matching user requirements)
   const [productSku, setProductSku] = useState('')
@@ -1760,25 +1792,7 @@ export default function InteractiveModulePanel({
             addNewLabel={
               isCategoriesPage
                 ? '+ New Category'
-                : activeModule === 'Livestock'
-                ? '+ New Animal'
-                : activeModule === 'Crops & Fields'
-                ? '+ New Field'
-                : activeModule === 'Farm Inventory' && activePage === 'Farm Inputs'
-                ? '+ New Input'
-                : activeModule === 'Products' || activeModule === 'Products & Stock' || activeModule === 'Farm Inventory' || activeModule === 'Ingredients & Stock'
-                ? '+ New Product'
-                : activeModule === 'Sales'
-                ? '+ New Sale'
-                : activeModule === 'Purchases'
-                ? '+ New Purchase'
-                : activeModule === 'Customers'
-                ? '+ New Customer'
-                : activeModule === 'Suppliers'
-                ? '+ New Supplier'
-                : activeModule === 'Expenses'
-                ? '+ New Expense'
-                : `+ New ${activePage}`
+                : `+ New ${resolvedEntityName}`
             }
             onViewRow={isCategoriesPage ? (row) => handleOpenEditCategory(row.rawCategory || row) : (row) => setDetailRow(row)}
             onEditRow={
@@ -1809,7 +1823,7 @@ export default function InteractiveModulePanel({
                 ? 'No categories found yet. Click "+ New Category" to add your first category.'
                 : activePage === 'Low Stock'
                 ? 'No low stock products right now! All your products are healthy and above their reorder thresholds.'
-                : `No ${activePage} records yet. Click "${activeModule === 'Products' ? '+ New Product' : `+ New ${activePage}`}" to add your first record.`
+                : `No ${resolvedEntityName} records yet. Click "+ New ${resolvedEntityName}" to add your first record.`
             }
           />
         </div>

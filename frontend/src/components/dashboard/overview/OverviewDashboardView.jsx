@@ -7,11 +7,13 @@ import CashFlowCurveChart from './CashFlowCurveChart'
 import RecentActivityTable from './RecentActivityTable'
 import WidgetCustomizerModal from '../layout/WidgetCustomizerModal'
 import LiveWorkflowModal from '../modals/LiveWorkflowModal'
+import MobileFintechDashboardHeader from '../layout/MobileFintechDashboardHeader'
 
 export default function OverviewDashboardView({
   currentArch = {},
   activeArchId = 'buy-and-sell',
   handleModuleClick = () => {},
+  navigateToModulePage = null,
   setActivePage = () => {},
   availableWidgets = [],
   isCardVisible = () => true,
@@ -22,6 +24,13 @@ export default function OverviewDashboardView({
   setVisibleMetricCards = () => {},
   archTransactions = [],
   hideFinancials = false,
+  setHideFinancials = () => {},
+  user = null,
+  liveDashboardData = {},
+  notifOpen = false,
+  setNotifOpen = () => {},
+  activeBusinessAlerts = [],
+  onLogout = () => {},
   addDemoRecord = () => {},
   widgetSearch = '',
   setWidgetSearch = () => {}
@@ -35,8 +44,24 @@ export default function OverviewDashboardView({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Reference Header: Dashboard / All Your Workflows And Performance */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. Mobile Fintech Dashboard Header & Quick Links (Matching Image 1 & 2) */}
+      <MobileFintechDashboardHeader
+        user={user}
+        currentArch={currentArch}
+        liveDashboardData={liveDashboardData}
+        hideFinancials={hideFinancials}
+        setHideFinancials={setHideFinancials}
+        navigateToModulePage={navigateToModulePage}
+        handleModuleClick={handleModuleClick}
+        notifOpen={notifOpen}
+        setNotifOpen={setNotifOpen}
+        activeBusinessAlerts={activeBusinessAlerts}
+        onOpenCustomize={() => setAddCardModalOpen(true)}
+        onLogout={onLogout}
+      />
+
+      {/* Desktop Reference Header: Dashboard / All Your Workflows And Performance */}
+      <div className="hidden lg:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Dashboard Overview
@@ -66,8 +91,12 @@ export default function OverviewDashboardView({
               key={act.label}
               type="button"
               onClick={() => {
-                handleModuleClick(act.module)
-                setActivePage(act.page)
+                if (navigateToModulePage) {
+                  navigateToModulePage(act.module, act.page, { action: 'create' })
+                } else {
+                  handleModuleClick(act.module)
+                  setActivePage(act.page)
+                }
               }}
               className={`px-4 py-2 rounded-2xl text-xs font-bold cursor-pointer flex items-center gap-2 transition-all shadow-md ${
                 i === 0

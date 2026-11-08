@@ -14,6 +14,7 @@ export default function WorkspaceContentRouter({
   activePage = 'Dashboard',
   handleArchSwitch = () => {},
   handleModuleClick = () => {},
+  navigateToModulePage = () => {},
   setActiveModule = () => {},
   setActivePage = () => {},
   availableWidgets = [],
@@ -25,6 +26,13 @@ export default function WorkspaceContentRouter({
   setVisibleMetricCards = () => {},
   archTransactions = [],
   hideFinancials = false,
+  setHideFinancials = () => {},
+  user = null,
+  liveDashboardData = {},
+  notifOpen = false,
+  setNotifOpen = () => {},
+  activeBusinessAlerts = [],
+  onLogout = () => {},
   addDemoRecord = () => {},
   widgetSearch = '',
   setWidgetSearch = () => {}
@@ -90,6 +98,7 @@ export default function WorkspaceContentRouter({
       currentArch={currentArch}
       activeArchId={activeArchId}
       handleModuleClick={handleModuleClick}
+      navigateToModulePage={navigateToModulePage}
       setActivePage={setActivePage}
       availableWidgets={availableWidgets}
       isCardVisible={isCardVisible}
@@ -100,6 +109,13 @@ export default function WorkspaceContentRouter({
       setVisibleMetricCards={setVisibleMetricCards}
       archTransactions={archTransactions}
       hideFinancials={hideFinancials}
+      setHideFinancials={setHideFinancials}
+      user={user}
+      liveDashboardData={liveDashboardData}
+      notifOpen={notifOpen}
+      setNotifOpen={setNotifOpen}
+      activeBusinessAlerts={activeBusinessAlerts}
+      onLogout={onLogout}
       addDemoRecord={addDemoRecord}
       widgetSearch={widgetSearch}
       setWidgetSearch={setWidgetSearch}

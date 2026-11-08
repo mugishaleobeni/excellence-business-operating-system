@@ -31,7 +31,7 @@ export default function DashboardTopNav({
   applyAgricultureTrade
 }) {
   return (
-    <header className={`exbos-sticky-workspace-header ${workspaceScrolled ? 'is-scrolled' : ''}`}>
+    <header className={`exbos-sticky-workspace-header ${activeModule === 'Overview' ? 'hidden lg:block' : ''} ${workspaceScrolled ? 'is-scrolled' : ''}`}>
       {/* Top Meta Bar: Breadcrumbs (Left) + Quick Controls: Craft Badge, Bell, Sign Out (Right) */}
       <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 text-xs pb-2 border-b border-white/10">
         {/* Left: Breadcrumbs Trail with Whitespace Protection */}

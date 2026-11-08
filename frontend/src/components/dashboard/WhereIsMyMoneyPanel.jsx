@@ -281,7 +281,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
                 <h3 className="font-orbitron text-xs font-bold text-slate-600 dark:text-[#9EDCFF]/90 uppercase">
                   {b.title}
                 </h3>
-                <div className="font-orbitron text-xl sm:text-2xl font-extrabold text-[#071544] dark:text-white">
+                <div className="font-orbitron text-xl sm:text-2xl font-extrabold text-[#071544] dark:text-white break-words leading-tight">
                   {formatRWF(b.amount, hideFinancials)}
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300">{b.subtitle}</p>

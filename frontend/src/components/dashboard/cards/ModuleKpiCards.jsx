@@ -120,12 +120,12 @@ function MetricCard({
           </button>
         </div>
 
-        <div className="mt-2">
-          <div className="font-orbitron font-extrabold text-xl sm:text-2xl text-white tracking-tight truncate tabular-nums">
+        <div className="mt-2 min-w-0">
+          <div className="font-orbitron font-extrabold text-lg sm:text-xl xl:text-2xl text-white tracking-tight break-words tabular-nums leading-tight">
             {displayValue}
           </div>
           {subtitle && (
-            <div className="text-[11px] text-slate-400 font-medium mt-1 truncate leading-normal">
+            <div className="text-[11px] text-slate-400 font-medium mt-1 break-words leading-normal">
               {subtitle}
             </div>
           )}

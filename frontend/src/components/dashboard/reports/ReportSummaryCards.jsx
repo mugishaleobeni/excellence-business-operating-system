@@ -90,15 +90,15 @@ function SummaryCardItem({
           )}
         </div>
 
-        <div className="mt-1">
+        <div className="mt-1 min-w-0">
           <div
-            className={`font-orbitron text-xl sm:text-2xl font-extrabold tracking-tight ${c.accent} truncate`}
+            className={`font-orbitron text-lg sm:text-xl xl:text-2xl font-extrabold tracking-tight ${c.accent} break-words leading-tight`}
             title={String(value)}
           >
             {displayValue}
           </div>
           {subtitle && (
-            <div className="text-[11px] text-slate-400 mt-1 line-clamp-1">
+            <div className="text-[11px] text-slate-400 mt-1 break-words leading-normal">
               {subtitle}
             </div>
           )}

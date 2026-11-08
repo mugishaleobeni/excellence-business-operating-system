@@ -6,6 +6,7 @@ import RailNavigation from '../components/dashboard/layout/RailNavigation'
 import ContextualSidebar from '../components/dashboard/layout/ContextualSidebar'
 import DashboardTopNav from '../components/dashboard/layout/DashboardTopNav'
 import WorkspaceContentRouter from '../components/dashboard/layout/WorkspaceContentRouter'
+import MobileFloatingDock from '../components/dashboard/layout/MobileFloatingDock'
 import TradeSelectionModal from '../components/dashboard/make-and-sell/modals/TradeSelectionModal'
 import {
   MODULE_ICONS,
@@ -21,6 +22,7 @@ export default function DashboardPage() {
     theme,
     toggleTheme,
     hideFinancials,
+    setHideFinancials,
     user,
     updateUserProfile,
     logout,
@@ -45,7 +47,8 @@ export default function DashboardPage() {
     activePage,
     setActivePage,
     handleArchSwitch,
-    handleModuleClick: rawHandleModuleClick
+    handleModuleClick: rawHandleModuleClick,
+    navigateToModulePage
   } = useDashboardNavigation({ architectures, user })
 
   // First-time trade onboarding modal for Make & Sell
@@ -349,7 +352,7 @@ export default function DashboardPage() {
 
           {/* SCROLLABLE INNER WORKSPACE BODY */}
           <div
-            className="exbos-workspace-scrollable-body space-y-6"
+            className="exbos-workspace-scrollable-body space-y-6 pb-28 lg:pb-8"
             onScroll={handleWorkspaceScroll}
           >
             {/* DYNAMIC CONTENT ROUTING INSIDE MAIN WORKSPACE */}
@@ -360,6 +363,7 @@ export default function DashboardPage() {
               activePage={activePage}
               handleArchSwitch={handleArchSwitch}
               handleModuleClick={handleModuleClick}
+              navigateToModulePage={navigateToModulePage}
               setActiveModule={setActiveModule}
               setActivePage={setActivePage}
               availableWidgets={AVAILABLE_WIDGETS}
@@ -371,6 +375,16 @@ export default function DashboardPage() {
               setVisibleMetricCards={setVisibleMetricCards}
               archTransactions={archTransactions}
               hideFinancials={hideFinancials}
+              setHideFinancials={setHideFinancials}
+              user={user}
+              liveDashboardData={liveDashboardData}
+              notifOpen={notifOpen}
+              setNotifOpen={setNotifOpen}
+              activeBusinessAlerts={activeBusinessAlerts}
+              onLogout={() => {
+                if (logout) logout()
+                navigate('/login')
+              }}
               addDemoRecord={addDemoRecord}
               widgetSearch={widgetSearch}
               setWidgetSearch={setWidgetSearch}
@@ -397,6 +411,25 @@ export default function DashboardPage() {
           setFirstTimeTradeModalOpen(false)
         }}
         isFirstTimePrompt={true}
+      />
+
+      {/* Mobile Floating Dock Navigation (Matching Video Style) */}
+      <MobileFloatingDock
+        user={user}
+        currentArch={currentArch}
+        activeModule={activeModule}
+        activePage={activePage}
+        navigateToModulePage={navigateToModulePage}
+        handleModuleClick={handleModuleClick}
+        mobileSidebarOpen={mobileSidebarOpen}
+        setMobileSidebarOpen={setMobileSidebarOpen}
+        notifOpen={notifOpen}
+        setNotifOpen={setNotifOpen}
+        activeBusinessAlerts={activeBusinessAlerts}
+        onLogout={() => {
+          if (logout) logout()
+          navigate('/login')
+        }}
       />
     </div>
   )
