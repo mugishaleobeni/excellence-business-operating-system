@@ -1,6 +1,6 @@
 import React from 'react'
 import {
-  Home,
+  LayoutDashboard,
   Repeat,
   Wallet,
   ArrowUpRight,
@@ -18,9 +18,9 @@ export default function MobileFloatingDock({
 }) {
   const tabs = [
     {
-      id: 'home',
-      label: 'Home',
-      icon: Home,
+      id: 'overview',
+      label: 'Overview',
+      icon: LayoutDashboard,
       isActive: activeModule === 'Overview',
       action: () => {
         if (navigateToModulePage) {

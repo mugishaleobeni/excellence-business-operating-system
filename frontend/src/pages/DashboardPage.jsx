@@ -312,6 +312,17 @@ export default function DashboardPage() {
           activeModule={activeModule}
           currentArch={currentArch}
           architectures={architectures}
+          mainModules={mainModules}
+          pinnedModules={pinnedModules}
+          MODULE_ICONS={MODULE_ICONS}
+          MODULE_SHORT_LABELS={MODULE_SHORT_LABELS}
+          handleModuleClick={handleModuleClick}
+          theme={theme}
+          toggleTheme={toggleTheme}
+          onLogout={() => {
+            if (logout) logout()
+            navigate('/login')
+          }}
           onSwitchArch={(newArchId) => {
             handleArchSwitch(newArchId)
             if (updateUserProfile) {
