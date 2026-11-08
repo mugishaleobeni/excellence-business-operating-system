@@ -96,6 +96,23 @@ def _extract_record_amount(raw_dump: dict) -> float:
     return 0.0
 
 
+PRODUCT_BUCKETS = {"Inventory", "Products"}
+
+
+def _mirror_product(db, scope_key: str, arch_id: str, item: dict, now_iso: str) -> None:
+    """Mirror a product/inventory item into the dedicated top-level `db.products` collection."""
+    if not isinstance(item, dict) or not item.get("id"):
+        return
+    doc = {**item, "scopeKey": scope_key, "architectureId": arch_id, "updated_at": now_iso}
+    doc.pop("_id", None)
+    doc.pop("bucket", None)
+    db.products.update_one(
+        {"scopeKey": scope_key, "architectureId": arch_id, "id": str(item["id"])},
+        {"$set": doc, "$setOnInsert": {"created_at": now_iso}},
+        upsert=True,
+    )
+
+
 def _sync_bucket_to_module_records(
     db, scope_key: str, arch_id: str, bucket_name: str, records_list: list, now_iso: str
 ) -> None:
@@ -131,6 +148,8 @@ def _sync_bucket_to_module_records(
             {"$set": doc},
             upsert=True,
         )
+        if bucket_name in PRODUCT_BUCKETS:
+            _mirror_product(db, scope_key, arch_id, {**item, "id": rec_id}, now_iso)
     # Remove any records from db.module_records that were deleted from the bucket
     if keep_ids:
         db.module_records.delete_many(
@@ -417,6 +436,8 @@ def create_module_record(
         },
         upsert=True,
     )
+    if module_name in PRODUCT_BUCKETS:
+        _mirror_product(db, scope_key, arch_id, record_doc, now_iso)
 
     # Compute automatic workspace KPI updates and ledger transaction side-effects
     spendable = float(ws.get("spendableRWF", 0))
@@ -620,6 +641,8 @@ def update_module_record(
         },
         upsert=True,
     )
+    if module_name in PRODUCT_BUCKETS:
+        _mirror_product(db, scope_key, arch_id, updated_item, now_iso)
     logger.info(
         "UPDATED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
         arch_id,
@@ -665,6 +688,10 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
             "id": str(record_id),
         }
     )
+    if module_name in PRODUCT_BUCKETS:
+        db.products.delete_one(
+            {"scopeKey": scope_key, "architectureId": arch_id, "id": str(record_id)}
+        )
     logger.info(
         "DELETED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
         arch_id,

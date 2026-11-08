@@ -326,7 +326,17 @@ export default function CardNav({
   }, [])
 
   const handleLinkActivate = (href, link, item, e) => {
-    e.preventDefault()
+    if (link?.onClick) {
+      e?.preventDefault?.()
+      link.onClick(e)
+      setOpen(false)
+      return
+    }
+    if (href?.startsWith('http://') || href?.startsWith('https://') || href?.startsWith('mailto:')) {
+      setOpen(false)
+      return
+    }
+    e?.preventDefault?.()
     setOpen(false)
     if (onNavigate && href) {
       onNavigate(href, link, item)
@@ -434,6 +444,8 @@ export default function CardNav({
                     <li key={`${link.label}-${linkIndex}`}>
                       <a
                         href={link.href || '#'}
+                        target={link.target}
+                        rel={link.target === '_blank' ? 'noopener noreferrer' : undefined}
                         tabIndex={open ? undefined : -1}
                         onClick={(e) => handleLinkActivate(link.href, link, item, e)}
                         className="cn-link"

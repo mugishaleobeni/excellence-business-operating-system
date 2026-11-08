@@ -232,8 +232,12 @@ export default function FinancialToolsSection() {
 
   const handleCalculateClick = (e) => {
     e.preventDefault()
+    runCalculation(activeToolId, inputs[activeToolId])
+  }
+
+  const handleSaveAnalysis = () => {
+    if (!calculatedResult) return
     if (!user) {
-      // Preserve entered values and prompt authentication (Section 2.1 & 3.2)
       savePendingCalculatorState({
         toolId: activeToolId,
         inputs: inputs[activeToolId],
@@ -242,11 +246,6 @@ export default function FinancialToolsSection() {
       setAuthModalOpen(true)
       return
     }
-    runCalculation(activeToolId, inputs[activeToolId])
-  }
-
-  const handleSaveAnalysis = () => {
-    if (!calculatedResult) return
     saveFinancialAnalysis({
       toolName: calculatedResult.toolName,
       summary: `${calculatedResult.headline} (${formatRWF(calculatedResult.primaryAmount)})`
@@ -258,15 +257,106 @@ export default function FinancialToolsSection() {
   const getToolIcon = (id) => {
     switch (id) {
       case 'break-even':
-        return <TrendingUp className="w-4 h-4" />
+        return <TrendingUp className="w-5 h-5" />
       case 'survival-budget':
-        return <ShieldAlert className="w-4 h-4" />
+        return <ShieldAlert className="w-5 h-5" />
       case 'startup-cost':
-        return <Rocket className="w-4 h-4" />
+        return <Rocket className="w-5 h-5" />
       case 'pricing-profit':
-        return <Coins className="w-4 h-4" />
+        return <Coins className="w-5 h-5" />
       default:
-        return <LifeBuoy className="w-4 h-4" />
+        return <LifeBuoy className="w-5 h-5" />
+    }
+  }
+
+  const getToolCardData = (toolId) => {
+    switch (toolId) {
+      case 'break-even': {
+        const fixed = Number(inputs['break-even']?.fixedCosts) || 600000
+        const price = Number(inputs['break-even']?.sellingPrice) || 15000
+        const variable = Number(inputs['break-even']?.variableCost) || 9000
+        const margin = price - variable
+        const units = margin > 0 ? Math.ceil(fixed / margin) : 0
+        const revenue = units * price
+        return {
+          badge: 'Break-Even Target',
+          title: 'BREAK-EVEN SALES TARGET',
+          amount: revenue,
+          subtitle: `Sell ${units.toLocaleString()} units to cover ${formatRWF(fixed)} fixed costs`,
+          problemSolved: 'Solves: Selling at a loss without knowing break-even units'
+        }
+      }
+      case 'survival-budget': {
+        const d = inputs['survival-budget'] || {}
+        const totalMonthly =
+          (Number(d.rent) || 0) +
+          (Number(d.salaries) || 0) +
+          (Number(d.electricity) || 0) +
+          (Number(d.internet) || 0) +
+          (Number(d.software) || 0) +
+          (Number(d.otherFixed) || 0)
+        const safetyBudget = totalMonthly * 6
+        return {
+          badge: '6-Month Reserve',
+          title: '6-MONTH SURVIVAL BUDGET',
+          amount: safetyBudget,
+          subtitle: `Fixed monthly costs (${formatRWF(totalMonthly)}) × 6 months safety shield`,
+          problemSolved: 'Solves: Business running out of cash in slow months'
+        }
+      }
+      case 'startup-cost': {
+        const d = inputs['startup-cost'] || {}
+        const total =
+          (Number(d.equipment) || 0) +
+          (Number(d.premises) || 0) +
+          (Number(d.inventory) || 0) +
+          (Number(d.registration) || 0) +
+          (Number(d.marketing) || 0) +
+          (Number(d.otherStartup) || 0)
+        return {
+          badge: 'Initial Capital',
+          title: 'STARTUP CAPITAL REQUIRED',
+          amount: total,
+          subtitle: 'Equipment, premises, opening stock & business licensing',
+          problemSolved: 'Solves: Underestimating cash needed before opening'
+        }
+      }
+      case 'pricing-profit': {
+        const d = inputs['pricing-profit'] || {}
+        const price = Number(d.sellingPrice) || 25000
+        const cost = Number(d.unitCost) || 14000
+        const sales = Number(d.expectedSales) || 200
+        const opex = Number(d.operatingExpenses) || 850000
+        const profit = Math.max(0, (price - cost) * sales - opex)
+        return {
+          badge: 'Monthly Margin',
+          title: 'PRICING & PROFIT TARGET',
+          amount: profit,
+          subtitle: `Estimated monthly net profit after ${formatRWF(opex)} overhead`,
+          problemSolved: 'Solves: Pricing goods too low to cover true overhead'
+        }
+      }
+      case 'emergency-fund': {
+        const d = inputs['emergency-fund'] || {}
+        const monthly = Number(d.monthlyExpenses) || 750000
+        const months = Number(d.reserveMonths) || 6
+        const target = monthly * months
+        return {
+          badge: 'Buffer Shield',
+          title: 'EMERGENCY RESERVE FUND',
+          amount: target,
+          subtitle: `${months} months of operations protected against unexpected shocks`,
+          problemSolved: 'Solves: Equipment failure or emergency halts business'
+        }
+      }
+      default:
+        return {
+          badge: 'Financial Tool',
+          title: 'FINANCIAL PLANNER',
+          amount: 0,
+          subtitle: 'Plan costs & cash flow',
+          problemSolved: 'Solves: Financial uncertainty'
+        }
     }
   }
 
@@ -342,13 +432,13 @@ export default function FinancialToolsSection() {
         </p>
       </div>
 
-      {/* 5 Tool Selector Cards */}
+      {/* 5 Financial Planning Tool Cards - Designed Identical to Reference Image */}
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 items-stretch"
-        style={{ gap: '16px', marginBottom: '28px' }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 items-stretch gap-4 sm:gap-5 mb-8"
       >
         {enabledTools.map((tool) => {
           const isSelected = tool.id === activeToolId
+          const cardData = getToolCardData(tool.id)
           return (
             <button
               key={tool.id}
@@ -357,44 +447,35 @@ export default function FinancialToolsSection() {
                 setActiveToolId(tool.id)
                 setCalculatedResult(null)
               }}
-              style={{ boxShadow: 'none', transform: 'none', gap: '14px', minHeight: '132px' }}
-              className={`financial-tool-card text-left p-4 rounded-2xl cursor-pointer border flex flex-col justify-start ${
+              className={`text-left rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-200 cursor-pointer ${
                 isSelected
-                  ? 'bg-gradient-to-br from-[#1045CA] to-[#071544] text-white border-[#9EDCFF]'
-                  : 'liquid-glass text-[#071544] dark:text-white'
+                  ? 'bg-gradient-to-b from-[#133272] via-[#0D2456] to-[#071536] border-2 border-[#218DFF] ring-4 ring-[#218DFF]/25 shadow-2xl scale-[1.01]'
+                  : 'bg-gradient-to-b from-[#0F285D]/90 via-[#0B1E48]/95 to-[#071536] border border-[#218DFF]/30 hover:border-[#218DFF]/70 hover:-translate-y-1 shadow-xl'
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                    isSelected
-                      ? 'bg-[#218DFF]/30 text-[#9EDCFF]'
-                      : 'bg-[#218DFF]/15 text-[#218DFF]'
-                  }`}
-                >
-                  {getToolIcon(tool.id)}
-                </div>
-                <span
-                  className={`text-[10px] font-orbitron uppercase px-2 py-0.5 rounded-full ${
-                    isSelected
-                      ? 'bg-white/15 text-[#9EDCFF]'
-                      : 'bg-[#218DFF]/10 text-[#1045CA] dark:text-[#9EDCFF]'
-                  }`}
-                >
-                  Tool
-                </span>
-              </div>
               <div>
-                <h3 className="font-orbitron font-bold text-xs sm:text-sm leading-snug">
-                  {tool.shortName}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="w-11 h-11 rounded-2xl bg-[#163065] border border-[#234C9A]/70 flex items-center justify-center text-[#9EDCFF] shadow-inner shrink-0">
+                    {getToolIcon(tool.id)}
+                  </div>
+                  <span className="px-3 py-1 rounded-full bg-[#132A58] border border-[#234C9A]/50 text-xs font-medium text-[#9EDCFF] text-right truncate max-w-[65%]">
+                    {cardData.badge}
+                  </span>
+                </div>
+
+                <h3 className="font-orbitron text-xs font-bold text-[#9EDCFF]/90 uppercase tracking-wider mt-5">
+                  {cardData.title}
                 </h3>
-                <p
-                  className={`text-xs mt-1 line-clamp-2 ${
-                    isSelected ? 'text-[#9EDCFF]/90' : 'text-slate-500 dark:text-slate-400'
-                  }`}
-                >
-                  {tool.tagline}
+                <div className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-2.5">
+                  {formatRWF(cardData.amount)}
+                </div>
+                <p className="text-xs sm:text-sm text-slate-300/85 mt-2 leading-relaxed font-normal line-clamp-2">
+                  {cardData.subtitle}
                 </p>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-white/10 text-xs text-slate-300 font-normal leading-relaxed">
+                {cardData.problemSolved}
               </div>
             </button>
           )
@@ -409,24 +490,24 @@ export default function FinancialToolsSection() {
         {/* Left: Interactive Monetary Inputs */}
         <form
           onSubmit={handleCalculateClick}
-          className="lg:col-span-7 liquid-glass rounded-3xl p-6 sm:p-8 space-y-6"
+          className="lg:col-span-7 rounded-3xl p-6 sm:p-8 space-y-6 bg-gradient-to-b from-[#0F285D]/90 via-[#0B1E48]/95 to-[#071536] border border-[#218DFF]/30 text-white shadow-2xl"
         >
-          <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-blue-200/60 dark:border-[#9EDCFF]/15">
+          <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-white/10">
             <div>
               <span className="text-xs font-orbitron uppercase tracking-wider text-[#218DFF]">
                 Interactive Financial Planner
               </span>
-              <h3 className="font-orbitron text-xl sm:text-2xl font-extrabold text-[#071544] dark:text-white mt-1">
+              <h3 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white mt-1">
                 {activeTool.name}
               </h3>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1">
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
                 {activeTool.description}
               </p>
             </div>
           </div>
 
           {/* Formula Callout Pill */}
-          <div className="p-3.5 rounded-2xl bg-[#218DFF]/10 dark:bg-[#0A2786]/40 border border-[#218DFF]/30 text-xs font-medium text-[#071544] dark:text-[#9EDCFF] flex items-center gap-2.5">
+          <div className="p-3.5 rounded-2xl bg-[#163065]/70 border border-[#234C9A]/60 text-xs font-medium text-[#9EDCFF] flex items-center gap-2.5">
             <Info className="w-4 h-4 text-[#218DFF] shrink-0" />
             <span>{activeTool.formulaNote}</span>
           </div>
@@ -649,29 +730,29 @@ export default function FinancialToolsSection() {
         {/* Right: Analysis Output & Saved Analyses */}
         <div className="lg:col-span-5 space-y-5">
           {calculatedResult ? (
-            <div className="sapphire-analytics-card p-6 sm:p-8 space-y-6">
+            <div className="rounded-3xl p-6 sm:p-8 space-y-6 bg-gradient-to-b from-[#0F285D]/90 via-[#0B1E48]/95 to-[#071536] border border-[#218DFF]/30 text-white shadow-2xl">
               <div className="flex items-center justify-between gap-2">
-                <span className="px-3 py-1 rounded-full bg-[#218DFF]/20 border border-[#218DFF]/40 text-xs font-orbitron text-[#1045CA] dark:text-[#9EDCFF]">
+                <span className="px-3 py-1 rounded-full bg-[#132A58] border border-[#234C9A]/50 text-xs font-orbitron text-[#9EDCFF]">
                   Verified Financial Estimate
                 </span>
                 <button
                   type="button"
                   onClick={handleSaveAnalysis}
-                  className="px-3 py-1.5 rounded-xl bg-[#218DFF]/15 hover:bg-[#218DFF]/25 text-xs font-semibold text-[#1045CA] dark:text-[#9EDCFF] flex items-center gap-1.5 cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-[#218DFF]/20 hover:bg-[#218DFF]/30 border border-[#218DFF]/40 text-xs font-semibold text-[#9EDCFF] flex items-center gap-1.5 cursor-pointer transition-all"
                 >
-                  <BookmarkCheck className="w-3.5 h-3.5" />
+                  <BookmarkCheck className="w-3.5 h-3.5 text-[#218DFF]" />
                   <span>{savedNotice ? 'Saved to Workspace!' : 'Save Analysis'}</span>
                 </button>
               </div>
 
               <div>
-                <div className="text-xs uppercase tracking-wider text-slate-500 dark:text-[#9EDCFF]/75">
+                <div className="text-xs uppercase tracking-wider text-[#9EDCFF]/80 font-medium">
                   {calculatedResult.primaryLabel}
                 </div>
-                <div className="font-orbitron text-3xl sm:text-4xl font-extrabold text-[#071544] dark:text-white mt-1">
+                <div className="font-orbitron text-3xl sm:text-4xl font-extrabold text-white mt-1">
                   {formatRWF(calculatedResult.primaryAmount)}
                 </div>
-                <div className="text-xs italic text-[#1045CA] dark:text-[#9EDCFF] mt-1">
+                <div className="text-xs italic text-[#9EDCFF] mt-1">
                   {amountToWords(calculatedResult.primaryAmount, language)}
                 </div>
               </div>
@@ -680,51 +761,51 @@ export default function FinancialToolsSection() {
                 {calculatedResult.metrics.map((m) => (
                   <div
                     key={m.label}
-                    className="p-3.5 rounded-2xl bg-white/75 dark:bg-[#03091F]/65 border border-blue-200/60 dark:border-[#9EDCFF]/20 flex items-center justify-between gap-2"
+                    className="p-3.5 rounded-2xl bg-[#071536]/80 border border-white/10 flex items-center justify-between gap-2"
                   >
-                    <span className="text-xs text-slate-600 dark:text-slate-300">{m.label}</span>
-                    <strong className="font-orbitron text-sm text-[#071544] dark:text-[#9EDCFF]">
+                    <span className="text-xs text-slate-300">{m.label}</span>
+                    <strong className="font-orbitron text-sm text-[#9EDCFF]">
                       {m.value}
                     </strong>
                   </div>
                 ))}
               </div>
 
-              <div className="p-4 rounded-2xl bg-[#218DFF]/10 dark:bg-[#1045CA]/25 border border-[#218DFF]/30 text-xs sm:text-sm leading-relaxed text-[#071544] dark:text-slate-200">
-                <strong className="block font-orbitron text-xs uppercase text-[#1045CA] dark:text-[#9EDCFF] mb-1">
+              <div className="p-4 rounded-2xl bg-[#163065]/70 border border-[#234C9A]/50 text-xs sm:text-sm leading-relaxed text-slate-200">
+                <strong className="block font-orbitron text-xs uppercase text-[#9EDCFF] mb-1">
                   ExBOS Planning Insight
                 </strong>
                 {calculatedResult.insight}
               </div>
 
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+              <p className="text-[11px] text-slate-400 leading-normal">
                 * Important: Financial results are estimates for business planning and must not be presented as guaranteed profits or business survival outcomes.
               </p>
             </div>
           ) : (
-            <div className="sapphire-analytics-card p-6 sm:p-8 space-y-5">
-              <div className="w-12 h-12 rounded-2xl bg-[#218DFF]/20 border border-[#218DFF]/40 flex items-center justify-center text-[#218DFF]">
+            <div className="rounded-3xl p-6 sm:p-8 space-y-5 bg-gradient-to-b from-[#0F285D]/90 via-[#0B1E48]/95 to-[#071536] border border-[#218DFF]/30 text-white shadow-2xl">
+              <div className="w-12 h-12 rounded-2xl bg-[#163065] border border-[#234C9A]/70 flex items-center justify-center text-[#9EDCFF]">
                 <Sparkles className="w-6 h-6" />
               </div>
-              <h4 className="font-orbitron text-xl font-bold text-[#071544] dark:text-white">
+              <h4 className="font-orbitron text-xl font-bold text-white">
                 Ready to Calculate Your {activeTool.shortName}
               </h4>
-              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              <p className="text-sm text-slate-300 leading-relaxed font-normal">
                 Enter your business numbers on the left—notice how EXCELLENCE BOS automatically formats your RWF amounts with commas and writes them out in words ({language === 'rw' ? 'Kinyarwanda' : 'English'}). Click <strong>Calculate &amp; Analyse</strong> to view your full survival and profitability breakdown.
               </p>
-              <div className="p-4 rounded-2xl bg-white/60 dark:bg-[#03091F]/60 border border-blue-200/60 dark:border-[#9EDCFF]/20 space-y-2">
-                <div className="text-xs font-orbitron uppercase text-[#1045CA] dark:text-[#9EDCFF]">
+              <div className="p-4 rounded-2xl bg-[#071536]/80 border border-white/10 space-y-2">
+                <div className="text-xs font-orbitron uppercase text-[#9EDCFF]">
                   Saved Financial Analyses ({savedAnalyses.length})
                 </div>
                 {savedAnalyses.slice(0, 3).map((item) => (
                   <div
                     key={item.id}
-                    className="text-xs py-1.5 border-b last:border-0 border-blue-200/40 dark:border-[#9EDCFF]/10 flex items-center justify-between gap-2"
+                    className="text-xs py-1.5 border-b last:border-0 border-white/10 flex items-center justify-between gap-2"
                   >
-                    <span className="font-medium text-[#071544] dark:text-white">
-                      {item.toolName}: <span className=" font-normal opacity-80">{item.summary}</span>
+                    <span className="font-medium text-white">
+                      {item.toolName}: <span className="font-normal text-slate-300">{item.summary}</span>
                     </span>
-                    <span className="text-[10px] opacity-60 shrink-0">{item.date}</span>
+                    <span className="text-[10px] text-slate-400 shrink-0">{item.date}</span>
                   </div>
                 ))}
               </div>
@@ -792,22 +873,6 @@ export default function FinancialToolsSection() {
                 className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 border border-[#9EDCFF]/35 text-white font-semibold text-sm cursor-pointer transition-all"
               >
                 Sign In to Existing Account (Preserves Values)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  login({
-                    name: 'Jean-Paul Habimana',
-                    email: 'owner@kigaliprime.rw',
-                    role: 'Business Owner',
-                    businessName: 'Kigali Prime Enterprises'
-                  })
-                  setAuthModalOpen(false)
-                }}
-                className="w-full py-2.5 rounded-xl bg-[#218DFF]/20 hover:bg-[#218DFF]/30 border border-[#218DFF]/40 text-[#9EDCFF] text-xs font-semibold cursor-pointer"
-              >
-                Instant Demo Sign-In &amp; Show Result Immediately
               </button>
             </div>
           </div>

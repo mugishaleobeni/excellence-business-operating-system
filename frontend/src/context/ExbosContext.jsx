@@ -743,7 +743,22 @@ export function ExbosProvider({ children }) {
       })
     }
 
-    exbosApi.addModuleRecord(targetArch, moduleName, entry)
+    // Persist to MongoDB with one retry; surface failures instead of silently dropping data
+    const persistRecord = async (attempt = 1) => {
+      const res = await exbosApi.addModuleRecord(targetArch, moduleName, entry)
+      if (res?.ok) return
+      if (attempt < 2) {
+        setTimeout(() => persistRecord(attempt + 1), 1500)
+        return
+      }
+      console.error('Record not saved to database:', moduleName, entry.id, res?.error)
+      addToast({
+        type: 'error',
+        title: 'Not Saved to Database',
+        message: `"${entry.title || entry.name || entry.id}" could not be saved to the server (${res?.error || 'network error'}). Please try again.`
+      })
+    }
+    persistRecord()
 
     return entry
   }

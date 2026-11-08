@@ -146,8 +146,8 @@ export default function LoginPage({ isForgotPassword = false }) {
 
       <main className="flex-1 flex items-center justify-center px-4 py-24 sm:py-28">
         <div className="w-full max-w-md relative">
-          {/* Floating User Icon Orb */}
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#218DFF] via-[#1045CA] to-[#071544] border-2 border-[#9EDCFF] shadow-sapphire-glow flex items-center justify-center text-white mx-auto -mb-8 relative z-20">
+          {/* Floating User Icon Orb - Solid Premium Dark Sapphire (Anti-Slop Design) */}
+          <div className="w-16 h-16 rounded-2xl bg-[#071544] border-2 border-[#218DFF]/40 shadow-xl flex items-center justify-center text-white mx-auto -mb-8 relative z-20">
             {isForgotPassword ? (
               <KeyRound className="w-7 h-7 text-[#9EDCFF]" />
             ) : (

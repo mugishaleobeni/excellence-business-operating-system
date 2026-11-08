@@ -122,7 +122,7 @@ export default function ProductModal({
     const generatedSku = productSku.trim() || `600${Math.floor(1000000000 + Math.random() * 9000000000)}`;
 
     const payload = {
-      id: editRow ? editRow.id : `PROD-${Date.now().toString().slice(-4)}`,
+      id: editRow ? editRow.id : `PROD-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: title.trim(),
       subPage: activePage,
       category: typeof productCategory === "object" ? (productCategory?.name || "General") : (productCategory || "General"),
