@@ -359,6 +359,8 @@ export default function DashboardPage() {
             applyServiceTrade={applyServiceTrade}
             agricultureTrade={agricultureTrade}
             applyAgricultureTrade={applyAgricultureTrade}
+            navigateToModulePage={navigateToModulePage}
+            handleModuleClick={handleModuleClick}
           />
 
           {/* SCROLLABLE INNER WORKSPACE BODY */}
@@ -368,6 +370,7 @@ export default function DashboardPage() {
           >
             {/* DYNAMIC CONTENT ROUTING INSIDE MAIN WORKSPACE */}
             <WorkspaceContentRouter
+              searchQuery={searchQuery}
               activeArchId={activeArchId}
               currentArch={currentArch}
               activeModule={activeModule}
