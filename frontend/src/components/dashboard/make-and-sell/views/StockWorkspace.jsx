@@ -562,7 +562,7 @@ export default function StockWorkspace({
               Stock · {activeSubPage}
             </span>
           </div>
-          <h2 className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h2 className="font-orbitron text-lg sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight">
             {activeSubPage === 'Finished Goods' && 'Finished Goods (Ready to Sell)'}
             {activeSubPage === 'Raw Materials' && 'Raw Materials & Ingredients'}
             {activeSubPage === 'Low Stock' && 'Low Stock & Production Shortages'}
@@ -585,7 +585,7 @@ export default function StockWorkspace({
           <button
             type="button"
             onClick={() => setExportOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white text-xs font-bold transition-all border border-white/15 flex items-center gap-2 cursor-pointer"
+            className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 hover:text-white text-xs font-bold transition-all border border-white/15 flex items-center gap-2 cursor-pointer"
           >
             Export
           </button>
@@ -594,7 +594,7 @@ export default function StockWorkspace({
             <button
               type="button"
               onClick={handleOpenNewProduct}
-              className="btn-sapphire-clean px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
+              className="btn-sapphire-clean px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
             >
               <Plus className="w-4 h-4 text-[#9EDCFF]" />
               <span>+ New Product</span>
@@ -606,7 +606,7 @@ export default function StockWorkspace({
               <button
                 type="button"
                 onClick={onOpenReceiveStock || handleOpenNewMaterial}
-                className="btn-sapphire-clean px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
+                className="btn-sapphire-clean px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
               >
                 <ShoppingCart className="w-4 h-4 text-[#9EDCFF]" />
                 <span>Receive Stock</span>
@@ -614,7 +614,7 @@ export default function StockWorkspace({
               <button
                 type="button"
                 onClick={handleOpenNewMaterial}
-                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
+                className="px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
               >
                 <span>+ New Material</span>
               </button>
@@ -630,7 +630,7 @@ export default function StockWorkspace({
                 setNewCategoryDesc('')
                 setCategoryModalOpen(true)
               }}
-              className="btn-sapphire-clean px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
+              className="btn-sapphire-clean px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
             >
               <Plus className="w-4 h-4 text-[#9EDCFF]" />
               <span>+ New Category</span>
@@ -641,48 +641,48 @@ export default function StockWorkspace({
 
       {/* 3-Number Summary Strip with Expiration Health Monitor */}
       {activeSubPage === 'Finished Goods' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          <div className="p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
             <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF]/70 tracking-wider">
               Total Stock Value
             </span>
-            <div className="font-orbitron text-2xl font-bold text-white">
+            <div className="font-orbitron text-base sm:text-2xl font-bold text-white truncate">
               {!hideFinancials && !isCashier ? formatRWF(finishedSummary.totalValue) : '•••••• RWF'}
             </div>
-            <span className="text-[11px] text-slate-400">At retail selling price</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">At retail selling price</span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
+          <div className="p-3 sm:p-4 rounded-2xl bg-white/5 border border-white/10 space-y-1">
             <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF]/70 tracking-wider">
               Units Available
             </span>
-            <div className="font-orbitron text-2xl font-bold text-white">
+            <div className="font-orbitron text-base sm:text-2xl font-bold text-white truncate">
               {finishedSummary.totalUnits.toLocaleString()} pcs
             </div>
-            <span className="text-[11px] text-slate-400">Ready for store or delivery</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">Ready for store or delivery</span>
           </div>
 
           <div
             onClick={() => setStockTab('Expiring Soon')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-1 ${
+            className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer space-y-1 ${
               stockTab === 'Expiring Soon'
                 ? 'bg-amber-500/20 border-amber-500/60 shadow-lg'
                 : 'bg-white/5 border-white/10 hover:border-amber-500/40'
             }`}
           >
             <span className="text-[10px] font-orbitron uppercase text-amber-300/90 tracking-wider flex items-center justify-between">
-              <span>Expiring Soon (≤30d)</span>
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span className="truncate">Expiring Soon (≤30d)</span>
+              <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-1" />
             </span>
-            <div className="font-orbitron text-2xl font-bold text-amber-400">
+            <div className="font-orbitron text-base sm:text-2xl font-bold text-amber-400 truncate">
               {finishedSummary.expiring} lots
             </div>
-            <span className="text-[11px] text-slate-400">Prioritized for sale (FEFO)</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">Prioritized for sale (FEFO)</span>
           </div>
 
           <div
             onClick={() => setStockTab('Expired')}
-            className={`p-4 rounded-2xl border transition-all cursor-pointer space-y-1 ${
+            className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer space-y-1 ${
               finishedSummary.expired > 0
                 ? stockTab === 'Expired'
                   ? 'bg-rose-500/25 border-rose-500 shadow-[0_0_20px_rgba(244,63,94,0.3)]'
@@ -691,14 +691,14 @@ export default function StockWorkspace({
             }`}
           >
             <span className="text-[10px] font-orbitron uppercase text-rose-300 tracking-wider flex items-center justify-between">
-              <span>Expired Lots</span>
-              <AlertTriangle className={`w-3.5 h-3.5 ${finishedSummary.expired > 0 ? 'text-rose-400 animate-pulse' : 'text-slate-500'}`} />
+              <span className="truncate">Expired Lots</span>
+              <AlertTriangle className={`w-3.5 h-3.5 shrink-0 ml-1 ${finishedSummary.expired > 0 ? 'text-rose-400 animate-pulse' : 'text-slate-500'}`} />
             </span>
-            <div className={`font-orbitron text-2xl font-bold ${finishedSummary.expired > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            <div className={`font-orbitron text-base sm:text-2xl font-bold truncate ${finishedSummary.expired > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
               {finishedSummary.expired} {finishedSummary.expired === 1 ? 'lot' : 'lots'}
             </div>
-            <span className="text-[11px] text-slate-400">
-              {finishedSummary.expired > 0 ? 'Action required: scrap or remove' : 'Zero expired stock (healthy)'}
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block truncate">
+              {finishedSummary.expired > 0 ? 'Action required' : 'Zero expired stock (healthy)'}
             </span>
           </div>
         </div>
@@ -770,15 +770,15 @@ export default function StockWorkspace({
 
       {/* Search, Filter & Tabs Toolbar */}
       {(activeSubPage === 'Finished Goods' || activeSubPage === 'Raw Materials') && (
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2 flex-1 max-w-lg">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={`Search ${activeSubPage.toLowerCase()} by name, lot, or code...`}
+                placeholder={`Search ${activeSubPage.toLowerCase()}...`}
                 className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-[#218DFF]"
               />
             </div>
@@ -789,13 +789,13 @@ export default function StockWorkspace({
                 { value: 'All', label: 'All Categories' },
                 ...categoryNames.map((cat) => ({ value: cat, label: cat }))
               ]}
-              className="w-44 shrink-0"
+              className="w-32 sm:w-44 shrink-0"
               buttonClassName="!py-2 !rounded-xl !bg-[#040C26] !text-xs !border-white/15"
             />
           </div>
 
           {activeSubPage === 'Finished Goods' && (
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#040C26] border border-white/10 self-start sm:self-auto overflow-x-auto">
+            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#040C26] border border-white/10 self-stretch sm:self-auto overflow-x-auto no-scrollbar">
               {[
                 { id: 'All', label: 'All Lots' },
                 { id: 'Fresh', label: 'Fresh / Valid' },
@@ -806,7 +806,7 @@ export default function StockWorkspace({
                   key={tab.id}
                   type="button"
                   onClick={() => setStockTab(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold cursor-pointer transition-all whitespace-nowrap ${
                     stockTab === tab.id
                       ? tab.id === 'Expired'
                         ? 'bg-rose-500 text-white shadow-sm'
@@ -834,308 +834,697 @@ export default function StockWorkspace({
         </div>
       )}
 
-      {/* --- SUBPAGE 1: FINISHED GOODS TABLE --- */}
+      {/* --- SUBPAGE 1: FINISHED GOODS (DESKTOP TABLE + MOBILE RESPONSIVE CARDS) --- */}
       {activeSubPage === 'Finished Goods' && (
-        <div className="exbos-glass-card rounded-2xl overflow-hidden border border-white/10 shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/5 text-[11px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
-                  <th className="p-3.5 pl-5">Product &amp; Batch Code</th>
-                  <th className="p-3.5">Category</th>
-                  <th className="p-3.5 text-right">Available Stock</th>
-                  <th className="p-3.5 text-right">Selling Price</th>
-                  {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Cost &amp; Profit / Unit</th>}
-                  <th className="p-3.5">Best-Before Date</th>
-                  <th className="p-3.5 text-center">Price Engine</th>
-                  <th className="p-3.5 pr-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300">
-                {filteredFinishedGoods.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-400">
-                      <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF] mb-3">
-                        <Package className="w-6 h-6" />
+        <div className="space-y-4">
+          {/* DESKTOP TABLE VIEW (Visible on md and larger screens) */}
+          <div className="hidden md:block exbos-glass-card rounded-2xl overflow-hidden border border-white/10 shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 text-[11px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
+                    <th className="p-3.5 pl-5">Product &amp; Batch Code</th>
+                    <th className="p-3.5">Category</th>
+                    <th className="p-3.5 text-right">Available Stock</th>
+                    <th className="p-3.5 text-right">Selling Price</th>
+                    {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Cost &amp; Profit / Unit</th>}
+                    <th className="p-3.5">Best-Before Date</th>
+                    <th className="p-3.5 text-center">Price Engine</th>
+                    <th className="p-3.5 pr-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-300">
+                  {filteredFinishedGoods.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center text-slate-400">
+                        <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF] mb-3">
+                          <Package className="w-6 h-6" />
+                        </div>
+                        <div className="text-sm font-bold text-white font-orbitron mb-1">
+                          {finishedGoods.length === 0
+                            ? 'No Finished Products Recorded Yet'
+                            : 'No finished products found matching search criteria'}
+                        </div>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+                          {finishedGoods.length === 0
+                            ? 'All demo items have been cleared. Click "+ New Product" above to record your first real manufactured product.'
+                            : 'Try adjusting your search query or category filter.'}
+                        </p>
+                        {finishedGoods.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProd(null)
+                              setProdName('')
+                              setProdCategory('')
+                              setProdBatchCode(`LOT-${Date.now().toString().slice(-4)}`)
+                              setProdStock(0)
+                              setProdUnit(tradePresets?.units?.[0] || 'pcs')
+                              setProdPrice(0)
+                              setProdCost(0)
+                              setProdExpiry('')
+                              setProdReorderLevel(10)
+                              setDrawerType('product')
+                              setDrawerOpen(true)
+                            }}
+                            className="px-4 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>+ New Product</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredFinishedGoods.map((item) => {
+                      const bb = item.bestBeforeDate || item.expiryDate
+                      const isExp = bb && new Date(bb) < now
+                      const diffDays = bb ? Math.ceil((new Date(bb) - now) / 86400000) : 999
+                      const isSoon = diffDays >= 0 && diffDays <= 30
+
+                      return (
+                        <tr
+                          key={item.id}
+                          onClick={() => setDetailItem(item)}
+                          className="hover:bg-white/5 transition-colors cursor-pointer group"
+                        >
+                          <td className="p-3.5 pl-5">
+                            <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors">
+                              {item.name || item.title}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Lot: {item.batchCode || 'LOT-MAIN'}
+                            </div>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-slate-300">
+                              {item.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-mono font-bold text-white">
+                            {(item.currentStock || item.stock || 0).toLocaleString()} {item.unit || 'pcs'}
+                          </td>
+                          <td className="p-3.5 text-right font-mono font-bold text-emerald-400">
+                            {formatRWF(item.sellingPriceRWF || item.sellingPrice || 0)}
+                          </td>
+                          {!isCashier && !hideFinancials && (
+                            <td className="p-3.5 text-right font-mono">
+                              <div className="text-slate-400 text-xs">
+                                {formatRWF(item.costPerUnitRWF || item.unitCost || 0)}
+                              </div>
+                              {(() => {
+                                const cost = Number(item.costPerUnitRWF || item.unitCost || 0)
+                                const price = Number(item.sellingPriceRWF || item.sellingPrice || 0)
+                                const profit = price - cost
+                                const margin = price > 0 ? Math.round((profit / price) * 100) : 0
+                                return (
+                                  <div className={`text-[10px] font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                    {profit >= 0 ? '+' : ''}{formatRWF(profit)} ({margin}%)
+                                  </div>
+                                )
+                              })()}
+                            </td>
+                          )}
+                          <td className="p-3.5">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1.5 ${
+                                isExp
+                                  ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40 shadow-sm'
+                                  : isSoon
+                                  ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-sm'
+                                  : bb
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'text-slate-400 bg-white/5'
+                              }`}
+                            >
+                              {isExp ? (
+                                <>
+                                  <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                                  <span>Expired ({Math.abs(diffDays)}d ago)</span>
+                                </>
+                              ) : isSoon ? (
+                                <>
+                                  <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                                  <span>Expiring ({diffDays}d left)</span>
+                                </>
+                              ) : bb ? (
+                                <>
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                  <span>Fresh ({diffDays}d left)</span>
+                                </>
+                              ) : (
+                                <span>Shelf-stable</span>
+                              )}
+                            </span>
+                            {bb && <span className="block text-[10px] text-slate-500 font-mono mt-0.5">{bb}</span>}
+                          </td>
+                          <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                            {!isCashier && !hideFinancials && (
+                              <button
+                                type="button"
+                                onClick={() => setCalcProduct(item)}
+                                className="px-2.5 py-1 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/30 text-[#9EDCFF] text-[11px] font-bold border border-[#218DFF]/40 flex items-center gap-1 mx-auto cursor-pointer"
+                                title="Calculate price from recipe raw materials"
+                              >
+                                <Calculator className="w-3 h-3" />
+                                <span>Calculate Price</span>
+                              </button>
+                            )}
+                          </td>
+                          <td className="p-3.5 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditItem(item)
+                                  setProdName(item.name || item.title)
+                                  setProdCategory(item.category || categoryNames[0] || 'Bread')
+                                  setProdUnit(item.unit || 'pcs')
+                                  setProdCostPerUnit(item.costPerUnitRWF || item.unitCost || '')
+                                  setProdSellingPrice(item.sellingPriceRWF || item.sellingPrice || '')
+                                  setProdShelfLifeDays(item.shelfLifeDays || 4)
+                                  setProdBestBeforeDate(
+                                    item.bestBeforeDate ||
+                                    item.expiryDate ||
+                                    new Date(Date.now() + (item.shelfLifeDays || 4) * 86400000).toISOString().slice(0, 10)
+                                  )
+                                  setProdReorderLevel(item.minimumStockLevel || 20)
+                                  setDrawerType('product')
+                                  setDrawerOpen(true)
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                                title="Edit product"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteItem(item, 'product')}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                                title="Delete product"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE RESPONSIVE CARDS VIEW (Shown on < md screens without horizontal squeezing) */}
+          <div className="block md:hidden space-y-3">
+            {filteredFinishedGoods.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-[#040C26]/90 border border-white/10 text-center space-y-3 shadow-lg">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF]">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div className="text-sm font-bold text-white font-orbitron">
+                  {finishedGoods.length === 0
+                    ? 'No Finished Products Recorded Yet'
+                    : 'No finished products found'}
+                </div>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  {finishedGoods.length === 0
+                    ? 'All demo items have been cleared. Click "+ New Product" below to record your first real manufactured product.'
+                    : 'Try adjusting your search query or category filter.'}
+                </p>
+                {finishedGoods.length === 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenNewProduct}
+                    className="btn-sapphire-clean px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-lg mx-auto"
+                  >
+                    <Plus className="w-4 h-4 text-[#9EDCFF]" />
+                    <span>+ New Product</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredFinishedGoods.map((item) => {
+                const bb = item.bestBeforeDate || item.expiryDate
+                const isExp = bb && new Date(bb) < now
+                const diffDays = bb ? Math.ceil((new Date(bb) - now) / 86400000) : 999
+                const isSoon = diffDays >= 0 && diffDays <= 30
+                const cost = Number(item.costPerUnitRWF || item.unitCost || 0)
+                const price = Number(item.sellingPriceRWF || item.sellingPrice || 0)
+                const profit = price - cost
+                const margin = price > 0 ? Math.round((profit / price) * 100) : 0
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setDetailItem(item)}
+                    className="p-3.5 sm:p-4 rounded-2xl bg-[#071536]/90 hover:bg-[#0a1e4a] border border-white/12 shadow-lg space-y-3 transition-all cursor-pointer relative"
+                  >
+                    {/* Header: Title, Batch Code & Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-sm text-white tracking-tight leading-snug truncate">
+                          {item.name || item.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-400 font-mono bg-white/5 px-2 py-0.5 rounded-md border border-white/5 shrink-0">
+                            Lot: {item.batchCode || 'LOT-MAIN'}
+                          </span>
+                          <span className="text-[10px] font-semibold text-[#9EDCFF] bg-[#218DFF]/15 border border-[#218DFF]/30 px-2 py-0.5 rounded-full truncate max-w-[120px]">
+                            {item.category || 'General'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-sm font-bold text-white font-orbitron mb-1">
-                        {finishedGoods.length === 0
-                          ? 'No Finished Products Recorded Yet'
-                          : 'No finished products found matching search criteria'}
+
+                      {/* Expiration badge */}
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 shrink-0 ${
+                          isExp
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            : isSoon
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            : bb
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'text-slate-400 bg-white/5 border border-white/10'
+                        }`}
+                      >
+                        {isExp ? (
+                          <>
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span>Expired</span>
+                          </>
+                        ) : isSoon ? (
+                          <>
+                            <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                            <span>{diffDays}d left</span>
+                          </>
+                        ) : bb ? (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>Fresh</span>
+                          </>
+                        ) : (
+                          <span>Shelf-stable</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Stock & Financial Grid */}
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-[#040C26]/80 border border-white/5">
+                      <div>
+                        <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                          Available Stock
+                        </span>
+                        <span className="font-mono text-sm font-bold text-white">
+                          {(item.currentStock || item.stock || 0).toLocaleString()} {item.unit || 'pcs'}
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
-                        {finishedGoods.length === 0
-                          ? 'All demo items have been cleared. Click "+ New Product" above to record your first real manufactured product.'
-                          : 'Try adjusting your search query or category filter.'}
-                      </p>
-                      {finishedGoods.length === 0 && (
+
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                          Selling Price
+                        </span>
+                        <span className="font-mono text-sm font-bold text-emerald-400">
+                          {formatRWF(price)}
+                        </span>
+                      </div>
+
+                      {!isCashier && !hideFinancials && (
+                        <>
+                          <div className="pt-1.5 border-t border-white/5">
+                            <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                              Cost / Unit
+                            </span>
+                            <span className="font-mono text-xs text-slate-300">
+                              {formatRWF(cost)}
+                            </span>
+                          </div>
+
+                          <div className="pt-1.5 border-t border-white/5 text-right">
+                            <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                              Profit / Unit
+                            </span>
+                            <span className={`font-mono text-xs font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {profit >= 0 ? '+' : ''}{formatRWF(profit)} ({margin}%)
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div
+                      className="flex items-center justify-between pt-1 border-t border-white/5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div>
+                        {!isCashier && !hideFinancials && (
+                          <button
+                            type="button"
+                            onClick={() => setCalcProduct(item)}
+                            className="px-2.5 py-1.5 rounded-xl bg-[#218DFF]/20 hover:bg-[#218DFF]/30 text-[#9EDCFF] text-[11px] font-bold border border-[#218DFF]/40 inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+                            title="Calculate price from recipe raw materials"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                            <span>Price Engine</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => {
-                            setEditingProd(null)
-                            setProdName('')
-                            setProdCategory('')
-                            setProdBatchCode(`LOT-${Date.now().toString().slice(-4)}`)
-                            setProdStock(0)
-                            setProdUnit(tradePresets?.units?.[0] || 'pcs')
-                            setProdPrice(0)
-                            setProdCost(0)
-                            setProdExpiry('')
-                            setProdReorderLevel(10)
+                            setEditItem(item)
+                            setProdName(item.name || item.title)
+                            setProdCategory(item.category || categoryNames[0] || 'Bread')
+                            setProdUnit(item.unit || 'pcs')
+                            setProdCostPerUnit(item.costPerUnitRWF || item.unitCost || '')
+                            setProdSellingPrice(item.sellingPriceRWF || item.sellingPrice || '')
+                            setProdShelfLifeDays(item.shelfLifeDays || 4)
+                            setProdBestBeforeDate(
+                              item.bestBeforeDate ||
+                              item.expiryDate ||
+                              new Date(Date.now() + (item.shelfLifeDays || 4) * 86400000).toISOString().slice(0, 10)
+                            )
+                            setProdReorderLevel(item.minimumStockLevel || 20)
                             setDrawerType('product')
                             setDrawerOpen(true)
                           }}
-                          className="px-4 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer"
+                          className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-medium border border-white/15 inline-flex items-center gap-1 cursor-pointer transition-all"
+                          title="Edit product"
                         >
-                          <Plus className="w-4 h-4" />
-                          <span>+ New Product</span>
+                          <Edit2 className="w-3.5 h-3.5 text-slate-300" />
+                          <span>Edit</span>
                         </button>
-                      )}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredFinishedGoods.map((item) => {
-                    const bb = item.bestBeforeDate || item.expiryDate
-                    const isExp = bb && new Date(bb) < now
-                    const diffDays = bb ? Math.ceil((new Date(bb) - now) / 86400000) : 999
-                    const isSoon = diffDays >= 0 && diffDays <= 30
 
-                    return (
-                      <tr
-                        key={item.id}
-                        onClick={() => setDetailItem(item)}
-                        className="hover:bg-white/5 transition-colors cursor-pointer group"
-                      >
-                        <td className="p-3.5 pl-5">
-                          <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors">
-                            {item.name || item.title}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
-                            Lot: {item.batchCode || 'LOT-MAIN'}
-                          </div>
-                        </td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-slate-300">
-                            {item.category || 'General'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right font-mono font-bold text-white">
-                          {(item.currentStock || item.stock || 0).toLocaleString()} {item.unit || 'pcs'}
-                        </td>
-                        <td className="p-3.5 text-right font-mono font-bold text-emerald-400">
-                          {formatRWF(item.sellingPriceRWF || item.sellingPrice || 0)}
-                        </td>
-                        {!isCashier && !hideFinancials && (
-                          <td className="p-3.5 text-right font-mono">
-                            <div className="text-slate-400 text-xs">
-                              {formatRWF(item.costPerUnitRWF || item.unitCost || 0)}
-                            </div>
-                            {(() => {
-                              const cost = Number(item.costPerUnitRWF || item.unitCost || 0)
-                              const price = Number(item.sellingPriceRWF || item.sellingPrice || 0)
-                              const profit = price - cost
-                              const margin = price > 0 ? Math.round((profit / price) * 100) : 0
-                              return (
-                                <div className={`text-[10px] font-bold ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  {profit >= 0 ? '+' : ''}{formatRWF(profit)} ({margin}%)
-                                </div>
-                              )
-                            })()}
-                          </td>
-                        )}
-                        <td className="p-3.5">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold inline-flex items-center gap-1.5 ${
-                              isExp
-                                ? 'bg-rose-500/25 text-rose-300 border border-rose-500/40 shadow-sm'
-                                : isSoon
-                                ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-sm'
-                                : bb
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                : 'text-slate-400 bg-white/5'
-                            }`}
-                          >
-                            {isExp ? (
-                              <>
-                                <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
-                                <span>Expired ({Math.abs(diffDays)}d ago)</span>
-                              </>
-                            ) : isSoon ? (
-                              <>
-                                <Clock className="w-3 h-3 text-amber-400 shrink-0" />
-                                <span>Expiring ({diffDays}d left)</span>
-                              </>
-                            ) : bb ? (
-                              <>
-                                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                                <span>Fresh ({diffDays}d left)</span>
-                              </>
-                            ) : (
-                              <span>Shelf-stable</span>
-                            )}
-                          </span>
-                          {bb && <span className="block text-[10px] text-slate-500 font-mono mt-0.5">{bb}</span>}
-                        </td>
-                        <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          {!isCashier && !hideFinancials && (
-                            <button
-                              type="button"
-                              onClick={() => setCalcProduct(item)}
-                              className="px-2.5 py-1 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/30 text-[#9EDCFF] text-[11px] font-bold border border-[#218DFF]/40 flex items-center gap-1 mx-auto cursor-pointer"
-                              title="Calculate price from recipe raw materials"
-                            >
-                              <Calculator className="w-3 h-3" />
-                              <span>Calculate Price</span>
-                            </button>
-                          )}
-                        </td>
-                        <td className="p-3.5 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditItem(item)
-                                setProdName(item.name || item.title)
-                                setProdCategory(item.category || categoryNames[0] || 'Bread')
-                                setProdUnit(item.unit || 'pcs')
-                                setProdCostPerUnit(item.costPerUnitRWF || item.unitCost || '')
-                                setProdSellingPrice(item.sellingPriceRWF || item.sellingPrice || '')
-                                setProdShelfLifeDays(item.shelfLifeDays || 4)
-                                setProdBestBeforeDate(
-                                  item.bestBeforeDate ||
-                                  item.expiryDate ||
-                                  new Date(Date.now() + (item.shelfLifeDays || 4) * 86400000).toISOString().slice(0, 10)
-                                )
-                                setProdReorderLevel(item.minimumStockLevel || 20)
-                                setDrawerType('product')
-                                setDrawerOpen(true)
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-                              title="Edit product"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteItem(item, 'product')}
-                              className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
-                              title="Delete product"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteItem(item, 'product')}
+                          className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 cursor-pointer transition-all"
+                          title="Delete product"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       )}
 
-      {/* --- SUBPAGE 2: RAW MATERIALS TABLE --- */}
+      {/* --- SUBPAGE 2: RAW MATERIALS (DESKTOP TABLE + MOBILE RESPONSIVE CARDS) --- */}
       {activeSubPage === 'Raw Materials' && (
-        <div className="exbos-glass-card rounded-2xl overflow-hidden border border-white/10 shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 bg-white/5 text-[11px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
-                  <th className="p-3.5 pl-5">Raw Material &amp; Lot</th>
-                  <th className="p-3.5">Category</th>
-                  <th className="p-3.5 text-right">In Stock</th>
-                  <th className="p-3.5 text-right">Reorder Threshold</th>
-                  {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Purchase Price</th>}
-                  <th className="p-3.5">Expiry Date</th>
-                  <th className="p-3.5">Supplier</th>
-                  <th className="p-3.5 pr-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300">
-                {filteredRawMaterials.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
-                      No raw materials found. Click "Receive Stock" or "+ New Material" to add ingredients.
-                    </td>
+        <div className="space-y-4">
+          {/* DESKTOP TABLE VIEW (Visible on md and larger screens) */}
+          <div className="hidden md:block exbos-glass-card rounded-2xl overflow-hidden border border-white/10 shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 bg-white/5 text-[11px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider">
+                    <th className="p-3.5 pl-5">Raw Material &amp; Lot</th>
+                    <th className="p-3.5">Category</th>
+                    <th className="p-3.5 text-right">In Stock</th>
+                    <th className="p-3.5 text-right">Reorder Threshold</th>
+                    {!isCashier && !hideFinancials && <th className="p-3.5 text-right">Purchase Price</th>}
+                    <th className="p-3.5">Expiry Date</th>
+                    <th className="p-3.5">Supplier</th>
+                    <th className="p-3.5 pr-5 text-right">Actions</th>
                   </tr>
-                ) : (
-                  filteredRawMaterials.map((mat) => {
-                    const isLow = Number(mat.currentStock || mat.stock || 0) <= Number(mat.minimumStockLevel || mat.minStock || 20)
-                    return (
-                      <tr
-                        key={mat.id}
-                        onClick={() => setDetailItem(mat)}
-                        className="hover:bg-white/5 transition-colors cursor-pointer group"
-                      >
-                        <td className="p-3.5 pl-5">
-                          <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors">
-                            {mat.name}
-                          </div>
-                          <div className="text-[10px] text-slate-500 font-mono">
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-300">
+                  {filteredRawMaterials.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-12 text-center text-slate-400">
+                        <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF] mb-3">
+                          <Package className="w-6 h-6" />
+                        </div>
+                        <div className="text-sm font-bold text-white font-orbitron mb-1">
+                          No Raw Materials Recorded Yet
+                        </div>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+                          All demo items have been cleared. Click "Receive Stock" or "+ New Material" to add your ingredients.
+                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={onOpenReceiveStock || handleOpenNewMaterial}
+                            className="btn-sapphire-clean px-4 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-md"
+                          >
+                            <ShoppingCart className="w-4 h-4 text-[#9EDCFF]" />
+                            <span>Receive Stock</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleOpenNewMaterial}
+                            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
+                          >
+                            <span>+ New Material</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRawMaterials.map((mat) => {
+                      const isLow = Number(mat.currentStock || mat.stock || 0) <= Number(mat.minimumStockLevel || mat.minStock || 20)
+                      return (
+                        <tr
+                          key={mat.id}
+                          onClick={() => setDetailItem(mat)}
+                          className="hover:bg-white/5 transition-colors cursor-pointer group"
+                        >
+                          <td className="p-3.5 pl-5">
+                            <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors">
+                              {mat.name}
+                            </div>
+                            <div className="text-[10px] text-slate-500 font-mono">
+                              Lot: {mat.batchCode || mat.id}
+                            </div>
+                          </td>
+                          <td className="p-3.5">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-slate-300">
+                              {mat.category || 'Inputs'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-mono font-bold text-white">
+                            <span className={isLow ? 'text-rose-400' : 'text-white'}>
+                              {(mat.currentStock || mat.stock || 0).toLocaleString()} {mat.unit || 'kg'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right font-mono text-slate-400">
+                            {mat.minimumStockLevel || mat.minStock || 20} {mat.unit}
+                          </td>
+                          {!isCashier && !hideFinancials && (
+                            <td className="p-3.5 text-right font-mono font-semibold text-white">
+                              {formatRWF(mat.purchasePriceRWF || mat.purchasePrice || 0)}/{mat.unit}
+                            </td>
+                          )}
+                          <td className="p-3.5">
+                            <span className="text-slate-300 text-[11px]">{mat.expiryDate || 'Non-perishable'}</span>
+                          </td>
+                          <td className="p-3.5 text-slate-400 text-[11px]">
+                            {mat.supplier || 'Local Supplier'}
+                          </td>
+                          <td className="p-3.5 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditItem(mat)
+                                  setMatName(mat.name)
+                                  setMatCategory(mat.category || categoryNames[3] || 'Flour & Grains')
+                                  setMatUnit(mat.unit || 'kg')
+                                  setMatPurchasePrice(mat.purchasePriceRWF || '')
+                                  setMatReorderLevel(mat.minimumStockLevel || 50)
+                                  setMatExpiryDate(mat.expiryDate || '')
+                                  setDrawerType('material')
+                                  setDrawerOpen(true)
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
+                                title="Edit material"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteItem(mat, 'material')}
+                                className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                                title="Delete material"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* MOBILE RESPONSIVE CARDS VIEW (Shown on < md screens without horizontal squeezing) */}
+          <div className="block md:hidden space-y-3">
+            {filteredRawMaterials.length === 0 ? (
+              <div className="p-6 rounded-2xl bg-[#040C26]/90 border border-white/10 text-center space-y-3 shadow-lg">
+                <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF]">
+                  <Package className="w-6 h-6" />
+                </div>
+                <div className="text-sm font-bold text-white font-orbitron">
+                  No Raw Materials Recorded
+                </div>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                  Click "Receive Stock" or "+ New Material" to add ingredients to your store.
+                </p>
+                <div className="flex items-center justify-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={onOpenReceiveStock || handleOpenNewMaterial}
+                    className="btn-sapphire-clean px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-lg"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5 text-[#9EDCFF]" />
+                    <span>Receive Stock</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenNewMaterial}
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
+                  >
+                    <span>+ New Material</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              filteredRawMaterials.map((mat) => {
+                const isLow = Number(mat.currentStock || mat.stock || 0) <= Number(mat.minimumStockLevel || mat.minStock || 20)
+                return (
+                  <div
+                    key={mat.id}
+                    onClick={() => setDetailItem(mat)}
+                    className="p-3.5 sm:p-4 rounded-2xl bg-[#071536]/90 hover:bg-[#0a1e4a] border border-white/12 shadow-lg space-y-3 transition-all cursor-pointer relative"
+                  >
+                    {/* Header: Name, Lot & Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-sm text-white tracking-tight leading-snug truncate">
+                          {mat.name}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-400 font-mono bg-white/5 px-2 py-0.5 rounded-md border border-white/5 shrink-0">
                             Lot: {mat.batchCode || mat.id}
-                          </div>
-                        </td>
-                        <td className="p-3.5">
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-white/10 text-slate-300">
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-300 bg-white/10 px-2 py-0.5 rounded-full truncate max-w-[120px]">
                             {mat.category || 'Inputs'}
                           </span>
-                        </td>
-                        <td className="p-3.5 text-right font-mono font-bold text-white">
-                          <span className={isLow ? 'text-rose-400' : 'text-white'}>
-                            {(mat.currentStock || mat.stock || 0).toLocaleString()} {mat.unit || 'kg'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right font-mono text-slate-400">
-                          {mat.minimumStockLevel || mat.minStock || 20} {mat.unit}
-                        </td>
-                        {!isCashier && !hideFinancials && (
-                          <td className="p-3.5 text-right font-mono font-semibold text-white">
-                            {formatRWF(mat.purchasePriceRWF || mat.purchasePrice || 0)}/{mat.unit}
-                          </td>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 shrink-0 ${
+                          isLow
+                            ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                        }`}
+                      >
+                        {isLow ? (
+                          <>
+                            <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                            <span>Low Stock</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                            <span>Optimal</span>
+                          </>
                         )}
-                        <td className="p-3.5">
-                          <span className="text-slate-300 text-[11px]">{mat.expiryDate || 'Non-perishable'}</span>
-                        </td>
-                        <td className="p-3.5 text-slate-400 text-[11px]">
-                          {mat.supplier || 'Local Supplier'}
-                        </td>
-                        <td className="p-3.5 pr-5 text-right" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditItem(mat)
-                                setMatName(mat.name)
-                                setMatCategory(mat.category || categoryNames[3] || 'Flour & Grains')
-                                setMatUnit(mat.unit || 'kg')
-                                setMatPurchasePrice(mat.purchasePriceRWF || '')
-                                setMatReorderLevel(mat.minimumStockLevel || 50)
-                                setMatExpiryDate(mat.expiryDate || '')
-                                setDrawerType('material')
-                                setDrawerOpen(true)
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-white cursor-pointer"
-                              title="Edit material"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteItem(mat, 'material')}
-                              className="p-1.5 text-slate-400 hover:text-rose-400 cursor-pointer"
-                              title="Delete material"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
+                      </span>
+                    </div>
+
+                    {/* Stock & Price Grid */}
+                    <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-[#040C26]/80 border border-white/5">
+                      <div>
+                        <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                          In Stock
+                        </span>
+                        <span className={`font-mono text-sm font-bold ${isLow ? 'text-rose-400' : 'text-white'}`}>
+                          {(mat.currentStock || mat.stock || 0).toLocaleString()} {mat.unit || 'kg'}
+                        </span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400 block">
+                          Reorder Threshold
+                        </span>
+                        <span className="font-mono text-sm font-bold text-slate-300">
+                          {mat.minimumStockLevel || mat.minStock || 20} {mat.unit || 'kg'}
+                        </span>
+                      </div>
+
+                      {!isCashier && !hideFinancials && (
+                        <div className="pt-1.5 border-t border-white/5 col-span-2 flex items-center justify-between">
+                          <span className="text-[10px] uppercase font-orbitron tracking-wider text-slate-400">
+                            Purchase Price
+                          </span>
+                          <span className="font-mono text-xs font-semibold text-white">
+                            {formatRWF(mat.purchasePriceRWF || mat.purchasePrice || 0)}/{mat.unit || 'kg'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Supplier & Expiry info */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                      <span className="truncate max-w-[140px]">
+                        Supplier: <strong className="text-slate-300 font-normal">{mat.supplier || 'Local Supplier'}</strong>
+                      </span>
+                      <span>
+                        Expiry: <strong className="text-slate-300 font-normal">{mat.expiryDate || 'Non-perishable'}</strong>
+                      </span>
+                    </div>
+
+                    {/* Action Row */}
+                    <div
+                      className="flex items-center justify-end gap-1.5 pt-1 border-t border-white/5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditItem(mat)
+                          setMatName(mat.name)
+                          setMatCategory(mat.category || categoryNames[3] || 'Flour & Grains')
+                          setMatUnit(mat.unit || 'kg')
+                          setMatPurchasePrice(mat.purchasePriceRWF || '')
+                          setMatReorderLevel(mat.minimumStockLevel || 50)
+                          setMatExpiryDate(mat.expiryDate || '')
+                          setDrawerType('material')
+                          setDrawerOpen(true)
+                        }}
+                        className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-medium border border-white/15 inline-flex items-center gap-1 cursor-pointer transition-all"
+                        title="Edit material"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-slate-300" />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteItem(mat, 'material')}
+                        className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 cursor-pointer transition-all"
+                        title="Delete material"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })
+            )}
           </div>
         </div>
       )}
