@@ -227,9 +227,9 @@ export default function CashFlowCurveChart({
   // SVG Geometry Dimensions
   const svgWidth = 880
   const svgHeight = 290
-  const paddingLeft = 58
+  const paddingLeft = 68
   const paddingRight = 28
-  const paddingTop = 32
+  const paddingTop = 36
   const paddingBottom = 42
 
   // Determine scale range based on current graphMode & metricFocus
@@ -777,7 +777,20 @@ export default function CashFlowCurveChart({
               </filter>
             </defs>
 
-            {/* Horizontal Y-Axis Gridlines */}
+            {/* Currency Scale Indicator */}
+            <text
+              x={paddingLeft - 10}
+              y={paddingTop - 12}
+              textAnchor="end"
+              fill="#9EDCFF"
+              fontSize="10"
+              fontWeight="800"
+              fontFamily="Orbitron, sans-serif"
+            >
+              RWF
+            </text>
+
+            {/* Horizontal Y-Axis Gridlines & Range Markers */}
             {yAxisSteps.map((step, i) => {
               const yPos = paddingTop + step.pct * (svgHeight - paddingTop - paddingBottom)
               const isBaseline = i === yAxisSteps.length - 1
@@ -788,17 +801,29 @@ export default function CashFlowCurveChart({
                     y1={yPos}
                     x2={svgWidth - paddingRight}
                     y2={yPos}
-                    stroke={isBaseline ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'}
+                    stroke={isBaseline ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.12)'}
                     strokeDasharray={isBaseline ? 'none' : '4 4'}
                     strokeWidth={isBaseline ? '1.5' : '1'}
                   />
+                  {/* Subtle axis tick */}
+                  <line
+                    x1={paddingLeft - 6}
+                    y1={yPos}
+                    x2={paddingLeft}
+                    y2={yPos}
+                    stroke={isBaseline ? '#9EDCFF' : 'rgba(255,255,255,0.4)'}
+                    strokeWidth="1.5"
+                  />
+                  {/* High contrast, prominent Y-Axis Number Scale */}
                   <text
-                    x={paddingLeft - 10}
+                    x={paddingLeft - 12}
                     y={yPos + 4}
                     textAnchor="end"
-                    className={`font-orbitron text-[10px] sm:text-[11px] font-bold ${
-                      isBaseline ? 'fill-slate-300' : 'fill-slate-400'
-                    }`}
+                    fill={isBaseline ? '#cbd5e1' : '#ffffff'}
+                    fontSize="11"
+                    fontWeight="700"
+                    fontFamily="Orbitron, sans-serif"
+                    style={{ textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}
                   >
                     {formatShortMoney(step.val)}
                   </text>
@@ -1084,9 +1109,9 @@ export default function CashFlowCurveChart({
           </svg>
         </div>
 
-        {/* X-AXIS TIMELINE LABELS */}
+        {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES */}
         <div
-          className="flex items-start justify-between pt-2 text-xs"
+          className="flex items-start justify-between pt-3 text-xs w-full"
           style={{
             paddingLeft: `${(paddingLeft / svgWidth) * 100}%`,
             paddingRight: `${(paddingRight / svgWidth) * 100}%`
@@ -1094,29 +1119,40 @@ export default function CashFlowCurveChart({
         >
           {currentChartData.map((d, i) => {
             const isCur = i === safeIndex
+            const moneyVal =
+              graphMode === 'cumulative'
+                ? formatShortMoney(d.cumulative)
+                : graphMode === 'velocity'
+                ? formatShortMoney(d.net)
+                : formatShortMoney(d.income)
+
             return (
               <button
                 key={d.label}
                 type="button"
                 onMouseEnter={() => setActiveCurveIndex(i)}
                 onClick={() => setActiveCurveIndex(i)}
-                className={`flex flex-col items-center gap-0.5 cursor-pointer border-0 bg-transparent transition-all p-0 ${
-                  isCur ? 'text-white font-black scale-105' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className="group flex flex-col items-center gap-1.5 cursor-pointer border-0 bg-transparent transition-all p-0 flex-1 min-w-0"
               >
-                <span className="font-orbitron text-[10px] sm:text-[11px] font-bold tracking-wider">
-                  {d.label}
-                </span>
                 <span
-                  className={`text-[8px] sm:text-[9px] font-mono transition-colors ${
-                    isCur ? 'text-[#9EDCFF] font-bold' : 'text-slate-400'
+                  className={`font-orbitron text-[11px] sm:text-xs font-bold tracking-wider transition-colors ${
+                    isCur
+                      ? 'text-white font-black scale-105 drop-shadow-[0_0_8px_rgba(33,141,255,0.7)]'
+                      : 'text-slate-300 group-hover:text-white'
                   }`}
                 >
-                  {graphMode === 'cumulative'
-                    ? formatShortMoney(d.cumulative)
-                    : graphMode === 'velocity'
-                    ? formatShortMoney(d.net)
-                    : formatShortMoney(d.income)}
+                  {d.label}
+                </span>
+
+                {/* Prominent, readable value badge (e.g. 500k, 1M, 15.2M) */}
+                <span
+                  className={`px-1.5 py-0.5 rounded-md font-orbitron text-[10px] sm:text-[11px] font-extrabold tracking-tight transition-all border whitespace-nowrap ${
+                    isCur
+                      ? 'bg-[#218DFF] text-white border-white/40 shadow-[0_0_12px_rgba(33,141,255,0.6)] scale-105'
+                      : 'bg-white/10 text-white border-white/15 group-hover:bg-white/20 group-hover:border-white/30'
+                  }`}
+                >
+                  {moneyVal}
                 </span>
               </button>
             )
