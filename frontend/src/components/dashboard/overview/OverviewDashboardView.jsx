@@ -152,6 +152,7 @@ export default function OverviewDashboardView({
         currentArch={currentArch}
         archTransactions={archTransactions}
         hideFinancials={hideFinancials}
+        onOpenWorkflowModal={() => setWorkflowModalOpen(true)}
       />
 
       {/* Executions / Recent Activity Feed */}

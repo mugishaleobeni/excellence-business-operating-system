@@ -6,15 +6,15 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
   const navigate = useNavigate()
 
   // 1. Resolve Architecture ID:
-  //    - If the signed-in user has a registered architectureId, lock strictly to `user.architectureId`
-  //      so they always stay in their registered business architecture and cannot be switched.
+  //    - Prioritize explicit URL `?arch=` parameter or architecture switcher
+  //    - Fallback to registered user architecture or saved storage
   const activeArchId = useMemo(() => {
-    if (user?.architectureId && architectures.some((a) => a.id === user.architectureId)) {
-      return user.architectureId
-    }
     const fromUrl = searchParams.get('arch')
     if (fromUrl && architectures.some((a) => a.id === fromUrl)) {
       return fromUrl
+    }
+    if (user?.architectureId && architectures.some((a) => a.id === user.architectureId)) {
+      return user.architectureId
     }
     try {
       const fromStorage = localStorage.getItem('exbos_active_arch')
