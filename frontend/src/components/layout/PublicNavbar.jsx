@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
+import { isTokenValid } from '../../utils/apiClient'
 import exbosLogo from '../../../logo/exboslogo.png'
 import LanguageDropdown from '../common/LanguageDropdown'
 import CountryFlag from '../common/CountryFlag'
 import CardNav from './CardNav'
 import RequestIntegrationModal from '../common/RequestIntegrationModal'
-import { ArrowRight, Check, ChevronDown, MessageSquare, Mail, Plug } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, MessageSquare, Mail, Plug, LayoutDashboard } from 'lucide-react'
 
 export default function PublicNavbar() {
-  const { language, setLanguage } = useExbos()
+  const { user, language, setLanguage } = useExbos()
+  const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+  const isAuthenticated = Boolean(user && token && isTokenValid(token))
   const location = useLocation()
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
@@ -43,7 +46,8 @@ export default function PublicNavbar() {
     { label: language === 'rw' ? 'Ibikoresho bya Imari' : 'Business Tools', to: '/business-tools' },
     { label: language === 'rw' ? 'Ibiciro' : 'Pricing', to: '/pricing' },
     { label: language === 'rw' ? 'Ubumenyi' : 'Resources', to: '/resources' },
-    { label: language === 'rw' ? 'Ibyerekeye ExBOS' : 'About', to: '/about' }
+    { label: language === 'rw' ? 'Ibyerekeye ExBOS' : 'About', to: '/about' },
+    ...(isAuthenticated ? [{ label: 'Dashboard', to: '/dashboard' }] : [])
   ]
 
   // EXCELLENCE BOS Content structured into CardNav cards for Mobile Responsive
@@ -97,14 +101,24 @@ export default function PublicNavbar() {
     },
     {
       label: language === 'rw' ? 'Konti & Kwiyandikisha' : 'Account & Access',
-      description:
-        language === 'rw'
-          ? 'Injira muri konti yawe cyangwa utangire gukoresha ExBOS.'
-          : 'Sign in to your account or start your 7-step guided business setup.',
-      links: [
-        { label: language === 'rw' ? 'Tangira' : 'Get Started', href: '/register' },
-        { label: language === 'rw' ? 'Injira' : 'Sign In', href: '/login' }
-      ]
+      description: isAuthenticated
+        ? (language === 'rw'
+            ? `Winjiye muri konti ya ${user?.name || 'ExBOS'}. Kanda hano ukomeze muri Dashboard.`
+            : `Logged in as ${user?.name || 'User'}. Return to your operational dashboard.`)
+        : (language === 'rw'
+            ? 'Injira muri konti yawe cyangwa utangire gukoresha ExBOS.'
+            : 'Sign in to your account or start your 7-step guided business setup.'),
+      links: isAuthenticated
+        ? [
+            {
+              label: language === 'rw' ? 'Fungura Dashboard' : 'Go to Dashboard',
+              href: '/dashboard'
+            }
+          ]
+        : [
+            { label: language === 'rw' ? 'Tangira' : 'Get Started', href: '/register' },
+            { label: language === 'rw' ? 'Injira' : 'Sign In', href: '/login' }
+          ]
     }
   ]
 
@@ -292,21 +306,32 @@ export default function PublicNavbar() {
           })}
         </div>
 
-        {/* Right Controls: Language Dropdown + Only "Get Started" Button */}
+        {/* Right Controls: Language Dropdown + CTA Button (Dashboard if authenticated, Register if not) */}
         <div className="flex items-center gap-3 shrink-0">
           <LanguageDropdown />
 
-          <Link
-            to="/register"
-            className="btn-sapphire px-5 py-2.5 text-sm no-underline"
-          >
-            <span>{language === 'rw' ? 'Tangira' : 'Get Started'}</span>
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/dashboard"
+              className="btn-sapphire px-5 py-2.5 text-sm no-underline flex items-center gap-2"
+            >
+              <LayoutDashboard className="w-4 h-4 text-[#9EDCFF]" />
+              <span>{language === 'rw' ? 'Dashboard' : 'Dashboard'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          ) : (
+            <Link
+              to="/register"
+              className="btn-sapphire px-5 py-2.5 text-sm no-underline"
+            >
+              <span>{language === 'rw' ? 'Tangira' : 'Get Started'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          )}
         </div>
       </nav>
 
-      {/* Mobile & Tablet Responsive CardNav: Left = Get Started | Center = Logo | Right = Menu + Translation inside Menu */}
+      {/* Mobile & Tablet Responsive CardNav: Left = CTA | Center = Logo | Right = Menu */}
       <div className="lg:hidden px-3 pt-2.5">
         <CardNav
           logo={exbosLogo}
@@ -314,8 +339,8 @@ export default function PublicNavbar() {
           logoHref="/"
           items={cardNavItems}
           cta={{
-            label: language === 'rw' ? 'Tangira' : 'Get Started',
-            href: '/register'
+            label: isAuthenticated ? 'Dashboard' : (language === 'rw' ? 'Tangira' : 'Get Started'),
+            href: isAuthenticated ? '/dashboard' : '/register'
           }}
           menuTranslation={({ closeMenu }) => (
             <div className="flex flex-col gap-2.5">

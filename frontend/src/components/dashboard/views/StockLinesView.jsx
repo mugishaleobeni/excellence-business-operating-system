@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Boxes,
   Clock,
@@ -10,7 +10,9 @@ import {
   Eye,
   Edit2,
   Trash2,
-  X
+  X,
+  Tag,
+  Package
 } from "lucide-react";
 import { formatRWF } from "../../../utils/currencyWords";
 import { renderBarcodeSvg } from "../../../utils/barcodeUtils";
@@ -72,11 +74,14 @@ function getStockExpiryMeta(expiryDate) {
 }
 
 function StockLinesView({
+  searchQuery = '',
   currentArch,
   inventory = [],
   hideFinancials,
   formatRWF,
   onReceiveStock,
+  onNewProduct,
+  onNewCategory,
   onViewStockLine,
   onEditStockLine,
   onDeleteStockLine
@@ -86,6 +91,13 @@ function StockLinesView({
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [supplierFilter, setSupplierFilter] = useState('all')
   const [deleteConfirmItem, setDeleteConfirmItem] = useState(null)
+
+  // Sync internal searchTerm when top nav searchQuery updates
+  useEffect(() => {
+    if (searchQuery !== undefined) {
+      setSearchTerm(searchQuery)
+    }
+  }, [searchQuery])
 
   const processedLines = useMemo(() => {
     return (inventory || []).map((item) => {
@@ -142,19 +154,29 @@ function StockLinesView({
       if (categoryFilter !== 'all' && item.category !== categoryFilter) return false
       if (supplierFilter !== 'all' && item.supplierLabel !== supplierFilter) return false
 
-      if (searchTerm.trim()) {
-        const term = searchTerm.toLowerCase()
-        const matchTitle = item.title?.toLowerCase().includes(term)
-        const matchBarcode = item.barcode?.toLowerCase().includes(term)
-        const matchSku = item.sku?.toLowerCase().includes(term)
-        const matchSupplier = item.supplierLabel?.toLowerCase().includes(term)
-        const matchCat = item.category?.toLowerCase().includes(term)
-        if (!matchTitle && !matchBarcode && !matchSku && !matchSupplier && !matchCat) return false
+      const effectiveTerm = (searchTerm || searchQuery || '').trim().toLowerCase()
+      if (effectiveTerm) {
+        const titleStr = String(item.title || item.name || '').toLowerCase()
+        const barcodeStr = String(item.barcode || '').toLowerCase()
+        const skuStr = String(item.sku || '').toLowerCase()
+        const supplierStr = String(item.supplierLabel || item.supplier || item.supplierName || '').toLowerCase()
+        const catStr = String(item.category || '').toLowerCase()
+        const idStr = String(item.id || '').toLowerCase()
+
+        const match =
+          titleStr.includes(effectiveTerm) ||
+          barcodeStr.includes(effectiveTerm) ||
+          skuStr.includes(effectiveTerm) ||
+          supplierStr.includes(effectiveTerm) ||
+          catStr.includes(effectiveTerm) ||
+          idStr.includes(effectiveTerm)
+
+        if (!match) return false
       }
 
       return true
     })
-  }, [processedLines, activeTab, categoryFilter, supplierFilter, searchTerm])
+  }, [processedLines, activeTab, categoryFilter, supplierFilter, searchTerm, searchQuery])
 
   return (
     <div className="space-y-6">
@@ -254,14 +276,38 @@ function StockLinesView({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={onReceiveStock}
-            className="btn-sapphire-clean px-4 py-2.5 text-xs font-bold inline-flex items-center gap-2 self-start sm:self-auto cursor-pointer shadow-lg hover:scale-105 transition-transform"
-          >
-            <Plus className="w-3.5 h-3.5 text-[#9EDCFF]" />
-            <span>+ Receive Stock</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            {onNewCategory && (
+              <button
+                type="button"
+                onClick={onNewCategory}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-[#9EDCFF] hover:text-white inline-flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Create a new product category"
+              >
+                <Tag className="w-3.5 h-3.5 text-[#218DFF]" />
+                <span>+ Category</span>
+              </button>
+            )}
+            {onNewProduct && (
+              <button
+                type="button"
+                onClick={onNewProduct}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-bold text-white inline-flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Create a new product"
+              >
+                <Package className="w-3.5 h-3.5 text-[#218DFF]" />
+                <span>+ Product</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onReceiveStock}
+              className="btn-sapphire-clean px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-lg hover:scale-105 transition-transform"
+            >
+              <Plus className="w-3.5 h-3.5 text-[#9EDCFF]" />
+              <span>+ Receive Stock</span>
+            </button>
+          </div>
         </div>
 
         {/* Filter and Search Bar */}

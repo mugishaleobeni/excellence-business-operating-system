@@ -26,6 +26,8 @@ export default function DashboardTopNav({
   currentArch = {},
   activeModule,
   activePage,
+  setActivePage,
+  subPages = [],
   searchInputRef,
   searchQuery,
   setSearchQuery,
@@ -637,6 +639,42 @@ export default function DashboardTopNav({
           )}
         </div>
       </div>
+
+      {/* Mobile Horizontal Subpage Navigation Bar (Instant 1-Tap Access to Categories, Low Stock, etc.) */}
+      {subPages && subPages.length > 1 && (
+        <div className="lg:hidden pt-2 pb-0.5 overflow-x-auto scrollbar-none flex items-center gap-1.5 border-t border-white/10 mt-2">
+          {subPages.map((p) => {
+            const isCurrent = activePage === p
+            const isAlert =
+              p.includes('Alert') ||
+              p.includes('Low Stock') ||
+              p.includes('Unpaid') ||
+              p.includes('Outstanding') ||
+              p.includes('Amounts Owed') ||
+              p.includes('Dead Stock')
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => {
+                  if (setActivePage) setActivePage(p)
+                  else if (navigateToModulePage) navigateToModulePage(activeModule, p)
+                }}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border shrink-0 ${
+                  isCurrent
+                    ? 'exbos-glass-pill-active border-white/40 text-white shadow-sm'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <span>{p}</span>
+                {isAlert && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Glowing Scroll Progress Line */}
       <div

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
-import { exbosApi } from '../utils/apiClient'
+import { exbosApi, isTokenValid } from '../utils/apiClient'
 import PublicNavbar from '../components/layout/PublicNavbar'
 import CodeSlots from '../components/common/CodeSlots'
 import { formatRWF } from '../utils/currencyWords'
@@ -35,6 +35,7 @@ const STEPS = [
 
 export default function RegisterPage() {
   const {
+    user,
     architectures,
     pricingPlans,
     preselectedArchitecture,
@@ -43,6 +44,20 @@ export default function RegisterPage() {
   } = useExbos()
 
   const navigate = useNavigate()
+
+  // Auto-redirect if user already has an active, valid JWT session
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+    if (user && token && isTokenValid(token)) {
+      const targetArch =
+        user.architectureId ||
+        localStorage.getItem('exbos_active_arch') ||
+        'buy-and-sell'
+      navigate(`/dashboard?arch=${targetArch}&module=Overview&page=Dashboard`, {
+        replace: true
+      })
+    }
+  }, [user, navigate])
   const [searchParams] = useSearchParams()
   const queryArch = searchParams.get('arch')
   const queryPlan = searchParams.get('plan')

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ExbosProvider, useExbos } from './context/ExbosContext'
+import { isTokenValid } from './utils/apiClient'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -23,7 +24,7 @@ function ProtectedRoute({ children }) {
   const location = useLocation()
   const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
 
-  if (!user || !token) {
+  if (!user || !token || !isTokenValid(token)) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 

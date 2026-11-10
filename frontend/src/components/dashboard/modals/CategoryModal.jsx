@@ -40,7 +40,7 @@ export default function CategoryModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#020617]/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
+      className="fixed inset-0 z-[70] bg-[#020617]/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div

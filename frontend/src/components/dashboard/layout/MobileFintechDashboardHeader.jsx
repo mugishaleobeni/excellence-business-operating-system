@@ -59,10 +59,10 @@ export default function MobileFintechDashboardHeader({
     .join('') || 'LM'
 
   const metricsTabs = [
-    { id: 'netProfit', label: 'Net Profit', amount: liveDashboardData.netProfit ?? 0 },
-    { id: 'revenue', label: 'Revenue', amount: liveDashboardData.totalSales ?? 0 },
-    { id: 'expenses', label: 'Expenses', amount: liveDashboardData.totalExpenses ?? 0 },
-    { id: 'stock', label: 'Stock Shelf', amount: liveDashboardData.stockValue ?? 0 }
+    { id: 'netProfit', label: 'Net Profit', shortLabel: 'Net', amount: liveDashboardData.netProfit ?? 0 },
+    { id: 'revenue', label: 'Revenue', shortLabel: 'Revenue', amount: liveDashboardData.totalSales ?? 0 },
+    { id: 'expenses', label: 'Expenses', shortLabel: 'Expenses', amount: liveDashboardData.totalExpenses ?? 0 },
+    { id: 'stock', label: 'Stock Shelf', shortLabel: 'Stock', amount: liveDashboardData.stockValue ?? 0 }
   ]
 
   const activeMetricObj =
@@ -266,34 +266,42 @@ export default function MobileFintechDashboardHeader({
                 key={tab.id}
                 type="button"
                 onClick={() => setSelectedMetric(tab.id)}
-                className={`py-1.5 text-[11px] font-bold rounded-xl transition-all cursor-pointer truncate ${
+                className={`py-1.5 px-0.5 text-[10px] sm:text-[11px] font-bold rounded-xl transition-all cursor-pointer text-center truncate ${
                   isTabActive
                     ? 'bg-[#218DFF] text-white shadow-md'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {tab.label}
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.shortLabel || tab.label}</span>
               </button>
             )
           })}
         </div>
 
         {/* Inner Balance Pill with Amber Eye Toggle (from Image 1 & 2) */}
-        <div className="rounded-2xl p-4 bg-[#071536]/85 border border-white/15 flex items-center justify-between gap-3 shadow-inner">
-          <div className="min-w-0 flex items-baseline gap-2">
-            <span className="text-xs font-bold font-orbitron text-[#9EDCFF] uppercase tracking-wider shrink-0">
+        <div className="rounded-2xl px-3.5 py-3 sm:px-4 sm:py-3.5 bg-[#071536]/85 border border-white/15 flex items-center justify-between gap-3 shadow-inner">
+          <div className="min-w-0 flex items-baseline gap-2 flex-1 overflow-hidden">
+            <span className="text-[11px] sm:text-xs font-bold font-orbitron text-[#9EDCFF] uppercase tracking-wider shrink-0">
               RWF
             </span>
-            <div className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight break-words leading-tight">
-              {hideFinancials ? '••••••••••••' : Number(activeMetricObj.amount || 0).toLocaleString()}
+            <div className="font-orbitron text-lg sm:text-xl md:text-2xl font-extrabold text-white tracking-tight truncate whitespace-nowrap leading-none">
+              {hideFinancials ? (
+                <span className="font-mono tracking-wider text-base sm:text-lg text-slate-300 select-none">
+                  ••••••
+                </span>
+              ) : (
+                Number(activeMetricObj.amount || 0).toLocaleString()
+              )}
             </div>
           </div>
 
           <button
             type="button"
             onClick={() => setHideFinancials(!hideFinancials)}
-            className="w-9 h-9 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all"
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all"
             title={hideFinancials ? 'Show financial balances' : 'Hide financial balances'}
+            aria-label={hideFinancials ? 'Show financial balances' : 'Hide financial balances'}
           >
             {hideFinancials ? (
               <EyeOff className="w-4 h-4 text-amber-400" />

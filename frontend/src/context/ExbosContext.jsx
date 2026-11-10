@@ -10,7 +10,7 @@ import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePr
 import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
 import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
 import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
-import { exbosApi, getAuthHeaders, resolveStorageUrl } from '../utils/apiClient'
+import { exbosApi, getAuthHeaders, resolveStorageUrl, isTokenValid } from '../utils/apiClient'
 
 const ExbosContext = createContext(null)
 
@@ -212,13 +212,18 @@ export function ExbosProvider({ children }) {
     }
   }, [hideFinancials])
 
-  // Authenticated User State (Requires real backend token; purges legacy demo sessions)
+  // Authenticated User State (Requires real backend token; purges legacy demo sessions or expired JWT)
   const [user, setUser] = useState(() => {
     try {
       localStorage.removeItem('exbos_demo_workspaces')
       const token = localStorage.getItem('exbos_access_token')
       const saved = localStorage.getItem('exbos_user')
       if (!token || !saved) return null
+      if (!isTokenValid(token)) {
+        localStorage.removeItem('exbos_user')
+        localStorage.removeItem('exbos_access_token')
+        return null
+      }
       const parsed = JSON.parse(saved)
       if (parsed?.isDemo || String(parsed?.role || '').includes('Demo')) {
         localStorage.removeItem('exbos_user')

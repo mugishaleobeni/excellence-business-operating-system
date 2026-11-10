@@ -1,7 +1,7 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
-import { exbosApi } from '../utils/apiClient'
+import { exbosApi, isTokenValid } from '../utils/apiClient'
 import PublicNavbar from '../components/layout/PublicNavbar'
 import {
   User,
@@ -18,10 +18,28 @@ import {
 } from 'lucide-react'
 
 export default function LoginPage({ isForgotPassword = false }) {
-  const { login, pendingCalculator, addToast } = useExbos()
+  const { user, login, pendingCalculator, addToast } = useExbos()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const returnTo = searchParams.get('returnTo')
+
+  // Auto-redirect if user already has an active, valid JWT session
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+    if (user && token && isTokenValid(token) && !isForgotPassword) {
+      if (returnTo === 'calculator') {
+        navigate('/#explore-business-tools')
+      } else {
+        const targetArch =
+          user.architectureId ||
+          localStorage.getItem('exbos_active_arch') ||
+          'buy-and-sell'
+        navigate(`/dashboard?arch=${targetArch}&module=Overview&page=Dashboard`, {
+          replace: true
+        })
+      }
+    }
+  }, [user, isForgotPassword, returnTo, navigate])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

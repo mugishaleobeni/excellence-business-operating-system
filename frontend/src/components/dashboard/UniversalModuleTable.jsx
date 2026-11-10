@@ -21,6 +21,7 @@ import DeleteConfirmModal from '../common/DeleteConfirmModal'
  * - Matching user reference image
  */
 export default function UniversalModuleTable({
+  searchQuery = '',
   title,
   subtitle,
   columns = [],
@@ -43,6 +44,14 @@ export default function UniversalModuleTable({
   const [deleteConfirmRow, setDeleteConfirmRow] = useState(null)
   const actionsRef = useRef(null)
   const pageSize = 8
+
+  // Sync internal searchTerm when top nav searchQuery updates
+  useEffect(() => {
+    if (searchQuery !== undefined) {
+      setSearchTerm(searchQuery)
+      setPage(1)
+    }
+  }, [searchQuery])
 
   // Close actions dropdown when clicking outside
   useEffect(() => {
@@ -72,11 +81,12 @@ export default function UniversalModuleTable({
     let list = [...data]
 
     // Search filter
-    if (searchTerm.trim()) {
-      const q = searchTerm.toLowerCase()
+    const effectiveSearch = (searchTerm || searchQuery || '').trim()
+    if (effectiveSearch) {
+      const q = effectiveSearch.toLowerCase()
       list = list.filter((row) =>
         Object.values(row).some((val) =>
-          String(val).toLowerCase().includes(q)
+          val !== null && val !== undefined && String(val).toLowerCase().includes(q)
         )
       )
     }
@@ -103,7 +113,7 @@ export default function UniversalModuleTable({
     }
 
     return list
-  }, [data, searchTerm, filterCategory, sortKey, sortAsc])
+  }, [data, searchTerm, searchQuery, filterCategory, sortKey, sortAsc])
 
   // ExBOS Page Pattern 1: 3-Number Summary Strip
   const summaryStrip = useMemo(() => {

@@ -8,6 +8,7 @@ import InteractiveModulePanel from '../InteractiveModulePanel'
 import OverviewDashboardView from '../overview/OverviewDashboardView'
 
 export default function WorkspaceContentRouter({
+  searchQuery = '',
   activeArchId = 'buy-and-sell',
   currentArch = {},
   activeModule = 'Overview',
@@ -80,6 +81,7 @@ export default function WorkspaceContentRouter({
   if (activeModule !== 'Overview' || activePage !== 'Dashboard') {
     return (
       <InteractiveModulePanel
+        searchQuery={searchQuery}
         activeArchId={activeArchId}
         currentArch={currentArch}
         activeModule={activeModule}

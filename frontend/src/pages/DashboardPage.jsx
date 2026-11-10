@@ -341,6 +341,8 @@ export default function DashboardPage() {
             currentArch={currentArch}
             activeModule={activeModule}
             activePage={activePage}
+            setActivePage={setActivePage}
+            subPages={subPages}
             searchInputRef={searchInputRef}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}

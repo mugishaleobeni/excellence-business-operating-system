@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
+import { isTokenValid } from '../utils/apiClient'
 import { useAOS } from '../utils/useAOS'
 import PublicNavbar from '../components/layout/PublicNavbar'
 import PublicFooter from '../components/layout/PublicFooter'
@@ -21,6 +22,9 @@ import {
 export default function LandingPage() {
   useAOS()
   const navigate = useNavigate()
+  const { user } = useExbos()
+  const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+  const isAuthenticated = Boolean(user && token && isTokenValid(token))
 
   const [heroVideoEnded, setHeroVideoEnded] = useState(false)
   const heroVideoRef = useRef(null)
@@ -134,10 +138,10 @@ export default function LandingPage() {
                 >
                   <button
                     type="button"
-                    onClick={() => navigate('/register')}
+                    onClick={() => navigate(isAuthenticated ? '/dashboard' : '/register')}
                     className="canva-block-inner hero-btn-primary"
                   >
-                    <span>Start Free</span>
+                    <span>{isAuthenticated ? 'Open Dashboard' : 'Start Free'}</span>
                     <span className="hero-btn-icon-pill">
                       <ArrowRight className="w-4 h-4 text-white" />
                     </span>

@@ -81,6 +81,7 @@ import BusinessActivitiesSettingsView from "./settings/BusinessActivitiesSetting
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
+  searchQuery = '',
   activeArchId,
   currentArch,
   activeModule,
@@ -685,6 +686,7 @@ export default function InteractiveModulePanel({
   }, [categoriesList, rawModuleRecords])
 
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
+  const [forceProductModal, setForceProductModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryNameInput, setCategoryNameInput] = useState('')
   const [categoryDescInput, setCategoryDescInput] = useState('')
@@ -1004,18 +1006,19 @@ export default function InteractiveModulePanel({
     activePage === 'Cost Categories'
 
   const isProductForm =
-    !editRow &&
-    (activeModule === 'Products' ||
-      activeModule === 'Products & Stock' ||
-      activeModule === 'Farm Inventory' ||
-      activeModule === 'Ingredients & Stock') &&
-    (activePage === 'All Products' ||
-      activePage === 'Finished Goods' ||
-      activePage === 'Raw Materials' ||
-      activePage === 'Farm Inputs' ||
-      activePage === 'Kitchen Ingredients' ||
-      activePage === 'Harvested Stock' ||
-      (activePage.includes('Low Stock') && !purchaseProductId))
+    forceProductModal ||
+    (!editRow &&
+      (activeModule === 'Products' ||
+        activeModule === 'Products & Stock' ||
+        activeModule === 'Farm Inventory' ||
+        activeModule === 'Ingredients & Stock') &&
+      (activePage === 'All Products' ||
+        activePage === 'Finished Goods' ||
+        activePage === 'Raw Materials' ||
+        activePage === 'Farm Inputs' ||
+        activePage === 'Kitchen Ingredients' ||
+        activePage === 'Harvested Stock' ||
+        (activePage.includes('Low Stock') && !purchaseProductId)))
 
   const isSaleForm =
     !editRow &&
@@ -1024,6 +1027,7 @@ export default function InteractiveModulePanel({
       activePage === 'Farm Sales')
 
   const isPurchaseForm =
+    !forceProductModal &&
     !editRow &&
     (activeModule === 'Purchases' ||
       activePage === 'All Purchases' ||
@@ -1705,12 +1709,20 @@ export default function InteractiveModulePanel({
         />
       ) : activeModule === 'Products' && activePage === 'Stock' ? (
         <StockLinesView
+          searchQuery={searchQuery}
           currentArch={currentArch}
           inventory={records}
           hideFinancials={hideFinancials}
           formatRWF={formatRWF}
+          onNewProduct={() => {
+            setEditRow(null)
+            setForceProductModal(true)
+            setModalOpen(true)
+          }}
+          onNewCategory={handleOpenCreateCategory}
           onReceiveStock={() => {
             setEditRow(null)
+            setForceProductModal(false)
             setPurchaseProductId('')
             setPurchaseItemTitle('')
             setPurchaseQuantity('1')
@@ -1777,6 +1789,7 @@ export default function InteractiveModulePanel({
           )}
 
           <UniversalModuleTable
+            searchQuery={searchQuery}
             title={`${currentArch.name} · ${activeModule} (${activePage})`}
             subtitle={`Organized ledger records, status tracking, and row actions for ${activePage}.`}
             columns={columns}
@@ -2172,11 +2185,12 @@ export default function InteractiveModulePanel({
       {/* Modals */}
       <ProductModal
         isOpen={modalOpen && isProductForm}
-        onClose={() => { setModalOpen(false); setEditRow(null); }}
+        onClose={() => { setModalOpen(false); setEditRow(null); setForceProductModal(false); }}
         editRow={editRow}
         activeArchId={activeArchId}
         activePage={activePage}
         categoryOptions={allCategories}
+        onAddCategory={handleAddCategory}
         onSaveProduct={(payload, isEdit) => {
           if (isEdit) {
             updateDemoRecord(activeArchId, bucketKey, payload.id, payload)
@@ -2185,6 +2199,7 @@ export default function InteractiveModulePanel({
           }
           setModalOpen(false)
           setEditRow(null)
+          setForceProductModal(false)
           addToast && addToast({
             type: "success",
             title: isEdit ? "Product Updated" : "Product Created",

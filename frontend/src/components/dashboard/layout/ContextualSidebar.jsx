@@ -71,9 +71,9 @@ export default function ContextualSidebar({
           sidebarCompact ? 'dashboard-sidebar-compact' : ''
         } ${
           mobileSidebarOpen
-            ? 'flex fixed inset-y-0 left-0 z-50 w-72 sm:w-80 shadow-2xl rounded-r-3xl rounded-l-none'
+            ? 'flex fixed inset-y-0 left-0 z-50 w-72 sm:w-80 shadow-2xl rounded-r-3xl rounded-l-none pb-28'
             : 'hidden lg:flex'
-        } flex-col justify-between p-4 sm:p-5 overflow-y-auto transition-all pb-28 lg:pb-5`}
+        } flex-col justify-between p-4 sm:p-5 overflow-y-auto transition-all`}
       >
         {/* COMPACT ICON MODE (When minimized/compacted like icon bar on desktop) */}
         {sidebarCompact ? (
@@ -215,8 +215,8 @@ export default function ContextualSidebar({
               </div>
             </div>
 
-            {/* ALL BUSINESS NAVIGATION MODULES */}
-            <div className="space-y-1">
+            {/* ALL BUSINESS NAVIGATION MODULES (MOBILE-ONLY: For mobile users opening drawer via "More") */}
+            <div className="space-y-1 lg:hidden">
               <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF]/75 px-2 pb-1 font-bold flex items-center justify-between">
                 <span>Business Modules</span>
                 <span className="text-[9px] text-slate-400 font-sans normal-case font-normal">
@@ -277,10 +277,10 @@ export default function ContextualSidebar({
               </div>
             </div>
 
-            {/* ACTIVE MODULE SUBPAGES */}
-            <div className="space-y-1 pt-3 border-t border-white/10">
-              <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF]/75 px-2 pb-1 font-bold">
-                {activeModule === 'Documents' ? 'Documents & Sharing' : activeModule} Subpages
+            {/* SUBPAGES NAVIGATION GROUP */}
+            <div className="space-y-1 pt-2 lg:pt-0 border-t border-white/10 lg:border-t-0">
+              <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF]/75 px-2 pb-1.5 font-bold">
+                {activeModule === 'Documents' ? 'Documents & Sharing' : activeModule} Modules
               </div>
               {subPages.map((p, idx) => {
                 const isCurrent = activePage === p

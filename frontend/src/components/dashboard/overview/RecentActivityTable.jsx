@@ -21,13 +21,13 @@ export default function RecentActivityTable({
   })
 
   return (
-    <div className="exbos-glass-card p-6 space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-        <div className="flex items-center gap-6">
-          <h3 className="font-orbitron text-lg font-bold text-white">
+    <div className="exbos-glass-card p-3.5 sm:p-6 space-y-4 sm:space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-white/10">
+        <div className="flex items-center justify-between sm:justify-start gap-4 sm:gap-6">
+          <h3 className="font-orbitron text-base sm:text-lg font-bold text-white">
             Executions
           </h3>
-          <div className="flex items-center gap-4 text-xs font-semibold">
+          <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold">
             <button
               type="button"
               onClick={() => setActiveTab('workflows')}
@@ -64,20 +64,20 @@ export default function RecentActivityTable({
           </div>
         </div>
 
-        <div className="relative">
+        <div className="relative w-full sm:w-auto">
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search executions..."
-            className="pl-8 pr-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:outline-none w-48 transition-all"
+            className="pl-8 pr-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:outline-none w-full sm:w-48 transition-all"
           />
         </div>
       </div>
 
       {/* Clean Frosted List / Live Workflow Canvas */}
-      <div className="space-y-3">
+      <div className="space-y-2.5 sm:space-y-3">
         {filteredTransactions.length === 0 ? (
           <div className="p-8 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
             <button
@@ -98,11 +98,11 @@ export default function RecentActivityTable({
           filteredTransactions.slice(0, 6).map((row, idx) => (
             <div
               key={row.id || idx}
-              className="p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between transition-all"
+              className="p-3 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between gap-2 sm:gap-4 transition-all min-w-0"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
                     row.type === 'in'
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : 'bg-rose-500/20 text-rose-300'
@@ -110,27 +110,27 @@ export default function RecentActivityTable({
                 >
                   0{idx + 1}
                 </div>
-                <div>
-                  <strong className="block text-sm font-semibold text-white">
+                <div className="min-w-0 flex-1 overflow-hidden">
+                  <strong className="block text-xs sm:text-sm font-semibold text-white truncate">
                     {row.title}
                   </strong>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-[10px] sm:text-xs text-slate-400 block truncate">
                     {row.createdAt || 'Just now'} · {row.category} · via{' '}
                     {row.account}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 <span
-                  className={`font-orbitron text-sm font-bold ${
+                  className={`font-orbitron text-xs sm:text-sm font-bold whitespace-nowrap ${
                     row.type === 'in' ? 'text-emerald-400' : 'text-rose-400'
                   }`}
                 >
                   {row.type === 'in' ? '+' : '-'}
                   {formatRWF(row.amountRWF, hideFinancials)}
                 </span>
-                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/15 text-xs text-[#9EDCFF] font-medium">
+                <span className="px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/10 border border-white/15 text-[10px] sm:text-xs text-[#9EDCFF] font-medium shrink-0 whitespace-nowrap">
                   {row.status || 'Posted'}
                 </span>
               </div>
