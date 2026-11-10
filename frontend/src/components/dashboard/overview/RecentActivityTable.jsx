@@ -21,17 +21,17 @@ export default function RecentActivityTable({
   })
 
   return (
-    <div className="exbos-glass-card p-3.5 sm:p-6 space-y-4 sm:space-y-5">
+    <div className="exbos-glass-card p-3 sm:p-6 space-y-3.5 sm:space-y-5 overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-white/10">
-        <div className="flex items-center justify-between sm:justify-start gap-4 sm:gap-6">
-          <h3 className="font-orbitron text-base sm:text-lg font-bold text-white">
+        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-6 min-w-0 overflow-x-auto no-scrollbar">
+          <h3 className="font-orbitron text-sm sm:text-lg font-bold text-white shrink-0">
             Executions
           </h3>
-          <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold">
+          <div className="flex items-center gap-2.5 sm:gap-4 text-[11px] sm:text-xs font-semibold shrink-0">
             <button
               type="button"
               onClick={() => setActiveTab('workflows')}
-              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors ${
+              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors whitespace-nowrap ${
                 activeTab === 'workflows'
                   ? 'text-white border-b-2 border-white'
                   : 'text-slate-400 hover:text-white'
@@ -42,7 +42,7 @@ export default function RecentActivityTable({
             <button
               type="button"
               onClick={() => setActiveTab('permissions')}
-              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors ${
+              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors whitespace-nowrap ${
                 activeTab === 'permissions'
                   ? 'text-white border-b-2 border-white'
                   : 'text-slate-400 hover:text-white'
@@ -53,7 +53,7 @@ export default function RecentActivityTable({
             <button
               type="button"
               onClick={() => setActiveTab('logs')}
-              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors ${
+              className={`pb-1 cursor-pointer bg-transparent border-0 transition-colors whitespace-nowrap ${
                 activeTab === 'logs'
                   ? 'text-white border-b-2 border-white'
                   : 'text-slate-400 hover:text-white'
@@ -77,7 +77,7 @@ export default function RecentActivityTable({
       </div>
 
       {/* Clean Frosted List / Live Workflow Canvas */}
-      <div className="space-y-2.5 sm:space-y-3">
+      <div className="space-y-2 sm:space-y-3">
         {filteredTransactions.length === 0 ? (
           <div className="p-8 rounded-2xl bg-white/5 border border-white/10 text-center space-y-2">
             <button
@@ -98,11 +98,11 @@ export default function RecentActivityTable({
           filteredTransactions.slice(0, 6).map((row, idx) => (
             <div
               key={row.id || idx}
-              className="p-3 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between gap-2 sm:gap-4 transition-all min-w-0"
+              className="p-2.5 sm:p-4 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between gap-2 sm:gap-4 transition-all min-w-0 overflow-hidden"
             >
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 overflow-hidden">
                 <div
-                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                  className={`w-7 h-7 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-[11px] sm:text-xs shrink-0 ${
                     row.type === 'in'
                       ? 'bg-emerald-500/20 text-emerald-300'
                       : 'bg-rose-500/20 text-rose-300'
@@ -121,7 +121,7 @@ export default function RecentActivityTable({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-3 shrink-0 text-right">
                 <span
                   className={`font-orbitron text-xs sm:text-sm font-bold whitespace-nowrap ${
                     row.type === 'in' ? 'text-emerald-400' : 'text-rose-400'
@@ -130,7 +130,7 @@ export default function RecentActivityTable({
                   {row.type === 'in' ? '+' : '-'}
                   {formatRWF(row.amountRWF, hideFinancials)}
                 </span>
-                <span className="px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/10 border border-white/15 text-[10px] sm:text-xs text-[#9EDCFF] font-medium shrink-0 whitespace-nowrap">
+                <span className="px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/10 border border-white/15 text-[9px] sm:text-xs text-[#9EDCFF] font-medium shrink-0 whitespace-nowrap inline-flex items-center justify-center">
                   {row.status || 'Posted'}
                 </span>
               </div>
