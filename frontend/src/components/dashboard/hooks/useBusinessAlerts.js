@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { formatRWF } from '../../../utils/currencyWords'
 
 export function useBusinessAlerts({
+  activeWorkspace = {},
   activeDemoWorkspace = {},
   archTransactions = [],
   activeArchId = 'buy-and-sell',
@@ -12,9 +13,10 @@ export function useBusinessAlerts({
   setActivePage = () => {},
   setNotifOpen = () => {}
 }) {
+  const currentWs = Object.keys(activeWorkspace).length > 0 ? activeWorkspace : activeDemoWorkspace
   return useMemo(() => {
     const list = []
-    const records = activeDemoWorkspace.records || {}
+    const records = currentWs.records || {}
     const customers = records['Customers'] || []
 
     // Has user entered live transactions or created custom customer records?
@@ -77,6 +79,7 @@ export function useBusinessAlerts({
     return list.filter((item) => !dismissedAlertIds.includes(item.id))
   }, [
     activeDemoWorkspace,
+    activeWorkspace,
     archTransactions,
     activeArchId,
     hideFinancials,

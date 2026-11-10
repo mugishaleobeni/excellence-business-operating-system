@@ -28,6 +28,7 @@ export default function DashboardPage() {
     logout,
     architectures = [],
     transactions = [],
+    workspaces = {},
     demoWorkspaces = {},
     addDemoRecord,
     makeSellTrade,
@@ -164,13 +165,12 @@ export default function DashboardPage() {
     [navMap, moduleKeys, pinnedList]
   )
 
-  // Active Demo Workspace & User Identity for Current Architecture
-  const activeDemoWorkspace = demoWorkspaces?.[activeArchId] || {}
-  const demoMetrics = activeDemoWorkspace.metrics || {}
+  // Active Live Workspace & User Identity from Database / Context
+  const activeWorkspace = workspaces?.[activeArchId] || demoWorkspaces?.[activeArchId] || {}
   const activeOwnerName =
-    user?.name || activeDemoWorkspace.ownerName || `${currentArch.shortName || 'BOS'} Business Owner`
+    user?.name || activeWorkspace.ownerName || `${user?.email?.split('@')[0] || currentArch.shortName || 'ExBOS'} Owner`
   const activeBusinessName =
-    user?.businessName || activeDemoWorkspace.businessName || `${currentArch.shortName || 'ExBOS'} Enterprise`
+    user?.businessName || activeWorkspace.businessName || `${currentArch.shortName || 'ExBOS'} Enterprise`
   const activeInitials =
     activeBusinessName
       .split(' ')
@@ -196,10 +196,11 @@ export default function DashboardPage() {
 
   // Live aggregated financial and operational data across all navigation modules
   const liveDashboardData = useLiveDashboardData({
-    activeDemoWorkspace,
-    archTransactions,
-    demoMetrics
+    activeWorkspace,
+    archTransactions
   })
+
+  const activeMetrics = activeWorkspace.metrics || {}
 
   // Catalog of customizable widgets
   const AVAILABLE_WIDGETS = useMemo(
@@ -208,11 +209,11 @@ export default function DashboardPage() {
         liveDashboardData,
         hideFinancials,
         navMap,
-        demoMetrics,
+        demoMetrics: activeMetrics,
         handleModuleClick,
         setActivePage
       }),
-    [liveDashboardData, hideFinancials, navMap, demoMetrics]
+    [liveDashboardData, hideFinancials, navMap, activeMetrics]
   )
 
   const isCardVisible = (widget) => {
@@ -259,7 +260,8 @@ export default function DashboardPage() {
 
   // Dynamic business & platform alerts
   const activeBusinessAlerts = useBusinessAlerts({
-    activeDemoWorkspace,
+    activeDemoWorkspace: activeWorkspace,
+    activeWorkspace,
     archTransactions,
     activeArchId,
     hideFinancials,

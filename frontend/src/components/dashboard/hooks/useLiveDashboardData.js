@@ -1,19 +1,25 @@
 import { useMemo } from 'react'
 
 export function useLiveDashboardData({
+  activeWorkspace = {},
   activeDemoWorkspace = {},
   archTransactions = [],
   demoMetrics = {}
 }) {
   return useMemo(() => {
-    const records = activeDemoWorkspace.records || {}
-    const salesList = records['Sales'] || []
-    const purchasesList = records['Purchases'] || []
-    const expensesList = records['Expenses'] || []
-    const inventoryList = records['Inventory'] || []
-    const customersList = records['Customers'] || []
-    const suppliersList = records['Suppliers'] || []
-    const productionList = records['Production'] || []
+    const ws = activeWorkspace?.records ? activeWorkspace : activeDemoWorkspace
+    const records = ws.records || {}
+    const salesList = Array.isArray(records['Sales']) ? records['Sales'] : []
+    const purchasesList = Array.isArray(records['Purchases']) ? records['Purchases'] : []
+    const expensesList = Array.isArray(records['Expenses']) ? records['Expenses'] : []
+    const inventoryList = Array.isArray(records['Inventory'])
+      ? records['Inventory']
+      : Array.isArray(records['Products'])
+      ? records['Products']
+      : []
+    const customersList = Array.isArray(records['Customers']) ? records['Customers'] : []
+    const suppliersList = Array.isArray(records['Suppliers']) ? records['Suppliers'] : []
+    const productionList = Array.isArray(records['Production']) ? records['Production'] : []
 
     const inTx = archTransactions
       .filter((t) => t.type === 'in')
@@ -22,52 +28,36 @@ export function useLiveDashboardData({
       .filter((t) => t.type === 'out')
       .reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
 
-    const rawSales =
-      salesList.reduce((acc, s) => acc + (Number(s.amountRWF) || 0), 0) + inTx
+    // Compute strictly from live database records and transactions
     const totalSales =
-      rawSales > 0 ? rawSales : demoMetrics.monthlyRevenueRWF ?? 0
+      salesList.reduce((acc, s) => acc + (Number(s.amountRWF || s.totalAmount || s.amount) || 0), 0) + inTx
 
-    const rawPurchases = purchasesList.reduce(
-      (acc, p) => acc + (Number(p.amountRWF) || 0),
+    const totalPurchases = purchasesList.reduce(
+      (acc, p) => acc + (Number(p.amountRWF || p.totalAmount || p.amount) || 0),
       0
     )
-    const totalPurchases =
-      rawPurchases > 0 ? rawPurchases : demoMetrics.monthlyPurchasesRWF ?? 0
 
-    const rawExpenses =
-      expensesList.reduce((acc, e) => acc + (Number(e.amountRWF) || 0), 0) + outTx
     const totalExpenses =
-      rawExpenses > 0
-        ? rawExpenses
-        : demoMetrics.todayCostsRWF
-        ? demoMetrics.todayCostsRWF * 22
-        : 0
+      expensesList.reduce((acc, e) => acc + (Number(e.amountRWF || e.totalAmount || e.amount) || 0), 0) + outTx
 
-    const rawCustDebts = customersList.reduce(
-      (acc, c) => acc + (Number(c.balanceOwedRWF ?? c.amountRWF) || 0),
+    const customerDebts = customersList.reduce(
+      (acc, c) => acc + (Number(c.balanceOwedRWF ?? c.amountRWF ?? c.debt) || 0),
       0
     )
-    const customerDebts =
-      rawCustDebts > 0 ? rawCustDebts : demoMetrics.owedToMeRWF ?? 0
 
-    const rawSuppDebts = suppliersList.reduce(
-      (acc, s) => acc + (Number(s.amountRWF ?? s.balanceOwedRWF) || 0),
+    const supplierDebts = suppliersList.reduce(
+      (acc, s) => acc + (Number(s.balanceOwedRWF ?? s.amountRWF ?? s.debt) || 0),
       0
     )
-    const supplierDebts =
-      rawSuppDebts > 0 ? rawSuppDebts : demoMetrics.iOweSuppliersRWF ?? 0
 
-    const rawStock = inventoryList.reduce((acc, i) => {
-      const q = Number(i.quantity) || 0
-      const c = Number(i.purchasePriceRWF ?? i.unitCostRWF) || 0
+    const stockValue = inventoryList.reduce((acc, i) => {
+      const q = Number(i.currentStock ?? i.stock ?? i.quantity) || 0
+      const c = Number(i.costPerUnitRWF ?? i.unitCost ?? i.purchasePriceRWF ?? i.unitCostRWF ?? i.sellingPriceRWF) || 0
       return acc + q * c
     }, 0)
-    const stockValue = rawStock > 0 ? rawStock : demoMetrics.stockValueRWF ?? 0
 
-    const netProfit =
-      totalSales - totalPurchases - totalExpenses || (demoMetrics.netProfitRWF ?? 0)
-    const spendable =
-      (demoMetrics.spendableRWF ?? 0) || Math.max(0, totalSales - totalExpenses)
+    const netProfit = totalSales - totalPurchases - totalExpenses
+    const spendable = Math.max(0, totalSales - totalExpenses)
 
     return {
       totalSales,
@@ -85,6 +75,6 @@ export function useLiveDashboardData({
       inventoryCount: inventoryList.length,
       productionCount: productionList.length
     }
-  }, [activeDemoWorkspace, archTransactions, demoMetrics])
+  }, [activeWorkspace, activeDemoWorkspace, archTransactions, demoMetrics])
 }
 

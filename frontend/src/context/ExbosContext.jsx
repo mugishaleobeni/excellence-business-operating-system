@@ -67,10 +67,10 @@ export const createCleanWorkspaces = () => {
   SIX_ARCHITECTURES.forEach((arch) => {
     zeroWorkspaces[arch.id] = {
       architectureId: arch.id,
-      ownerName: 'Business Owner',
+      ownerName: '',
       businessName: `${arch.name} Enterprise`,
-      email: 'owner@exbos.rw',
-      phone: '+250 788 000 000',
+      email: '',
+      phone: '',
       location: 'Kigali, Rwanda',
       category: arch.name,
       metrics: {
@@ -619,6 +619,138 @@ export function ExbosProvider({ children }) {
     }).catch(() => {})
   }, [workspaces, transactions, user, businesses, savedAnalyses, integrations, exportHistory, superAdminBroadcast])
 
+  // Global System Toast Notification System
+  const [toasts, setToasts] = useState([])
+
+  const addToast = (toast) => {
+    const id = `TOAST-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`
+    const newToast = {
+      id,
+      type: toast.type || 'error', // 'error' | 'success' | 'info' | 'warning'
+      title: toast.title || (toast.type === 'success' ? 'Success' : toast.type === 'warning' ? 'Notice' : 'Error Notice'),
+      message: toast.message || String(toast)
+    }
+    setToasts((prev) => [...prev, newToast])
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id))
+    }, 4500)
+    return id
+  }
+
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }
+
+  // Network Connectivity & Offline Queue Resilience System
+  const [isOnline, setIsOnline] = useState(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  )
+  const [syncStatus, setSyncStatus] = useState('synced') // 'synced' | 'syncing' | 'offline' | 'pending'
+
+  const getOfflineQueue = () => {
+    try {
+      const q = localStorage.getItem('exbos_offline_queue')
+      return q ? JSON.parse(q) : []
+    } catch {
+      return []
+    }
+  }
+
+  const saveOfflineQueue = (q) => {
+    try {
+      localStorage.setItem('exbos_offline_queue', JSON.stringify(q))
+    } catch {}
+  }
+
+  const enqueueOfflineAction = (action) => {
+    const queue = getOfflineQueue()
+    queue.push(action)
+    saveOfflineQueue(queue)
+    setSyncStatus('pending')
+  }
+
+  const flushOfflineQueue = async () => {
+    const queue = getOfflineQueue()
+    if (!queue || queue.length === 0) {
+      setSyncStatus('synced')
+      return
+    }
+
+    setSyncStatus('syncing')
+    const remaining = []
+    let processedCount = 0
+
+    for (const item of queue) {
+      try {
+        let res
+        if (item.type === 'add') {
+          res = await exbosApi.addModuleRecord(item.archId, item.moduleName, item.entry)
+        } else if (item.type === 'update') {
+          res = await exbosApi.updateModuleRecord(item.archId, item.moduleName, item.recordId, item.updatedFields)
+        } else if (item.type === 'delete') {
+          res = await exbosApi.deleteModuleRecord(item.archId, item.moduleName, item.recordId)
+        } else if (item.type === 'workspace') {
+          res = await exbosApi.patchWorkspace(item.archId, item.payload)
+        }
+        if (res?.ok) {
+          processedCount++
+        } else if (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+          remaining.push(item)
+        }
+      } catch {
+        remaining.push(item)
+      }
+    }
+
+    saveOfflineQueue(remaining)
+    if (remaining.length === 0) {
+      setSyncStatus('synced')
+      if (processedCount > 0) {
+        addToast({
+          type: 'success',
+          title: 'Database Synchronized',
+          message: `${processedCount} offline update${processedCount === 1 ? ' was' : 's were'} synchronized with the database.`
+        })
+      }
+    } else {
+      setSyncStatus('pending')
+    }
+  }
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true)
+      addToast({
+        type: 'info',
+        title: 'Network Restored',
+        message: 'Internet connection re-established. Synchronizing pending updates...'
+      })
+      flushOfflineQueue()
+    }
+
+    const handleOffline = () => {
+      setIsOnline(false)
+      setSyncStatus('offline')
+      addToast({
+        type: 'warning',
+        title: 'Working Offline',
+        message: 'No internet connection detected. Changes are saved locally and will auto-sync when online.'
+      })
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      flushOfflineQueue()
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
 
   const savePendingCalculatorState = (calcData) => {
@@ -649,12 +781,38 @@ export function ExbosProvider({ children }) {
         },
         records: mergedRecords
       }
-      // Immediately persist workspace update to MongoDB backend
-      exbosApi.patchWorkspace(targetArch, {
-        ...updates,
-        metrics: nextWorkspace.metrics,
-        records: updates.records ? mergedRecords : undefined
-      })
+      // Immediately persist workspace update to MongoDB backend or queue if offline
+      const persistWorkspace = async () => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          enqueueOfflineAction({
+            type: 'workspace',
+            archId: targetArch,
+            payload: {
+              ...updates,
+              metrics: nextWorkspace.metrics,
+              records: updates.records ? mergedRecords : undefined
+            }
+          })
+          return
+        }
+        const res = await exbosApi.patchWorkspace(targetArch, {
+          ...updates,
+          metrics: nextWorkspace.metrics,
+          records: updates.records ? mergedRecords : undefined
+        })
+        if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+          enqueueOfflineAction({
+            type: 'workspace',
+            archId: targetArch,
+            payload: {
+              ...updates,
+              metrics: nextWorkspace.metrics,
+              records: updates.records ? mergedRecords : undefined
+            }
+          })
+        }
+      }
+      persistWorkspace()
       return {
         ...prev,
         [targetArch]: nextWorkspace
@@ -755,19 +913,57 @@ export function ExbosProvider({ children }) {
       })
     }
 
-    // Persist to MongoDB with one retry; surface failures instead of silently dropping data
+    // Persist to MongoDB with offline queue fallback
     const persistRecord = async (attempt = 1) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineAction({
+          type: 'add',
+          archId: targetArch,
+          moduleName,
+          entry
+        })
+        addToast({
+          type: 'warning',
+          title: 'Saved Locally (Offline)',
+          message: `"${entry.title || entry.name || entry.id}" saved to device. Will sync to the cloud database once online.`
+        })
+        return
+      }
+
       const res = await exbosApi.addModuleRecord(targetArch, moduleName, entry)
       if (res?.ok) return
+
+      if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+        enqueueOfflineAction({
+          type: 'add',
+          archId: targetArch,
+          moduleName,
+          entry
+        })
+        addToast({
+          type: 'warning',
+          title: 'Saved Locally',
+          message: `"${entry.title || entry.name || entry.id}" saved locally. Network issue detected; changes will sync once reconnected.`
+        })
+        return
+      }
+
       if (attempt < 2) {
         setTimeout(() => persistRecord(attempt + 1), 1500)
         return
       }
-      console.error('Record not saved to database:', moduleName, entry.id, res?.error)
+
+      console.warn('Record queued for retry due to server error:', moduleName, entry.id, res?.error)
+      enqueueOfflineAction({
+        type: 'add',
+        archId: targetArch,
+        moduleName,
+        entry
+      })
       addToast({
-        type: 'error',
-        title: 'Not Saved to Database',
-        message: `"${entry.title || entry.name || entry.id}" could not be saved to the server (${res?.error || 'network error'}). Please try again.`
+        type: 'warning',
+        title: 'Saved Locally',
+        message: `"${entry.title || entry.name || entry.id}" saved locally. Will retry syncing to the database automatically.`
       })
     }
     persistRecord()
@@ -778,7 +974,29 @@ export function ExbosProvider({ children }) {
   const deleteRecord = (archId, moduleName, recordId) => {
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
-    exbosApi.deleteModuleRecord(targetArch, moduleName, recordId)
+
+    const persistDelete = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineAction({
+          type: 'delete',
+          archId: targetArch,
+          moduleName,
+          recordId
+        })
+        return
+      }
+      const res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recordId)
+      if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+        enqueueOfflineAction({
+          type: 'delete',
+          archId: targetArch,
+          moduleName,
+          recordId
+        })
+      }
+    }
+    persistDelete()
+
     setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
@@ -800,7 +1018,30 @@ export function ExbosProvider({ children }) {
   const updateRecord = (archId, moduleName, recordId, updatedFields) => {
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
-    exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
+
+    const persistUpdate = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineAction({
+          type: 'update',
+          archId: targetArch,
+          moduleName,
+          recordId,
+          updatedFields
+        })
+        return
+      }
+      const res = await exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
+      if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+        enqueueOfflineAction({
+          type: 'update',
+          archId: targetArch,
+          moduleName,
+          recordId,
+          updatedFields
+        })
+      }
+    }
+    persistUpdate()
     setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
@@ -909,6 +1150,14 @@ export function ExbosProvider({ children }) {
 
     setWorkspaces((prev) => {
       const base = prev['services'] || {}
+      const existingCategories = Array.isArray(base.records?.Categories) && base.records.Categories.length > 0
+        ? base.records.Categories
+        : (preset.categories || []).map((catName, idx) => ({
+            id: `cat-${idx + 1}`,
+            name: catName,
+            status: 'Active'
+          }))
+
       return {
         ...prev,
         services: {
@@ -922,11 +1171,11 @@ export function ExbosProvider({ children }) {
           },
           records: {
             ...(base.records || {}),
-            Services: [...(preset.services || [])],
-            Consumables: [...(preset.consumables || [])],
-            Staff: [...(preset.staff || [])],
-            Jobs: [...(preset.jobs || [])],
-            Categories: [...(preset.categories || [])]
+            Services: Array.isArray(base.records?.Services) ? base.records.Services : [],
+            Consumables: Array.isArray(base.records?.Consumables) ? base.records.Consumables : [],
+            Staff: Array.isArray(base.records?.Staff) ? base.records.Staff : [],
+            Jobs: Array.isArray(base.records?.Jobs) ? base.records.Jobs : [],
+            Categories: existingCategories
           }
         }
       }
@@ -956,12 +1205,12 @@ export function ExbosProvider({ children }) {
           },
           records: {
             ...(base.records || {}),
-            Animals: [...(preset.animals || [])],
-            Batches: [...(preset.batches || [])],
-            Feeds: [...(preset.feeds || [])],
-            Gestations: [...(preset.gestations || [])],
-            HealthRecords: [...(preset.healthRecords || [])],
-            Production: [...(preset.production || [])]
+            Animals: Array.isArray(base.records?.Animals) ? base.records.Animals : [],
+            Batches: Array.isArray(base.records?.Batches) ? base.records.Batches : [],
+            Feeds: Array.isArray(base.records?.Feeds) ? base.records.Feeds : [],
+            Gestations: Array.isArray(base.records?.Gestations) ? base.records.Gestations : [],
+            HealthRecords: Array.isArray(base.records?.HealthRecords) ? base.records.HealthRecords : [],
+            Production: Array.isArray(base.records?.Production) ? base.records.Production : []
           }
         }
       }
@@ -992,12 +1241,12 @@ export function ExbosProvider({ children }) {
           },
           records: {
             ...(base.records || {}),
-            MenuItems: [...(preset.menuItems || [])],
-            KitchenOrders: [...(preset.kitchenOrders || [])],
-            Ingredients: [...(preset.ingredients || [])],
-            Rooms: [...(preset.rooms || [])],
-            GuestFolios: [...(preset.guestFolios || [])],
-            WasteLogs: [...(preset.wasteLogs || [])]
+            MenuItems: Array.isArray(base.records?.MenuItems) ? base.records.MenuItems : [],
+            KitchenOrders: Array.isArray(base.records?.KitchenOrders) ? base.records.KitchenOrders : [],
+            Ingredients: Array.isArray(base.records?.Ingredients) ? base.records.Ingredients : [],
+            Rooms: Array.isArray(base.records?.Rooms) ? base.records.Rooms : [],
+            GuestFolios: Array.isArray(base.records?.GuestFolios) ? base.records.GuestFolios : [],
+            WasteLogs: Array.isArray(base.records?.WasteLogs) ? base.records.WasteLogs : []
           }
         }
       }
@@ -1035,8 +1284,8 @@ export function ExbosProvider({ children }) {
           },
           records: {
             ...(base.records || {}),
-            HybridItems: [...(preset.items || [])],
-            MixedSales: [...(preset.mixedSales || [])]
+            HybridItems: Array.isArray(base.records?.HybridItems) ? base.records.HybridItems : [],
+            MixedSales: Array.isArray(base.records?.MixedSales) ? base.records.MixedSales : []
           }
         }
       }
@@ -1252,28 +1501,6 @@ export function ExbosProvider({ children }) {
     })
   }
 
-  // Global System Toast Notification System
-  const [toasts, setToasts] = useState([])
-
-  const addToast = (toast) => {
-    const id = `TOAST-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`
-    const newToast = {
-      id,
-      type: toast.type || 'error', // 'error' | 'success' | 'info'
-      title: toast.title || (toast.type === 'success' ? 'Success' : 'Error Notice'),
-      message: toast.message || String(toast)
-    }
-    setToasts((prev) => [...prev, newToast])
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id))
-    }, 4500)
-    return id
-  }
-
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
-  }
-
   return (
     <ExbosContext.Provider
       value={{
@@ -1286,6 +1513,9 @@ export function ExbosProvider({ children }) {
         toasts,
         addToast,
         removeToast,
+        isOnline,
+        syncStatus,
+        flushOfflineQueue,
         user,
         setUser,
         login,
