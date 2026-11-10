@@ -23,6 +23,9 @@ import {
 } from 'lucide-react'
 import exbosLogo from '../../../../logo/exboslogo.png'
 import { formatRWF } from '../../../utils/currencyWords'
+import { useExbos } from '../../../context/ExbosContext'
+import TradeSelectionModal from '../make-and-sell/modals/TradeSelectionModal'
+import { TRADE_PRESETS } from '../make-and-sell/data/tradePresets'
 
 export default function MobileFintechDashboardHeader({
   user,
@@ -40,6 +43,9 @@ export default function MobileFintechDashboardHeader({
 }) {
   const [selectedMetric, setSelectedMetric] = useState('netProfit')
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [craftModalOpen, setCraftModalOpen] = useState(false)
+  const { makeSellTrade, applyMakeSellTrade } = useExbos?.() || {}
+  const currentCraft = TRADE_PRESETS[makeSellTrade] || TRADE_PRESETS.tailoring
   const [userStatus, setUserStatus] = useState(() => {
     try {
       return localStorage.getItem('exbos_user_status') || 'Online'
@@ -241,20 +247,33 @@ export default function MobileFintechDashboardHeader({
 
         {/* Card Header: Business Account Type */}
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <span className="text-xs sm:text-sm font-bold text-white block">
+          <div className="min-w-0 flex-1">
+            <span className="text-xs sm:text-sm font-bold text-white block truncate">
               {user?.businessName || currentArch?.name || 'Operating Account'}
             </span>
             {user?.businessName && currentArch?.name && (
-              <span className="text-[11px] text-slate-300 block mt-0.5">
+              <span className="text-[11px] text-slate-300 block mt-0.5 truncate">
                 {currentArch.name}
               </span>
             )}
           </div>
 
-          <span className="px-2.5 py-1 rounded-full bg-[#132A58] border border-[#234C9A]/60 text-[10px] font-orbitron uppercase text-[#9EDCFF] font-bold shrink-0">
-            Active
-          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {currentArch?.id === 'make-and-sell' && (
+              <button
+                type="button"
+                onClick={() => setCraftModalOpen(true)}
+                className="px-2.5 py-1 rounded-full bg-[#218DFF]/20 hover:bg-[#218DFF]/30 border border-[#218DFF]/40 text-[10px] font-bold text-[#9EDCFF] flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                title="Change Workshop Craft & Preset"
+              >
+                <span className="truncate max-w-[110px]">{currentCraft.name}</span>
+                <ChevronDown className="w-3 h-3 text-[#9EDCFF] shrink-0" />
+              </button>
+            )}
+            <span className="px-2.5 py-1 rounded-full bg-[#132A58] border border-[#234C9A]/60 text-[10px] font-orbitron uppercase text-[#9EDCFF] font-bold shrink-0">
+              Active
+            </span>
+          </div>
         </div>
 
         {/* Segmented Control Pill (from Image 2) */}
@@ -385,6 +404,20 @@ export default function MobileFintechDashboardHeader({
           })}
         </div>
       </div>
+
+      {/* Workshop Craft Selection Modal for Mobile */}
+      {currentArch?.id === 'make-and-sell' && (
+        <TradeSelectionModal
+          isOpen={craftModalOpen}
+          onClose={() => setCraftModalOpen(false)}
+          currentTradeId={makeSellTrade}
+          onSelectTrade={(newTradeId) => {
+            if (applyMakeSellTrade) applyMakeSellTrade(newTradeId)
+            setCraftModalOpen(false)
+          }}
+          isFirstTimePrompt={false}
+        />
+      )}
     </div>
   )
 }

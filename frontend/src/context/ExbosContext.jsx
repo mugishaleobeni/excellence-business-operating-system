@@ -106,10 +106,14 @@ export function sanitizeUserWorkspaces(data) {
     const knownSeedIds = [
       'SALE-101', 'PURCH-301', 'PURCH-302', 'CUST-001', 'CUST-002',
       'SUP-001', 'SUP-002', 'EXP-201', 'JOB-201', 'JOB-202', 'JOB-203', 'JOB-204',
-      'HYB-001', 'HYB-002', 'HYB-003', 'HYB-004', 'HYB-005', 'HYB-006'
+      'HYB-001', 'HYB-002', 'HYB-003', 'HYB-004', 'HYB-005', 'HYB-006',
+      'PROD-SUIT-01', 'PROD-DRESS-02', 'PROD-SHRT-03', 'RUN-SUIT-01', 'RUN-DRESS-02', 'RUN-SHRT-03',
+      'REC-SUIT-01', 'REC-DRESS-02', 'RUN-SUIT-101', 'RUN-DRESS-102',
+      'PROD-TBL-01', 'PROD-CHR-02', 'PROD-CAB-03', 'PROD-JUICE-01', 'PROD-JUICE-02',
+      'PROD-GATE-01', 'PROD-GRILL-02', 'REC-TBL-01', 'REC-JUICE-01', 'REC-GATE-01'
     ]
     if (knownSeedIds.includes(id)) return true
-    if (/^(PRD|INV|SAL|PUR|CUS|SUP|EXP)-[1-6]0[1-9]$/.test(id)) return true
+    if (/^(PRD|INV|SAL|PUR|CUS|SUP|EXP|RUN|REC)-[1-6]0[1-9]$/.test(id)) return true
     const seedTitles = [
       'cimerwa cement', 'sadolin paint', 'twyford ceramic', 'brioche loaves',
       'wedding tier cake', 'azania wheat flour', 'azania premium wheat flour',
@@ -117,7 +121,10 @@ export function sanitizeUserWorkspaces(data) {
       'samsung a55', 'supermarket a (kigali heights)', 'sawa city supermarket',
       'bakhresa grain milling', 'kabuye sugar works', 'standard sandwich loaf',
       'workshop rent', 'kitenge fabric', 'sewing thread', 'men tailored suit',
-      'ankara evening dress', 'sow mama', 'grilled tilapia', 'screen assembly'
+      'ankara evening dress', 'sow mama', 'grilled tilapia', 'screen assembly',
+      'italian wool suit', 'kitenge flared midi dress', 'fitted long-sleeve cotton shirt',
+      'custom 2-piece', 'mahogany planed hardwood', 'planed hardwood', 'brass zippers',
+      'dining table', 'passion fruit juice', 'sliding security gate'
     ]
     const textToScan = `${item.title || ''} ${item.name || ''} ${item.customer || ''} ${item.supplier || ''} ${item.productName || ''} ${item.materialName || ''}`.toLowerCase()
     return seedTitles.some((d) => textToScan.includes(d))
@@ -843,8 +850,31 @@ export function ExbosProvider({ children }) {
       localStorage.setItem('exbos_make_sell_trade', tradeKey)
     } catch {}
 
+    // Persist to MongoDB backend in user profile and workspace preset
+    try {
+      if (user?.email) {
+        exbosApi.updateProfile({ activeTradePresetId: tradeKey, architectureId: 'make-and-sell' }).catch(() => {})
+      }
+      fetch('/api/v1/workspaces/make-and-sell/preset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
+        },
+        body: JSON.stringify({ presetId: tradeKey, businessName: preset.businessName, attentionHeadline: preset.attentionHeadline })
+      }).catch(() => {})
+    } catch {}
+
     setWorkspaces((prev) => {
       const base = prev['make-and-sell'] || {}
+      const existingCategories = Array.isArray(base.records?.Categories) && base.records.Categories.length > 0
+        ? base.records.Categories
+        : (preset.categories || []).map((catName, idx) => ({
+            id: `cat-${idx + 1}`,
+            name: catName,
+            status: 'Active'
+          }))
+
       return {
         ...prev,
         'make-and-sell': {
@@ -858,11 +888,11 @@ export function ExbosProvider({ children }) {
           },
           records: {
             ...(base.records || {}),
-            RawMaterials: [...(preset.rawMaterials || [])],
-            Inventory: [...(preset.finishedGoods || [])],
-            Production: [...(preset.productionBatches || [])],
-            Recipes: [...(preset.recipes || [])],
-            Categories: [...(preset.categories || [])]
+            RawMaterials: Array.isArray(base.records?.RawMaterials) ? base.records.RawMaterials : [],
+            Inventory: Array.isArray(base.records?.Inventory) ? base.records.Inventory : [],
+            Production: Array.isArray(base.records?.Production) ? base.records.Production : [],
+            Recipes: Array.isArray(base.records?.Recipes) ? base.records.Recipes : [],
+            Categories: existingCategories
           }
         }
       }

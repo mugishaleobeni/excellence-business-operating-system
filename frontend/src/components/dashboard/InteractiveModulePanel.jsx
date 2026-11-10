@@ -78,6 +78,8 @@ import AlertsAndDeadStockView from "./views/AlertsAndDeadStockView"
 import TeamPermissionsView from "./settings/TeamPermissionsView"
 import SubscriptionBillingView from "./settings/SubscriptionBillingView"
 import BusinessActivitiesSettingsView from "./settings/BusinessActivitiesSettingsView"
+import ActiveTradeBadge from "./make-and-sell/components/ActiveTradeBadge"
+import { TRADE_PRESETS } from "./make-and-sell/data/tradePresets"
 const KpiCards = ModuleKpiCards || NamedModuleKpiCards
 
 export default function InteractiveModulePanel({
@@ -103,7 +105,9 @@ export default function InteractiveModulePanel({
     resetDemoData,
     transactions,
     addTransaction,
-    addToast
+    addToast,
+    makeSellTrade,
+    applyMakeSellTrade
   } = useExbos()
 
   const workspace =
@@ -1447,6 +1451,27 @@ export default function InteractiveModulePanel({
                 </button>
               </div>
             </div>
+
+            {/* Workshop Craft & Industry Preset for Make & Sell */}
+            {activeArchId === 'make-and-sell' && (
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/10 flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <span className="text-[11px] font-orbitron uppercase tracking-wider text-[#218DFF] font-bold block">
+                    Workshop Craft &amp; Industry Preset
+                  </span>
+                  <span className="text-xs text-slate-300 block mt-0.5">
+                    Active Craft: <strong className="text-white">{TRADE_PRESETS[makeSellTrade]?.name || 'Tailoring & Garments'}</strong>
+                  </span>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Configures standard units ({TRADE_PRESETS[makeSellTrade]?.units?.join(', ') || 'm, pcs'}), material &amp; product categories. Saved directly in your cloud database.
+                  </p>
+                </div>
+                <ActiveTradeBadge
+                  activeTradeId={makeSellTrade}
+                  onSelectTrade={applyMakeSellTrade}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div className="space-y-1">

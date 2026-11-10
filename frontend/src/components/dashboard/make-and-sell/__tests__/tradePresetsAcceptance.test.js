@@ -1,5 +1,7 @@
 /**
  * ExBOS Make & Sell: Multi-Trade Presets Acceptance Tests
+ * Verifies all 7 craft presets configure domain metadata, units, and categories
+ * with zero hardcoded demo inventory (ready for live DB records).
  */
 
 import assert from 'assert'
@@ -20,48 +22,30 @@ const tailoring = TRADE_PRESETS.tailoring
 assert.strictEqual(tailoring.category, 'Fashion & Garments')
 assert(tailoring.units.includes('m'), 'Tailoring must support meters (m)')
 assert(tailoring.units.includes('yd'), 'Tailoring must support yards (yd)')
-const suit = tailoring.finishedGoods.find((p) => p.name.includes('Suit'))
-assert(suit, 'Tailoring must include tailored suits')
-assert.strictEqual(suit.sellingPriceRWF, 145000)
-assert.strictEqual(suit.costPerUnitRWF, 81400)
-const suitProfit = suit.sellingPriceRWF - suit.costPerUnitRWF
-assert.strictEqual(suitProfit, 63600, 'Direct profit on custom suit must be 63,600 RWF')
-const suitMargin = Math.round((suitProfit / suit.sellingPriceRWF) * 100)
-assert.strictEqual(suitMargin, 44, 'Suit gross margin must be 44%')
-console.log('[PASS] Test 2: Tailoring trade has meters, wool suits, and exact 44% unit profit margin')
+assert.strictEqual(tailoring.finishedGoods.length, 0, 'Tailoring finishedGoods must start empty for real data entry')
+console.log('[PASS] Test 2: Tailoring trade has meters, yards, and clean zero-demo goods list')
 
 // Test 3: Carpentry trade specifications
 const carpentry = TRADE_PRESETS.carpentry
 assert.strictEqual(carpentry.category, 'Furniture & Woodworking')
 assert(carpentry.units.includes('m'), 'Carpentry must support meters (m)')
-const table = carpentry.finishedGoods.find((p) => p.name.includes('Dining Table'))
-assert(table, 'Carpentry must include dining table')
-assert.strictEqual(table.sellingPriceRWF, 380000)
-assert.strictEqual(table.costPerUnitRWF, 206100)
-const tableProfit = table.sellingPriceRWF - table.costPerUnitRWF
-assert.strictEqual(tableProfit, 173900, 'Direct profit on dining table must be 173,900 RWF')
-console.log('[PASS] Test 3: Carpentry trade has timber in meters, dining tables, and 173,900 RWF unit profit')
+assert.strictEqual(carpentry.finishedGoods.length, 0, 'Carpentry finishedGoods must start empty for real data entry')
+console.log('[PASS] Test 3: Carpentry trade has timber in meters and clean zero-demo goods list')
 
 // Test 4: Beverage trade specifications
 const beverage = TRADE_PRESETS.beverage
 assert.strictEqual(beverage.category, 'Beverages & Food Processing')
 assert(beverage.units.includes('L'), 'Beverages must support liters (L)')
 assert(beverage.units.includes('ml'), 'Beverages must support milliliters (ml)')
-const juice = beverage.finishedGoods.find((p) => p.name.includes('Passion Fruit Juice'))
-assert(juice, 'Beverage must include bottled passion fruit juice')
-assert.strictEqual(juice.sellingPriceRWF, 1200)
-assert.strictEqual(juice.shelfLifeDays, 30, 'Juice shelf life must be 30 days')
-console.log('[PASS] Test 4: Beverage trade has liters/ml, PET bottles, juices, and shelf life')
+assert.strictEqual(beverage.finishedGoods.length, 0, 'Beverage finishedGoods must start empty for real data entry')
+console.log('[PASS] Test 4: Beverage trade has liters/ml and clean zero-demo goods list')
 
 // Test 5: Metalwork trade specifications
 const metalwork = TRADE_PRESETS.metalwork
 assert.strictEqual(metalwork.category, 'Metal Fabrication')
 assert(metalwork.units.includes('m'), 'Metalwork must support meters (m)')
-const gate = metalwork.finishedGoods.find((p) => p.name.includes('Sliding Security Gate'))
-assert(gate, 'Metalwork must include sliding security gate')
-assert.strictEqual(gate.sellingPriceRWF, 520000)
-assert.strictEqual(gate.costPerUnitRWF, 344100)
-console.log('[PASS] Test 5: Metalwork trade has steel tubes in meters, welding rods, and sliding security gates')
+assert.strictEqual(metalwork.finishedGoods.length, 0, 'Metalwork finishedGoods must start empty for real data entry')
+console.log('[PASS] Test 5: Metalwork trade has steel units in meters and clean zero-demo goods list')
 
 // Test 6: Clean Slate / Zero-Base specifications
 const clean = TRADE_PRESETS.clean_slate

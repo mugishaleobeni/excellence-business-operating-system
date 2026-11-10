@@ -36,8 +36,7 @@ export const SIX_ARCHITECTURES = [
       'Most makers price by guessing and discover too late that raw material price increases wiped out their profit. ExBOS links your recipes and material costs directly to every batch so you know your exact unit margin before selling.',
     navigation: {
       Overview: ['Dashboard', 'Where Is My Money', 'Production Alerts'],
-      Stock: ['Finished Goods', 'Raw Materials', 'Low Stock', 'Categories'],
-      Production: ['Runs', 'Recipes & Formulas', 'In Progress', 'Completed Runs'],
+      Stock: ['Finished Goods', 'Raw Materials', 'Batch Runs', 'Recipes & Formulas', 'Low Stock', 'Categories'],
       Sales: ['All Sales', 'Sales Trends'],
       Purchases: ['All Purchases', 'Unpaid Purchases', 'Purchase Returns'],
       Customers: ['Customer Directory', 'Outstanding Balances'],

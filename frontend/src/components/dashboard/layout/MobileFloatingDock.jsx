@@ -47,18 +47,21 @@ export default function MobileFloatingDock({
     },
     {
       id: 'products',
-      label: 'Products',
+      label: currentArch?.id === 'make-and-sell' ? 'Stock' : 'Products',
       icon: Wallet,
       isActive:
         activeModule === 'Products' ||
         activeModule === 'Products & Stock' ||
+        activeModule === 'Stock' ||
         activeModule === 'Inventory' ||
         activeModule === 'Livestock',
       action: () => {
+        const targetMod = currentArch?.id === 'make-and-sell' ? 'Stock' : 'Products'
+        const targetPage = currentArch?.id === 'make-and-sell' ? 'Finished Goods' : 'Stock'
         if (navigateToModulePage) {
-          navigateToModulePage('Products', 'Stock')
+          navigateToModulePage(targetMod, targetPage)
         } else if (handleModuleClick) {
-          handleModuleClick('Products')
+          handleModuleClick(targetMod)
         }
         if (mobileSidebarOpen) setMobileSidebarOpen(false)
       }
@@ -86,6 +89,7 @@ export default function MobileFloatingDock({
         (activeModule !== 'Overview' &&
           activeModule !== 'Sales' &&
           activeModule !== 'Products' &&
+          activeModule !== 'Stock' &&
           activeModule !== 'Products & Stock' &&
           activeModule !== 'Inventory' &&
           activeModule !== 'Livestock' &&

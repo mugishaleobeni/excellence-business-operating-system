@@ -854,8 +854,43 @@ export default function StockWorkspace({
               <tbody className="divide-y divide-white/5 text-slate-300">
                 {filteredFinishedGoods.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400">
-                      No finished products found matching search criteria.
+                    <td colSpan={8} className="p-12 text-center text-slate-400">
+                      <div className="w-12 h-12 mx-auto rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#9EDCFF] mb-3">
+                        <Package className="w-6 h-6" />
+                      </div>
+                      <div className="text-sm font-bold text-white font-orbitron mb-1">
+                        {finishedGoods.length === 0
+                          ? 'No Finished Products Recorded Yet'
+                          : 'No finished products found matching search criteria'}
+                      </div>
+                      <p className="text-xs text-slate-400 max-w-sm mx-auto mb-4">
+                        {finishedGoods.length === 0
+                          ? 'All demo items have been cleared. Click "+ New Product" above to record your first real manufactured product.'
+                          : 'Try adjusting your search query or category filter.'}
+                      </p>
+                      {finishedGoods.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingProd(null)
+                            setProdName('')
+                            setProdCategory('')
+                            setProdBatchCode(`LOT-${Date.now().toString().slice(-4)}`)
+                            setProdStock(0)
+                            setProdUnit(tradePresets?.units?.[0] || 'pcs')
+                            setProdPrice(0)
+                            setProdCost(0)
+                            setProdExpiry('')
+                            setProdReorderLevel(10)
+                            setDrawerType('product')
+                            setDrawerOpen(true)
+                          }}
+                          className="px-4 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold transition-all shadow-md inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>+ New Product</span>
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ) : (

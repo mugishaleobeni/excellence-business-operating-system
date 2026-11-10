@@ -134,6 +134,29 @@ export default function MakeSellWorkspace({
   // Subpage router
   switch (activeModule) {
     case 'Stock':
+      if (activePage === 'Batch Runs' || activePage === 'Recipes & Formulas' || activePage === 'Runs' || activePage === 'In Progress' || activePage === 'Completed Runs') {
+        return (
+          <ProductionWorkspace
+            activeSubPage={activePage === 'Batch Runs' ? 'Runs' : activePage}
+            batches={batches}
+            recipes={recipes}
+            rawMaterials={rawMaterials}
+            finishedGoods={finishedGoods}
+            onUpdateBatches={handleUpdateBatches}
+            onUpdateRecipes={handleUpdateRecipes}
+            onUpdateRawMaterials={handleUpdateRawMaterials}
+            onUpdateFinishedGoods={handleUpdateFinishedGoods}
+            onOpenCreatePurchase={() => {
+              if (onSwitchPage) {
+                onSwitchPage('Purchases', 'All Purchases')
+              }
+            }}
+            isCashier={isCashier}
+            hideFinancials={hideFinancials}
+            addToast={addToast}
+          />
+        )
+      }
       return (
         <StockWorkspace
           activeSubPage={activePage}
