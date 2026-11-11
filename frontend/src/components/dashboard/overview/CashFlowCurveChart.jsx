@@ -225,12 +225,12 @@ export default function CashFlowCurveChart({
   }, [currentChartData])
 
   // SVG Geometry Dimensions
-  const svgWidth = 880
-  const svgHeight = 290
-  const paddingLeft = 68
-  const paddingRight = 28
-  const paddingTop = 36
-  const paddingBottom = 42
+  const svgWidth = 840
+  const svgHeight = 280
+  const paddingLeft = 20
+  const paddingRight = 20
+  const paddingTop = 28
+  const paddingBottom = 32
 
   // Determine scale range based on current graphMode & metricFocus
   const { minVal, maxVal, range } = useMemo(() => {
@@ -676,160 +676,180 @@ export default function CashFlowCurveChart({
 
       {/* SVG GRAPH CANVAS WITH RESPONSIVE Y-AXIS AND INTERACTIVE MODES */}
       <div className="relative pt-2 sm:pt-4 pb-2 select-none w-full">
-        {/* DESKTOP-ONLY FLOATING TOOLTIP */}
-        {activePoint && (
-          <div
-            className="hidden sm:flex absolute z-30 flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
-            style={{
-              left: `${(activePoint.x / svgWidth) * 100}%`,
-              top: `${Math.max(4, activePoint.y - 82)}px`,
-              transform: `translateX(${tooltipTranslateX})`
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#218DFF]" />
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                {activeData.label} Inflow:
-              </span>
-              <strong className="font-orbitron text-xs sm:text-sm font-extrabold text-white">
-                {formatRWF(activeData.income, hideFinancials)}
-              </strong>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 font-bold text-[10px]">
-                {activeData.change || '+0%'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 text-[11px] pt-1 border-t border-white/10 w-full justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-rose-400" />
-                <span className="text-slate-300">Outflow:</span>
-                <strong className="text-rose-300 font-bold">
-                  {formatRWF(activeData.expense, hideFinancials)}
-                </strong>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400">{graphMode === 'cumulative' ? 'Reserve:' : 'Net:'}</span>
-                <strong className="text-emerald-400 font-bold font-orbitron">
-                  {graphMode === 'cumulative'
-                    ? formatRWF(activeData.cumulative, hideFinancials)
-                    : `+${formatRWF(activeData.income - activeData.expense, hideFinancials)}`}
-                </strong>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SVG DRAWING CANVAS */}
-        <div
-          ref={svgRef}
-          onTouchStart={handleTouchScrub}
-          onTouchMove={handleTouchScrub}
-          className="w-full overflow-hidden touch-pan-y"
-        >
-          <svg
-            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-            preserveAspectRatio="xMidYMid meet"
-            className="w-full h-52 sm:h-80 overflow-visible"
-          >
-            <defs>
-              {/* Spline Area Gradients */}
-              <linearGradient id="sapphireWaveGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#218DFF" stopOpacity="0.55" />
-                <stop offset="60%" stopColor="#1045CA" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
-              </linearGradient>
-
-              <linearGradient id="expenseWaveGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
-                <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.01" />
-              </linearGradient>
-
-              <linearGradient id="cumulativeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#10b981" stopOpacity="0.50" />
-                <stop offset="50%" stopColor="#218DFF" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
-              </linearGradient>
-
-              {/* Bar Gradients */}
-              <linearGradient id="barIncGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#218DFF" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#1045CA" stopOpacity="0.75" />
-              </linearGradient>
-
-              <linearGradient id="barExpGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fb7185" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#e11d48" stopOpacity="0.75" />
-              </linearGradient>
-
-              <linearGradient id="velPosGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#34d399" stopOpacity="0.95" />
-                <stop offset="100%" stopColor="#059669" stopOpacity="0.75" />
-              </linearGradient>
-
-              <linearGradient id="velNegGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.75" />
-                <stop offset="100%" stopColor="#be123c" stopOpacity="0.95" />
-              </linearGradient>
-
-              <filter id="glowSapphire" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3.5" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
-            </defs>
-
-            {/* Currency Scale Indicator */}
-            <text
-              x={paddingLeft - 10}
-              y={paddingTop - 12}
-              textAnchor="end"
-              fill="#9EDCFF"
-              fontSize="10"
-              fontWeight="800"
-              fontFamily="Orbitron, sans-serif"
+        {/* GRAPH ROW: DEDICATED HTML Y-AXIS SCALE + SVG DRAWING CANVAS */}
+        <div className="flex items-stretch gap-1.5 sm:gap-2.5 w-full">
+          {/* DEDICATED HTML Y-AXIS SCALE (Crisp true font sizes on mobile & desktop, immune to SVG viewBox scaling) */}
+          <div className="w-11 sm:w-16 flex-shrink-0 relative select-none h-52 sm:h-80 pointer-events-none">
+            {/* Currency Indicator at top */}
+            <div
+              className="absolute right-1 sm:right-2 transform -translate-y-full pb-1 text-right"
+              style={{ top: `${(paddingTop / svgHeight) * 100}%` }}
             >
-              RWF
-            </text>
+              <span className="font-orbitron text-[11px] sm:text-xs font-black text-[#9EDCFF] tracking-wider uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                RWF
+              </span>
+            </div>
 
-            {/* Horizontal Y-Axis Gridlines & Range Markers */}
+            {/* Step Values */}
             {yAxisSteps.map((step, i) => {
-              const yPos = paddingTop + step.pct * (svgHeight - paddingTop - paddingBottom)
+              const topPct = ((paddingTop + step.pct * (svgHeight - paddingTop - paddingBottom)) / svgHeight) * 100
               const isBaseline = i === yAxisSteps.length - 1
               return (
-                <g key={i}>
-                  <line
-                    x1={paddingLeft}
-                    y1={yPos}
-                    x2={svgWidth - paddingRight}
-                    y2={yPos}
-                    stroke={isBaseline ? 'rgba(255,255,255,0.30)' : 'rgba(255,255,255,0.12)'}
-                    strokeDasharray={isBaseline ? 'none' : '4 4'}
-                    strokeWidth={isBaseline ? '1.5' : '1'}
-                  />
-                  {/* Subtle axis tick */}
-                  <line
-                    x1={paddingLeft - 6}
-                    y1={yPos}
-                    x2={paddingLeft}
-                    y2={yPos}
-                    stroke={isBaseline ? '#9EDCFF' : 'rgba(255,255,255,0.4)'}
-                    strokeWidth="1.5"
-                  />
-                  {/* High contrast, prominent Y-Axis Number Scale */}
-                  <text
-                    x={paddingLeft - 12}
-                    y={yPos + 4}
-                    textAnchor="end"
-                    fill={isBaseline ? '#cbd5e1' : '#ffffff'}
-                    fontSize="11"
-                    fontWeight="700"
-                    fontFamily="Orbitron, sans-serif"
-                    style={{ textShadow: '0 1px 4px rgba(0,0,0,0.9)' }}
+                <div
+                  key={i}
+                  className="absolute right-1 sm:right-2 transform -translate-y-1/2 flex items-center justify-end text-right"
+                  style={{ top: `${topPct}%` }}
+                >
+                  <span
+                    className={`font-orbitron text-xs sm:text-sm font-black tracking-tight ${
+                      isBaseline ? 'text-slate-300' : 'text-white'
+                    } drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]`}
                   >
                     {formatShortMoney(step.val)}
-                  </text>
-                </g>
+                  </span>
+                </div>
               )
             })}
+          </div>
+
+          {/* SVG DRAWING CANVAS CONTAINER */}
+          <div
+            ref={svgRef}
+            onTouchStart={handleTouchScrub}
+            onTouchMove={handleTouchScrub}
+            className="flex-1 min-w-0 touch-pan-y relative"
+          >
+            {/* DESKTOP-ONLY FLOATING TOOLTIP */}
+            {activePoint && (
+              <div
+                className="hidden sm:flex absolute z-30 flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
+                style={{
+                  left: `${(activePoint.x / svgWidth) * 100}%`,
+                  top: `${Math.max(4, activePoint.y - 82)}px`,
+                  transform: `translateX(${tooltipTranslateX})`
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#218DFF]" />
+                  <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                    {activeData.label} Inflow:
+                  </span>
+                  <strong className="font-orbitron text-xs sm:text-sm font-extrabold text-white">
+                    {formatRWF(activeData.income, hideFinancials)}
+                  </strong>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 font-bold text-[10px]">
+                    {activeData.change || '+0%'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] pt-1 border-t border-white/10 w-full justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                    <span className="text-slate-300">Outflow:</span>
+                    <strong className="text-rose-300 font-bold">
+                      {formatRWF(activeData.expense, hideFinancials)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-slate-400">{graphMode === 'cumulative' ? 'Reserve:' : 'Net:'}</span>
+                    <strong className="text-emerald-400 font-bold font-orbitron">
+                      {graphMode === 'cumulative'
+                        ? formatRWF(activeData.cumulative, hideFinancials)
+                        : `+${formatRWF(activeData.income - activeData.expense, hideFinancials)}`}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <svg
+              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="w-full h-52 sm:h-80 overflow-visible"
+            >
+              <defs>
+                {/* Spline Area Gradients */}
+                <linearGradient id="sapphireWaveGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.55" />
+                  <stop offset="60%" stopColor="#1045CA" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
+                </linearGradient>
+
+                <linearGradient id="expenseWaveGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.01" />
+                </linearGradient>
+
+                <linearGradient id="cumulativeGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.50" />
+                  <stop offset="50%" stopColor="#218DFF" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
+                </linearGradient>
+
+                {/* Bar Gradients */}
+                <linearGradient id="barIncGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#1045CA" stopOpacity="0.75" />
+                </linearGradient>
+
+                <linearGradient id="barExpGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#fb7185" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#e11d48" stopOpacity="0.75" />
+                </linearGradient>
+
+                <linearGradient id="velPosGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#34d399" stopOpacity="0.95" />
+                  <stop offset="100%" stopColor="#059669" stopOpacity="0.75" />
+                </linearGradient>
+
+                <linearGradient id="velNegGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.75" />
+                  <stop offset="100%" stopColor="#be123c" stopOpacity="0.95" />
+                </linearGradient>
+
+                <filter id="glowSapphire" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="3.5" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+
+              {/* Left Axis Spine */}
+              <line
+                x1={paddingLeft}
+                y1={paddingTop}
+                x2={paddingLeft}
+                y2={svgHeight - paddingBottom}
+                stroke="rgba(255,255,255,0.25)"
+                strokeWidth="1.5"
+              />
+
+              {/* Horizontal Y-Axis Gridlines & Range Markers */}
+              {yAxisSteps.map((step, i) => {
+                const yPos = paddingTop + step.pct * (svgHeight - paddingTop - paddingBottom)
+                const isBaseline = i === yAxisSteps.length - 1
+                return (
+                  <g key={i}>
+                    <line
+                      x1={paddingLeft}
+                      y1={yPos}
+                      x2={svgWidth - paddingRight}
+                      y2={yPos}
+                      stroke={isBaseline ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'}
+                      strokeDasharray={isBaseline ? 'none' : '4 4'}
+                      strokeWidth={isBaseline ? '1.5' : '1'}
+                    />
+                    {/* Subtle axis tick pointing to HTML label */}
+                    <line
+                      x1={paddingLeft - 5}
+                      y1={yPos}
+                      x2={paddingLeft}
+                      y2={yPos}
+                      stroke={isBaseline ? '#9EDCFF' : 'rgba(255,255,255,0.45)'}
+                      strokeWidth="1.5"
+                    />
+                  </g>
+                )
+              })}
 
             {/* Break-Even Horizontal Guideline (in Cumulative & Velocity modes if minVal < 0) */}
             {(graphMode === 'cumulative' || graphMode === 'velocity') && minVal < 0 && zeroY < svgHeight - paddingBottom && (
@@ -1108,10 +1128,16 @@ export default function CashFlowCurveChart({
             })}
           </svg>
         </div>
+      </div>
 
-        {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES */}
+      {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES */}
+      <div className="flex items-start gap-1.5 sm:gap-2.5 w-full pt-3">
+        {/* Spacer to align precisely with left HTML Y-axis scale */}
+        <div className="w-11 sm:w-16 flex-shrink-0" />
+
+        {/* Timeline labels spanning the SVG canvas */}
         <div
-          className="flex items-start justify-between pt-3 text-xs w-full"
+          className="flex-1 min-w-0 flex items-start justify-between"
           style={{
             paddingLeft: `${(paddingLeft / svgWidth) * 100}%`,
             paddingRight: `${(paddingRight / svgWidth) * 100}%`
@@ -1135,7 +1161,7 @@ export default function CashFlowCurveChart({
                 className="group flex flex-col items-center gap-1.5 cursor-pointer border-0 bg-transparent transition-all p-0 flex-1 min-w-0"
               >
                 <span
-                  className={`font-orbitron text-[11px] sm:text-xs font-bold tracking-wider transition-colors ${
+                  className={`font-orbitron text-xs sm:text-sm font-bold tracking-wider transition-colors ${
                     isCur
                       ? 'text-white font-black scale-105 drop-shadow-[0_0_8px_rgba(33,141,255,0.7)]'
                       : 'text-slate-300 group-hover:text-white'
@@ -1146,10 +1172,10 @@ export default function CashFlowCurveChart({
 
                 {/* Prominent, readable value badge (e.g. 500k, 1M, 15.2M) */}
                 <span
-                  className={`px-1.5 py-0.5 rounded-md font-orbitron text-[10px] sm:text-[11px] font-extrabold tracking-tight transition-all border whitespace-nowrap ${
+                  className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-orbitron text-[11px] sm:text-xs font-black tracking-tight transition-all border whitespace-nowrap shadow-sm ${
                     isCur
-                      ? 'bg-[#218DFF] text-white border-white/40 shadow-[0_0_12px_rgba(33,141,255,0.6)] scale-105'
-                      : 'bg-white/10 text-white border-white/15 group-hover:bg-white/20 group-hover:border-white/30'
+                      ? 'bg-[#218DFF] text-white border-white/60 shadow-[0_0_14px_rgba(33,141,255,0.8)] scale-105'
+                      : 'bg-[#06143b] text-white border-white/25 group-hover:bg-[#0c2364] group-hover:border-white/40'
                   }`}
                 >
                   {moneyVal}
@@ -1158,6 +1184,7 @@ export default function CashFlowCurveChart({
             )
           })}
         </div>
+      </div>
       </div>
 
       {/* FOOTER ACTIONS & RECORD BUTTON */}
