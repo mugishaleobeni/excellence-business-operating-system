@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from '../../utils/currencyWords'
+import apiClient from '../../utils/apiClient'
+import ProductQrCode from '../../utils/qrCodeGenerator'
 import LanguageDropdown from '../common/LanguageDropdown'
 import UniversalModuleTable from './UniversalModuleTable'
 import AnimalRegistryWorkspace from './animal/AnimalRegistryWorkspace'
@@ -107,8 +109,50 @@ export default function InteractiveModulePanel({
     addTransaction,
     addToast,
     makeSellTrade,
-    applyMakeSellTrade
+    applyMakeSellTrade,
+    logout
   } = useExbos()
+
+  const navigate = useNavigate()
+  const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+
+  const handleExecuteDeleteAccount = async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') {
+      addToast && addToast({
+        type: 'error',
+        title: 'Confirmation Required',
+        message: 'Please type "DELETE" exactly to confirm account deletion.'
+      })
+      return
+    }
+
+    setIsDeletingAccount(true)
+    try {
+      await apiClient.deleteAccount({
+        email: user?.email,
+        confirmation: 'DELETE'
+      })
+      addToast && addToast({
+        type: 'success',
+        title: 'Account Permanently Deleted',
+        message: 'Your account and business workspaces have been removed.'
+      })
+      setDeleteAccountModalOpen(false)
+      if (logout) logout()
+      navigate('/register')
+    } catch (err) {
+      console.error('Failed to delete account:', err)
+      addToast && addToast({
+        type: 'error',
+        title: 'Deletion Failed',
+        message: err.message || 'Unable to delete account. Please try again.'
+      })
+    } finally {
+      setIsDeletingAccount(false)
+    }
+  }
 
   const workspace =
     demoWorkspaces?.[activeArchId] || {}
@@ -273,7 +317,7 @@ export default function InteractiveModulePanel({
     }
 
     return list
-  }, [rawModuleRecords, transactions, bucketKey, activePage])
+  }, [rawModuleRecords, transactions, bucketKey, activePage, activeArchId, activeModule])
 
   // Available recorded products / items to sell based on architecture (ODT Section 2 Item Picker Rule)
   const recordedProducts = useMemo(() => {
@@ -1260,7 +1304,7 @@ export default function InteractiveModulePanel({
       { key: 'amountRWF', label: 'AMOUNT', type: 'amount', align: 'right', sortable: true, width: 'w-[18%]' },
       { key: 'status', label: 'STATUS', type: 'status', width: 'w-[17%]' }
     ]
-  }, [activeModule])
+  }, [activeModule, isCategoriesPage, categoryColumns, activePage])
 
   const handleSaveEntry = (e) => {
     e.preventDefault()
@@ -1554,6 +1598,138 @@ export default function InteractiveModulePanel({
             </div>
           </form>
         </div>
+
+        {/* Danger Zone: Account Deletion */}
+        <div className="rounded-2xl border-2 border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-[#040C26]/95 p-6 sm:p-7 space-y-4 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/20 pb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="font-orbitron text-sm sm:text-base font-extrabold text-rose-300 uppercase tracking-wider">
+                  Danger Zone
+                </h3>
+                <p className="text-xs text-rose-200/70">
+                  Irreversible administrative and account deletion actions
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-bold uppercase px-2.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300">
+              Irreversible
+            </span>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-rose-950/20 border border-rose-500/20">
+            <div className="space-y-1 max-w-xl">
+              <h4 className="text-xs sm:text-sm font-bold text-white">
+                Delete Account &amp; All Workspace Ledgers
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Permanently purge your user account ({user?.email || 'authenticated user'}), registered businesses, sales records, product catalogs, and transaction ledgers from MongoDB Atlas. Once deleted, this data cannot be recovered.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setDeleteConfirmText('')
+                setDeleteAccountModalOpen(true)
+              }}
+              className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold text-xs uppercase tracking-wider transition-all duration-150 shadow-lg shadow-rose-950/50 flex items-center justify-center gap-2 cursor-pointer shrink-0 border border-rose-400/50"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Delete My Account</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Delete Account Confirmation Modal */}
+        {deleteAccountModalOpen && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-150"
+            onClick={() => setDeleteAccountModalOpen(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-2xl bg-[#071644] border-2 border-rose-500/50 p-6 space-y-4 shadow-2xl shadow-rose-950/80 animate-in zoom-in-95 duration-150"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0">
+                  <AlertTriangle className="w-5 h-5 animate-pulse" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-orbitron font-extrabold text-base text-white">
+                    Permanently Delete Account?
+                  </h3>
+                  <p className="text-xs text-rose-300 mt-0.5 truncate">
+                    Account: {user?.email || 'Current User'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeleteAccountModalOpen(false)}
+                  className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-400 hover:text-white"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/30 text-xs text-rose-200/90 leading-relaxed space-y-2">
+                <p>
+                  <strong>Warning:</strong> This will immediately delete:
+                </p>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-300">
+                  <li>Your user credentials and profile in MongoDB</li>
+                  <li>All products, stock valuations, and categories</li>
+                  <li>All sales, purchases, and expense ledgers</li>
+                  <li>All cloud documents and integrations</li>
+                </ul>
+                <p className="text-[11px] text-rose-400 font-bold pt-1">
+                  This action is irreversible and permanent.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Type <span className="font-mono font-bold text-rose-400">DELETE</span> to confirm:
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/50 border border-rose-500/40 text-sm font-mono font-bold text-white focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteAccountModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-200 font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeletingAccount}
+                  onClick={handleExecuteDeleteAccount}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600 text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 shadow-lg shadow-rose-950/50 cursor-pointer disabled:cursor-not-allowed transition-all"
+                >
+                  {isDeletingAccount ? (
+                    <span>Deleting...</span>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Confirm Delete</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1898,24 +2074,35 @@ export default function InteractiveModulePanel({
 
             {/* Scrollable Body Container */}
             <div className="overflow-y-auto p-5 pt-3 space-y-3 text-xs">
-              {/* Product Barcode Visual Badge if present */}
-              {(detailRow.barcode || detailRow.sku) && (
-                <div className="p-3 rounded-2xl bg-white/10 border border-[#9EDCFF]/30 space-y-2">
+              {/* Product Barcode & Real Scannable QR Code */}
+              {(detailRow.barcode || detailRow.sku || detailRow.sellingPriceRWF !== undefined) && (
+                <div className="p-3.5 rounded-2xl bg-white/10 border border-[#9EDCFF]/30 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-[#9EDCFF] uppercase tracking-wider flex items-center gap-1.5">
                       <Barcode className="w-4 h-4 text-[#218DFF]" />
-                      <span>Product Barcode &amp; SKU</span>
+                      <span>Product Barcode &amp; Scannable QR</span>
                     </span>
                     <span className="font-mono text-xs font-bold text-white bg-black/40 px-2 py-0.5 rounded border border-white/10">
+                      {detailRow.barcode || detailRow.sku || 'SKU'}
+                    </span>
+                  </div>
+
+                  {/* 1D Barcode Vector Graphic */}
+                  <div className="p-2.5 rounded-xl bg-white overflow-hidden shadow-md flex flex-col items-center justify-center">
+                    {renderBarcodeSvg(detailRow.barcode || detailRow.sku, 52)}
+                    <span className="text-[11px] text-center font-mono text-slate-800 tracking-[0.25em] font-bold mt-1">
                       {detailRow.barcode || detailRow.sku}
                     </span>
                   </div>
-                  {/* Visual High-Contrast Barcode Vector Graphic */}
-                  <div className="p-2.5 rounded-xl bg-white overflow-hidden shadow-md flex items-center justify-center">
-                    {renderBarcodeSvg(detailRow.barcode || detailRow.sku, 56)}
-                  </div>
-                  <div className="text-[11px] text-center font-mono text-slate-300 tracking-[0.25em] font-semibold">
-                    {detailRow.barcode || detailRow.sku}
+
+                  {/* Real Scannable 2D QR Code */}
+                  <div className="pt-1">
+                    <ProductQrCode
+                      product={detailRow}
+                      businessName={workspace.businessName || user?.businessName || 'ExBOS Rwanda'}
+                      size={130}
+                      showActions={true}
+                    />
                   </div>
                 </div>
               )}

@@ -58,6 +58,12 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
       return fromUrl
     }
     try {
+      const moduleScopedStorage = localStorage.getItem(
+        `exbos_active_page_${activeArchId}_${activeModule}`
+      )
+      if (moduleScopedStorage && pages.includes(moduleScopedStorage)) {
+        return moduleScopedStorage
+      }
       const fromStorage = localStorage.getItem(
         `exbos_active_page_${activeArchId}`
       )
@@ -94,6 +100,7 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
     try {
       localStorage.setItem('exbos_active_arch', activeArchId)
       localStorage.setItem(`exbos_active_module_${activeArchId}`, activeModule)
+      localStorage.setItem(`exbos_active_page_${activeArchId}_${activeModule}`, activePage)
       localStorage.setItem(`exbos_active_page_${activeArchId}`, activePage)
     } catch (e) {
       // ignore

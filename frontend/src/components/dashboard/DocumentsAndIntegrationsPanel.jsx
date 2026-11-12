@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF } from '../../utils/currencyWords'
 import { printReportDocument } from '../../utils/printDocument'
+import { exbosApi } from '../../utils/apiClient'
 import {
   Folder,
   FileText,
@@ -17,7 +18,8 @@ import {
   Send,
   Sparkles,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from 'lucide-react'
 
 const FOLDERS = [
@@ -55,8 +57,63 @@ export default function DocumentsAndIntegrationsPanel({
   const [selectedPeriod, setSelectedPeriod] = useState('October 2026')
   const [reportType, setReportType] = useState('Executive Profit, Cash & Survival Summary')
   const [searchDoc, setSearchDoc] = useState('')
-  const [recipientEmail, setRecipientEmail] = useState('partner@kigaliprime.rw')
+  const [recipientEmail, setRecipientEmail] = useState(user?.email || 'mugishaleobeni0@gmail.com')
   const [statusBanner, setStatusBanner] = useState(null)
+  const [loadingAction, setLoadingAction] = useState(null)
+
+  // Keep recipient email in sync with logged-in user account
+  useEffect(() => {
+    if (user?.email) {
+      setRecipientEmail(user.email)
+    }
+  }, [user?.email])
+
+  // Fetch live integrations status on mount
+  useEffect(() => {
+    exbosApi
+      .getIntegrationsStatus()
+      .then((res) => {
+        if (res?.data) {
+          setIntegrations((prev) => ({
+            ...prev,
+            ...res.data
+          }))
+        }
+      })
+      .catch((err) => {
+        console.warn('Integrations status fetch note:', err.message)
+      })
+  }, [setIntegrations])
+
+  // Listen for Google Drive OAuth callback code in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    if (code) {
+      setStatusBanner('Exchanging authorization code with Google Cloud OAuth 2.0...')
+      exbosApi
+        .exchangeGoogleDriveCode({ code })
+        .then((res) => {
+          setStatusBanner(
+            '✓ Google Drive connected successfully! Linked to folder "EXCELLENCE BOS Reports".'
+          )
+          const cleanUrl = window.location.pathname + (window.location.hash || '')
+          window.history.replaceState({}, document.title, cleanUrl)
+          return exbosApi.getIntegrationsStatus()
+        })
+        .then((res) => {
+          if (res?.data) {
+            setIntegrations((prev) => ({ ...prev, ...res.data }))
+          }
+        })
+        .catch((err) => {
+          setStatusBanner(`Google Drive OAuth error: ${err.message || 'Authorization failed'}`)
+        })
+        .finally(() => {
+          setTimeout(() => setStatusBanner(null), 6000)
+        })
+    }
+  }, [setIntegrations])
 
   // Synchronize Report / Document Category with Active Subpage Selection
   useEffect(() => {
@@ -81,6 +138,115 @@ export default function DocumentsAndIntegrationsPanel({
       }
     }
   }, [mode, activePage])
+
+  // Send Live Email Report via Backend Gmail SMTP
+  const handleEmailReport = async () => {
+    const targetEmail = recipientEmail.trim() || user?.email || 'mugishaleobeni0@gmail.com'
+    setLoadingAction('email')
+    try {
+      const res = await exbosApi.sendReportEmail({
+        recipientEmail: targetEmail,
+        reportType,
+        period: selectedPeriod,
+        format: selectedFormat,
+        businessName: user?.businessName || 'kigali rwnada',
+        summaryCards: [
+          { title: 'Spendable Money', value: formatRWF(5070000, hideFinancials) },
+          { title: 'Stock on Shelf', value: formatRWF(4380000, hideFinancials) },
+          { title: 'Customer Debts', value: formatRWF(780000, hideFinancials) },
+          { title: '6-Month Reserve', value: formatRWF(5100000, hideFinancials) }
+        ],
+        rows: [
+          { category: 'Cash & Bank', item: 'Operating Float (Cash + MoMo + Bank)', amount: '5,070,000 RWF', status: 'Reconciled' },
+          { category: 'Inventory', item: 'Stock on Shelf & Warehouse Balance', amount: '4,380,000 RWF', status: 'Audited' },
+          { category: 'Receivables', item: 'Active Customer Debts Receivable', amount: '780,000 RWF', status: 'Current' },
+          { category: 'Payables', item: 'Supplier Accounts Payable', amount: '350,000 RWF', status: 'Scheduled' }
+        ]
+      })
+
+      const entry = {
+        id: `EXP-${Date.now().toString().slice(-4)}`,
+        title: `${reportType} (${selectedFormat})`,
+        format: selectedFormat,
+        period: selectedPeriod,
+        destination: `Gmail (${targetEmail})`,
+        timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        status: 'Delivered via Gmail SMTP'
+      }
+      setExportHistory((prev) => [entry, ...prev])
+      setStatusBanner(`✓ Report successfully emailed to ${targetEmail} with attached ${selectedFormat}!`)
+    } catch (err) {
+      setStatusBanner(`Email delivery issue: ${err.message || 'SMTP connection failed'}`)
+    } finally {
+      setLoadingAction(null)
+      setTimeout(() => setStatusBanner(null), 5000)
+    }
+  }
+
+  // Test Gmail SMTP Connection
+  const handleTestGmailConnection = async () => {
+    const targetEmail = recipientEmail.trim() || user?.email || 'mugishaleobeni0@gmail.com'
+    setLoadingAction('gmail-test')
+    try {
+      const res = await exbosApi.testGmailConnection({ targetEmail })
+      setStatusBanner(`✓ Gmail test message dispatched to ${targetEmail}! Verification check complete.`)
+    } catch (err) {
+      setStatusBanner(`Gmail test failed: ${err.message || 'Could not reach SMTP server'}`)
+    } finally {
+      setLoadingAction(null)
+      setTimeout(() => setStatusBanner(null), 5000)
+    }
+  }
+
+  // Connect Google Drive via Google Cloud OAuth 2.0
+  const handleConnectGoogleDrive = async () => {
+    setLoadingAction('drive-auth')
+    try {
+      const res = await exbosApi.getGoogleDriveAuthUrl()
+      const authUrl = res?.data?.authUrl
+      if (authUrl) {
+        window.location.href = authUrl
+      } else {
+        throw new Error('OAuth URL not returned by backend')
+      }
+    } catch (err) {
+      setStatusBanner(`Google Drive Auth error: ${err.message || 'Could not initiate OAuth'}`)
+      setLoadingAction(null)
+      setTimeout(() => setStatusBanner(null), 5000)
+    }
+  }
+
+  // Export Report to Google Drive Vault
+  const handleExportGoogleDrive = async () => {
+    setLoadingAction('drive-export')
+    try {
+      const res = await exbosApi.exportReportToGoogleDrive({
+        reportType,
+        period: selectedPeriod,
+        format: selectedFormat,
+        businessName: user?.businessName || 'kigali rwnada'
+      })
+
+      const entry = {
+        id: `EXP-${Date.now().toString().slice(-4)}`,
+        title: `${reportType} (${selectedFormat})`,
+        format: selectedFormat,
+        period: selectedPeriod,
+        destination: `Google Drive (${integrations?.googleDrive?.folderName || 'EXCELLENCE BOS Reports'})`,
+        timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
+        status: res?.data?.driveViewLink ? 'Uploaded to Drive Vault' : 'Saved to Drive Cloud'
+      }
+      setExportHistory((prev) => [entry, ...prev])
+      setStatusBanner(
+        `✓ ${reportType} saved to Google Drive vault (${integrations?.googleDrive?.folderName || 'EXCELLENCE BOS Reports'})!`
+      )
+    } catch (err) {
+      setStatusBanner(`Google Drive Export error: ${err.message || 'Export failed'}`)
+    } finally {
+      setLoadingAction(null)
+      setTimeout(() => setStatusBanner(null), 5000)
+    }
+  }
 
   // WhatsApp Interactive Simulator State
   const [waMessages, setWaMessages] = useState([
@@ -457,14 +623,41 @@ export default function DocumentsAndIntegrationsPanel({
               className="w-full px-3 py-2 rounded-xl bg-white dark:bg-[#071544] border border-blue-200 dark:border-[#9EDCFF]/30 text-xs text-[#071544] dark:text-white"
             />
           </div>
-          <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              onClick={() => triggerExportAction(`Gmail (${recipientEmail})`)}
-              className="btn-sapphire px-4 py-2 text-xs"
-            >
-              Email Current Report
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={loadingAction === 'email'}
+                onClick={handleEmailReport}
+                className="btn-sapphire px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {loadingAction === 'email' ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Email Current Report</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                disabled={loadingAction === 'gmail-test'}
+                onClick={handleTestGmailConnection}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-slate-200 cursor-pointer disabled:opacity-60 flex items-center gap-1"
+                title="Send a live test verification email to recipient"
+              >
+                {loadingAction === 'gmail-test' ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-3 h-3" />
+                )}
+                <span>Test Connection</span>
+              </button>
+            </div>
             <button
               type="button"
               onClick={() =>
@@ -507,27 +700,34 @@ export default function DocumentsAndIntegrationsPanel({
           <div className="flex items-center justify-between pt-4">
             <button
               type="button"
-              onClick={() =>
-                triggerExportAction(`Google Drive (${integrations.googleDrive.folderName})`)
-              }
-              className="btn-sapphire px-4 py-2 text-xs"
+              disabled={loadingAction === 'drive-export'}
+              onClick={handleExportGoogleDrive}
+              className="btn-sapphire px-4 py-2 text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
             >
-              Export to Google Drive
+              {loadingAction === 'drive-export' ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export to Google Drive</span>
+                </>
+              )}
             </button>
             <button
               type="button"
-              onClick={() =>
-                setIntegrations((prev) => ({
-                  ...prev,
-                  googleDrive: {
-                    ...prev.googleDrive,
-                    connected: !prev.googleDrive.connected
-                  }
-                }))
-              }
-              className="text-xs font-semibold text-rose-400 hover:underline bg-transparent border-0 cursor-pointer"
+              disabled={loadingAction === 'drive-auth'}
+              onClick={handleConnectGoogleDrive}
+              className="text-xs font-semibold text-cyan-400 hover:underline bg-transparent border-0 cursor-pointer flex items-center gap-1"
             >
-              {integrations.googleDrive.connected ? 'Revoke Access' : 'Connect Drive'}
+              {loadingAction === 'drive-auth' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <ExternalLink className="w-3 h-3" />
+              )}
+              <span>{integrations.googleDrive.connected ? 'Reconnect Drive' : 'Connect Drive'}</span>
             </button>
           </div>
         </div>

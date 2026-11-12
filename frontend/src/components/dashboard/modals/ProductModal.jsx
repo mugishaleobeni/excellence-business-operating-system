@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Box, X, Camera, VideoOff, TrendingUp, Percent, Tag, Plus, Check } from "lucide-react";
+import { Box, X, Camera, VideoOff, TrendingUp, Percent, Tag, Plus, Check, Barcode, QrCode } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 import { renderBarcodeSvg } from "../../../utils/barcodeUtils";
+import ProductQrCode from "../../../utils/qrCodeGenerator";
 import CustomSelect from "../../common/CustomSelect";
 
 export default function ProductModal({
@@ -295,6 +296,50 @@ export default function ProductModal({
                         <Camera className="w-3.5 h-3.5" />
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                {/* Live Real Scannable Barcode & QR Code Preview */}
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#9EDCFF] uppercase tracking-wider flex items-center gap-1.5">
+                      <QrCode className="w-4 h-4 text-[#218DFF]" />
+                      <span>Scannable Product Codes (Barcode &amp; QR)</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Scan with any smartphone camera
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                    {/* 1D Barcode Graphic */}
+                    <div className="p-3 rounded-xl bg-white flex flex-col items-center justify-center shadow-inner min-h-[140px]">
+                      <div className="w-full flex items-center justify-center">
+                        {renderBarcodeSvg(activeBarcodePreview, 48)}
+                      </div>
+                      <span className="font-mono text-xs font-bold text-slate-800 tracking-[0.2em] mt-1.5 block">
+                        {activeBarcodePreview}
+                      </span>
+                      <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">
+                        1D Retail Barcode
+                      </span>
+                    </div>
+
+                    {/* 2D Real Scannable QR Code */}
+                    <ProductQrCode
+                      product={{
+                        title: title.trim() || 'New Product Item',
+                        sku: activeBarcodePreview,
+                        category: typeof productCategory === 'object' ? (productCategory?.name || 'General') : (productCategory || 'General'),
+                        sellingPriceRWF: productSellingPrice || 0,
+                        unitCostRWF: productPurchasePrice || 0,
+                        quantity: productCurrentStock || 0,
+                        unit: productUnit || 'piece'
+                      }}
+                      size={110}
+                      showActions={false}
+                      className="min-h-[140px]"
+                    />
                   </div>
                 </div>
 

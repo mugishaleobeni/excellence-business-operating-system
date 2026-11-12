@@ -41,6 +41,13 @@ class BaseConfig:
     GMAIL_ADDRESS: str = os.getenv("GMAIL_ADDRESS", "")
     GMAIL_APP_PASSWORD: str = os.getenv("GMAIL_APP_PASSWORD", "")
 
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REDIRECT_URI: str = os.getenv(
+        "GOOGLE_REDIRECT_URI",
+        "http://127.0.0.1:5173/dashboard?module=Documents"
+    )
+
     CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(

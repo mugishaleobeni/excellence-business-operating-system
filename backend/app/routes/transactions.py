@@ -278,3 +278,56 @@ def edit_transaction_with_audit(
         message="Transaction updated and immutable audit entry recorded.",
     )
 
+
+@transactions_bp.route("/<string:tx_id>", methods=["DELETE"])
+def delete_transaction(tx_id: str):
+    """Delete a transaction from ledger and update workspace metrics if needed."""
+    db = get_db()
+    scope_key = _resolve_scope_key(db)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    tx_doc = db.transactions.find_one({
+        "$or": [
+            {"id": tx_id, "scopeKey": scope_key},
+            {"id": tx_id},
+            {"_id": tx_id}
+        ]
+    })
+    if not tx_doc:
+        return error_response(f"Transaction '{tx_id}' not found.", status_code=404)
+
+    # Reverse cashflow impact if workspace exists
+    amount = float(tx_doc.get("amountRWF", 0))
+    arch_id = tx_doc.get("architectureId", "buy-and-sell")
+    tx_type = tx_doc.get("type", "in")
+
+    if amount > 0:
+        ws_doc = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id})
+        if ws_doc:
+            spendable = float(ws_doc.get("spendableRWF", 0))
+            monthly_rev = float(ws_doc.get("monthlyRevenueRWF", 0))
+            net_profit = float(ws_doc.get("netProfitRWF", 0))
+            if str(tx_type).lower() in ("in", "inflow"):
+                spendable = max(0.0, spendable - amount)
+                monthly_rev = max(0.0, monthly_rev - amount)
+                net_profit -= amount
+            else:
+                spendable = max(0.0, spendable + amount)
+                net_profit += amount
+            db.workspaces.update_one(
+                {"_id": ws_doc["_id"]},
+                {
+                    "$set": {
+                        "spendableRWF": spendable,
+                        "monthlyRevenueRWF": monthly_rev,
+                        "netProfitRWF": net_profit,
+                        "updated_at": now_iso,
+                    }
+                }
+            )
+
+    db.transactions.delete_one({"_id": tx_doc["_id"]})
+    logger.info("DELETED TRANSACTION -> id=%s | scopeKey=%s", tx_id, scope_key)
+    return success_response(message=f"Transaction '{tx_id}' deleted successfully.")
+
+

@@ -679,13 +679,13 @@ export default function CashFlowCurveChart({
         {/* GRAPH ROW: DEDICATED HTML Y-AXIS SCALE + SVG DRAWING CANVAS */}
         <div className="flex items-stretch gap-1.5 sm:gap-2.5 w-full">
           {/* DEDICATED HTML Y-AXIS SCALE (Crisp true font sizes on mobile & desktop, immune to SVG viewBox scaling) */}
-          <div className="w-11 sm:w-16 flex-shrink-0 relative select-none h-52 sm:h-80 pointer-events-none">
+          <div className="w-14 sm:w-20 flex-shrink-0 relative select-none h-52 sm:h-80 pointer-events-none">
             {/* Currency Indicator at top */}
             <div
               className="absolute right-1 sm:right-2 transform -translate-y-full pb-1 text-right"
               style={{ top: `${(paddingTop / svgHeight) * 100}%` }}
             >
-              <span className="font-orbitron text-[11px] sm:text-xs font-black text-[#9EDCFF] tracking-wider uppercase drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+              <span className="font-orbitron text-xs sm:text-sm font-black text-cyan-300 tracking-wider uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 RWF
               </span>
             </div>
@@ -701,9 +701,9 @@ export default function CashFlowCurveChart({
                   style={{ top: `${topPct}%` }}
                 >
                   <span
-                    className={`font-orbitron text-xs sm:text-sm font-black tracking-tight ${
-                      isBaseline ? 'text-slate-300' : 'text-white'
-                    } drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]`}
+                    className={`font-orbitron text-[13px] sm:text-base font-black tracking-tight ${
+                      isBaseline ? 'text-slate-200' : 'text-white'
+                    } drop-shadow-[0_2px_8px_rgba(0,0,0,1)]`}
                   >
                     {formatShortMoney(step.val)}
                   </span>
@@ -1133,7 +1133,7 @@ export default function CashFlowCurveChart({
       {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES */}
       <div className="flex items-start gap-1.5 sm:gap-2.5 w-full pt-3">
         {/* Spacer to align precisely with left HTML Y-axis scale */}
-        <div className="w-11 sm:w-16 flex-shrink-0" />
+        <div className="w-14 sm:w-20 flex-shrink-0" />
 
         {/* Timeline labels spanning the SVG canvas */}
         <div
@@ -1161,10 +1161,10 @@ export default function CashFlowCurveChart({
                 className="group flex flex-col items-center gap-1.5 cursor-pointer border-0 bg-transparent transition-all p-0 flex-1 min-w-0"
               >
                 <span
-                  className={`font-orbitron text-xs sm:text-sm font-bold tracking-wider transition-colors ${
+                  className={`font-orbitron text-xs sm:text-sm font-black tracking-wider transition-colors ${
                     isCur
-                      ? 'text-white font-black scale-105 drop-shadow-[0_0_8px_rgba(33,141,255,0.7)]'
-                      : 'text-slate-300 group-hover:text-white'
+                      ? 'text-white scale-105 drop-shadow-[0_0_10px_rgba(33,141,255,0.8)]'
+                      : 'text-slate-200 group-hover:text-white'
                   }`}
                 >
                   {d.label}
@@ -1172,10 +1172,10 @@ export default function CashFlowCurveChart({
 
                 {/* Prominent, readable value badge (e.g. 500k, 1M, 15.2M) */}
                 <span
-                  className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg font-orbitron text-[11px] sm:text-xs font-black tracking-tight transition-all border whitespace-nowrap shadow-sm ${
+                  className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl font-orbitron text-xs sm:text-sm font-black tracking-tight transition-all border whitespace-nowrap shadow-md ${
                     isCur
-                      ? 'bg-[#218DFF] text-white border-white/60 shadow-[0_0_14px_rgba(33,141,255,0.8)] scale-105'
-                      : 'bg-[#06143b] text-white border-white/25 group-hover:bg-[#0c2364] group-hover:border-white/40'
+                      ? 'bg-[#218DFF] text-white border-2 border-white shadow-[0_0_18px_rgba(33,141,255,0.9)] scale-110'
+                      : 'bg-[#081f54] text-white border border-[#218DFF]/40 group-hover:bg-[#10348a] group-hover:border-[#218DFF]'
                   }`}
                 >
                   {moneyVal}

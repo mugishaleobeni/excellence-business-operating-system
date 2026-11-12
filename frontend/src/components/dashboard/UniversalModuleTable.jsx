@@ -340,9 +340,20 @@ export default function UniversalModuleTable({
                     if (col.type === 'category' || col.type === 'pill') {
                       return (
                         <td key={col.key} className="py-3.5 px-3 truncate">
-                          <span className="text-xs font-semibold text-slate-200 block truncate max-w-full" title={val || ''}>
-                            {val || '—'}
-                          </span>
+                          {row.sku ? (
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-200 block truncate max-w-full" title={val || ''}>
+                                {val || 'General'}
+                              </span>
+                              <span className="text-[10px] text-[#9EDCFF] font-mono block truncate" title={`SKU: ${row.sku}`}>
+                                {row.sku}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-200 block truncate max-w-full" title={val || ''}>
+                              {val || '—'}
+                            </span>
+                          )}
                         </td>
                       )
                     }
@@ -400,6 +411,20 @@ export default function UniversalModuleTable({
                               {row.email}
                             </span>
                           </div>
+                        ) : col.key === 'title' && (row.sellingPriceRWF !== undefined || row.unitCostRWF !== undefined) ? (
+                          <div className="min-w-0">
+                            <span className="truncate block font-semibold text-white" title={val}>
+                              {val}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block truncate font-mono">
+                              {row.sellingPriceRWF ? `Sell: ${Number(row.sellingPriceRWF).toLocaleString()} RWF` : ''}
+                              {row.unit ? ` / ${row.unit}` : ''}
+                            </span>
+                          </div>
+                        ) : col.key === 'quantity' ? (
+                          <span className="font-mono text-xs font-bold text-white block text-center" title={`${val} ${row.unit || ''}`}>
+                            {val !== undefined && val !== null ? val : '0'} {row.unit ? <span className="text-[10px] text-slate-400 font-normal ml-0.5">{row.unit}</span> : ''}
+                          </span>
                         ) : col.key === 'date' ? (
                           <span className="text-slate-400 font-mono tabular-nums text-xs whitespace-nowrap block truncate">
                             {val || '—'}

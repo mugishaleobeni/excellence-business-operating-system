@@ -1,6 +1,9 @@
 import logging
 from datetime import datetime, timezone
-from flask import Blueprint, request
+from io import BytesIO
+from flask import Blueprint, request, Response
+import qrcode
+import qrcode.image.svg
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.schemas.workspace_schemas import (
@@ -692,6 +695,16 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         db.products.delete_one(
             {"scopeKey": scope_key, "architectureId": arch_id, "id": str(record_id)}
         )
+    # Also clean up from transactions if this record was synced to transactions
+    db.transactions.delete_many(
+        {
+            "$or": [
+                {"id": str(record_id)},
+                {"_id": str(record_id)},
+                {"scopeKey": scope_key, "id": str(record_id)},
+            ]
+        }
+    )
     logger.info(
         "DELETED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
         arch_id,
@@ -700,4 +713,55 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         scope_key,
     )
     return success_response(message=f"Record '{record_id}' deleted from '{module_name}'.")
+
+
+@workspaces_bp.route("/qrcode", methods=["GET"])
+def get_qrcode_image():
+    """Generate a clean, high-resolution scannable QR Code as SVG or PNG for any product or inventory item."""
+    raw_text = request.args.get("text", "").strip()
+    if not raw_text:
+        raw_text = "ExBOS Product Item - Verified Rwanda"
+    
+    fmt = request.args.get("format", "svg").lower()
+    box_size = int(request.args.get("box_size", 8))
+    border = int(request.args.get("border", 2))
+
+    if fmt == "png":
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=box_size,
+            border=border,
+        )
+        qr.add_data(raw_text)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+        buf = BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return Response(
+            buf.getvalue(),
+            mimetype="image/png",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    else:
+        # Default: SVG vector path (crisp, zero quality loss, lightweight)
+        factory = qrcode.image.svg.SvgPathImage
+        qr = qrcode.QRCode(
+            version=None,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=box_size,
+            border=border,
+            image_factory=factory,
+        )
+        qr.add_data(raw_text)
+        qr.make(fit=True)
+        img = qr.make_image()
+        svg_xml = img.to_string(encoding="unicode")
+        return Response(
+            svg_xml,
+            mimetype="image/svg+xml; charset=utf-8",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
 

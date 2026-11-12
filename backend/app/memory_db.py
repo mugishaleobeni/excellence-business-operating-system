@@ -35,6 +35,11 @@ class InMemoryCursor:
         return iter(self._docs)
 
 
+class DeleteResult:
+    def __init__(self, count: int):
+        self.deleted_count = count
+
+
 class InMemoryCollection:
     def __init__(self, name: str):
         self.name = name
@@ -46,10 +51,15 @@ class InMemoryCollection:
     def count_documents(self, query: dict[str, Any]) -> int:
         return sum(1 for r in self._rows if _matches_filter(r, query))
 
-    def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
-        for r in self._rows:
-            if _matches_filter(r, query):
-                return copy.deepcopy(r)
+    def find_one(self, query: dict[str, Any] | None = None, *args, **kwargs) -> dict[str, Any] | None:
+        q = query or {}
+        matched = [r for r in self._rows if _matches_filter(r, q)]
+        sort = kwargs.get("sort")
+        if sort:
+            for field, direction in reversed(sort):
+                matched.sort(key=lambda x: str(x.get(field, "")), reverse=(direction < 0))
+        if matched:
+            return copy.deepcopy(matched[0])
         return None
 
     def find(self, query: dict[str, Any] | None = None) -> InMemoryCursor:
@@ -79,11 +89,20 @@ class InMemoryCollection:
                 new_doc["_id"] = ObjectId()
             self._rows.append(new_doc)
 
-    def delete_many(self, query: dict[str, Any]):
+    def delete_one(self, query: dict[str, Any]) -> DeleteResult:
+        for idx, r in enumerate(self._rows):
+            if _matches_filter(r, query):
+                del self._rows[idx]
+                return DeleteResult(1)
+        return DeleteResult(0)
+
+    def delete_many(self, query: dict[str, Any]) -> DeleteResult:
+        initial_len = len(self._rows)
         if not query:
             self._rows.clear()
         else:
             self._rows = [r for r in self._rows if not _matches_filter(r, query)]
+        return DeleteResult(initial_len - len(self._rows))
 
 
 class InMemoryDatabase:

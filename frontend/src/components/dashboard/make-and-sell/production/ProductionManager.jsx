@@ -22,6 +22,7 @@ export default function ProductionManager({
     demoWorkspaces,
     addDemoRecord,
     updateDemoRecord,
+    deleteDemoRecord,
     addTransaction,
     hideFinancials
   } = useExbos()
@@ -218,7 +219,8 @@ export default function ProductionManager({
       description: `Are you sure you want to delete order ${orderId}? This action cannot be undone.`,
       confirmText: 'Delete Order',
       onConfirm: () => {
-        setOrders((prev) => prev.filter((o) => o.id !== orderId))
+        setOrders((prev) => prev.filter((o) => String(o.id) !== String(orderId)))
+        deleteDemoRecord(activeArchId, 'Production', orderId)
         showToast({
           type: 'info',
           title: 'Order Deleted',
@@ -243,7 +245,7 @@ export default function ProductionManager({
 
   // Handle Delete Recipe
   const handleDeleteRecipe = (recipeId) => {
-    const rec = recipes.find((r) => r.id === recipeId)
+    const rec = recipes.find((r) => String(r.id) === String(recipeId))
     const recName = rec?.name || rec?.productName || recipeId
     setDeleteConfirm({
       title: 'Delete Recipe Formula',
@@ -251,7 +253,8 @@ export default function ProductionManager({
       description: `Are you sure you want to delete this recipe formula? This will remove the bill of materials from your registry.`,
       confirmText: 'Delete Recipe',
       onConfirm: () => {
-        setRecipes((prev) => prev.filter((r) => r.id !== recipeId))
+        setRecipes((prev) => prev.filter((r) => String(r.id) !== String(recipeId)))
+        deleteDemoRecord(activeArchId, 'Production', recipeId)
         showToast({
           type: 'info',
           title: 'Recipe Deleted',

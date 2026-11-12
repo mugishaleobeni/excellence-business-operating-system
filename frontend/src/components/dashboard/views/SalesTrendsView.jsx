@@ -395,8 +395,8 @@ export default function SalesTrendsView({
                       x={paddingLeft - 12}
                       y={yPos + 4}
                       textAnchor="end"
-                      className={`font-orbitron text-[10px] sm:text-[11px] font-bold ${
-                        isBaseline ? 'fill-slate-300' : 'fill-slate-400'
+                      className={`font-orbitron text-xs sm:text-sm font-black ${
+                        isBaseline ? 'fill-slate-200' : 'fill-white'
                       }`}
                     >
                       {formatShortMoney(step.val)}
@@ -500,14 +500,14 @@ export default function SalesTrendsView({
                       : 'text-slate-400 hover:text-white font-medium opacity-80 hover:opacity-100'
                   }`}
                 >
-                  <span className="font-orbitron text-[10px] sm:text-xs">
+                  <span className={`font-orbitron text-xs sm:text-sm font-black ${isCur ? 'text-white' : 'text-slate-200'}`}>
                     {d.label}
                   </span>
                   <span
-                    className={`text-[9px] sm:text-[10px] font-mono px-1.5 py-0.5 rounded-md ${
+                    className={`text-xs sm:text-sm font-orbitron font-black px-2 py-0.5 rounded-lg border whitespace-nowrap ${
                       isCur
-                        ? 'bg-[#218DFF]/30 text-[#9EDCFF] font-bold border border-[#218DFF]/40'
-                        : 'text-slate-500'
+                        ? 'bg-[#218DFF] text-white border-white shadow-[0_0_12px_rgba(33,141,255,0.7)]'
+                        : 'bg-[#081f54] text-white border-[#218DFF]/40'
                     }`}
                   >
                     {formatShortMoney(d.sales)}

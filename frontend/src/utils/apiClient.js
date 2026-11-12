@@ -113,6 +113,8 @@ export const exbosApi = {
     apiRequest('/auth/forgot-password', { method: 'POST', body: { email } }),
   resetPassword: (payload) =>
     apiRequest('/auth/reset-password', { method: 'POST', body: payload }),
+  deleteAccount: (payload = {}) =>
+    apiRequest('/auth/delete-account', { method: 'DELETE', body: payload }),
   patchWorkspace: (archId, payload) =>
     apiRequest(withScope(`/workspaces/${archId}`), { method: 'PATCH', body: payload }),
   addModuleRecord: (archId, moduleName, payload) =>
@@ -133,6 +135,26 @@ export const exbosApi = {
     apiRequest(withScope('/transactions'), { method: 'POST', body: payload }),
   editTransaction: (txId, payload) =>
     apiRequest(withScope(`/transactions/${txId}`), { method: 'PATCH', body: payload }),
+  deleteTransaction: (txId) =>
+    apiRequest(withScope(`/transactions/${txId}`), { method: 'DELETE' }),
   saveAnalysis: (payload) =>
-    apiRequest('/tools/analyses', { method: 'POST', body: payload })
+    apiRequest('/tools/analyses', { method: 'POST', body: payload }),
+  getIntegrationsStatus: () => apiRequest('/integrations/status'),
+  testGmailConnection: (payload) =>
+    apiRequest('/integrations/gmail/test', { method: 'POST', body: payload }),
+  sendReportEmail: (payload) =>
+    apiRequest('/integrations/gmail/send-report', { method: 'POST', body: payload }),
+  getGoogleDriveAuthUrl: () => apiRequest('/integrations/google-drive/auth-url'),
+  exchangeGoogleDriveCode: (payload) =>
+    apiRequest('/integrations/google-drive/oauth-callback', { method: 'POST', body: payload }),
+  exportReportToGoogleDrive: (payload) =>
+    apiRequest('/integrations/google-drive/export-report', { method: 'POST', body: payload }),
+  disconnectGoogleDrive: () =>
+    apiRequest('/integrations/google-drive/disconnect', { method: 'POST' }),
+  disconnectGmail: () =>
+    apiRequest('/integrations/gmail/disconnect', { method: 'POST' })
 }
+
+export const apiClient = exbosApi
+export default exbosApi
+

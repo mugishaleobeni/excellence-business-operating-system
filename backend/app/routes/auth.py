@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta, timezone
-from flask import Blueprint
+from flask import Blueprint, request
 from flask_jwt_extended import (
     create_access_token,
     create_refresh_token,
@@ -570,3 +570,63 @@ def reset_password(validated_data: ResetPasswordSchema):
     return success_response(
         message="Password has been updated in MongoDB Atlas. You may now sign in."
     )
+
+
+@auth_bp.route("/delete-account", methods=["DELETE", "POST"])
+def delete_account():
+    """Permanently delete user account and all workspace data."""
+    db = get_db()
+    identity = _safe_jwt_email()
+
+    body = request.get_json(silent=True) or {} if request.is_json else {}
+    req_email = body.get("email")
+    confirmation = str(body.get("confirmation") or body.get("confirm") or "").strip()
+
+    target_email = (identity or req_email or "").strip().lower()
+    if not target_email:
+        active_snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+        if active_snap and isinstance(active_snap.get("value"), dict):
+            # Only use snapshot if explicit confirmation string is passed
+            if confirmation.upper() == "DELETE":
+                target_email = (active_snap["value"].get("email") or "").strip().lower()
+
+    if not target_email:
+        return error_response(
+            "No authenticated user account found to delete.",
+            status_code=401,
+        )
+
+    # If unauthenticated, require exact uppercase confirmation "DELETE"
+    if not identity and confirmation.upper() != "DELETE":
+        return error_response(
+            "Confirmation 'DELETE' is required to delete an account.",
+            status_code=400,
+        )
+
+    # 1. Delete user doc
+    db.users.delete_many({"email": target_email})
+    # 2. Delete businesses
+    db.businesses.delete_many({"email": target_email})
+    # 3. Delete workspaces
+    db.workspaces.delete_many({"$or": [{"email": target_email}, {"scopeKey": target_email}]})
+    # 4. Delete transactions
+    db.transactions.delete_many({"$or": [{"email": target_email}, {"scopeKey": target_email}]})
+    # 5. Delete module records
+    db.module_records.delete_many({"$or": [{"email": target_email}, {"scopeKey": target_email}]})
+    # 6. Delete password resets
+    db.password_resets.delete_many({"email": target_email})
+    # 7. Clear active user snapshot if it matched this user
+    active_snap = db.platform_config.find_one({"key": "active_user_snapshot"})
+    if active_snap and isinstance(active_snap.get("value"), dict):
+        if (active_snap["value"].get("email") or "").strip().lower() == target_email:
+            db.platform_config.delete_many({"key": "active_user_snapshot"})
+
+    logger.info("Successfully deleted user account and scoped data for %s", target_email)
+    resp, code = success_response(
+        message=f"Account '{target_email}' and all business ledgers have been permanently deleted."
+    )
+    resp.delete_cookie("token")
+    resp.delete_cookie("auth_token")
+    resp.delete_cookie("session")
+    return resp, code
+

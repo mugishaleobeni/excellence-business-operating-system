@@ -11,6 +11,7 @@ build/
 .env
 .env.local
 .env.*.local
+docs/test/
 
 # Logs and cache
 npm-debug.log*
@@ -20,6 +21,10 @@ yarn-error.log*
 *.log
 .vite/
 .cache/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
 
 # OS metadata
 .DS_Store

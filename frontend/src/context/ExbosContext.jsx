@@ -689,6 +689,8 @@ export function ExbosProvider({ children }) {
           res = await exbosApi.updateModuleRecord(item.archId, item.moduleName, item.recordId, item.updatedFields)
         } else if (item.type === 'delete') {
           res = await exbosApi.deleteModuleRecord(item.archId, item.moduleName, item.recordId)
+        } else if (item.type === 'delete_tx') {
+          res = await exbosApi.deleteTransaction(item.txId)
         } else if (item.type === 'workspace') {
           res = await exbosApi.patchWorkspace(item.archId, item.payload)
         }
@@ -974,6 +976,10 @@ export function ExbosProvider({ children }) {
   const deleteRecord = (archId, moduleName, recordId) => {
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
+    const recIdStr = String(recordId)
+
+    // Simultaneously purge from transactions in case the record is linked to cashflow ledger
+    setTransactions((prev) => prev.filter((tx) => String(tx.id) !== recIdStr))
 
     const persistDelete = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -981,17 +987,20 @@ export function ExbosProvider({ children }) {
           type: 'delete',
           archId: targetArch,
           moduleName,
-          recordId
+          recordId: recIdStr
         })
         return
       }
-      const res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recordId)
+      const res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recIdStr)
+      // Also attempt backend transaction purge if it exists in ledger collection
+      exbosApi.deleteTransaction(recIdStr).catch(() => {})
+
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
         enqueueOfflineAction({
           type: 'delete',
           archId: targetArch,
           moduleName,
-          recordId
+          recordId: recIdStr
         })
       }
     }
@@ -1001,7 +1010,7 @@ export function ExbosProvider({ children }) {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
       if (!base) return prev
-      const filtered = (base.records?.[moduleName] || []).filter((r) => r.id !== recordId)
+      const filtered = (base.records?.[moduleName] || []).filter((r) => String(r.id) !== recIdStr)
       return {
         ...prev,
         [targetArch]: {
@@ -1013,6 +1022,50 @@ export function ExbosProvider({ children }) {
         }
       }
     })
+  }
+
+  const deleteTransaction = (txId) => {
+    isHydratedRef.current = true
+    const txIdStr = String(txId)
+
+    // 1. Purge from in-memory transactions
+    setTransactions((prev) => prev.filter((tx) => String(tx.id) !== txIdStr))
+
+    // 2. Purge from any workspace bucket that might contain it
+    setWorkspaces((prev) => {
+      const cleanMap = createCleanWorkspaces()
+      const targetArch = user?.architectureId || 'buy-and-sell'
+      const base = prev[targetArch] || cleanMap[targetArch]
+      if (!base) return prev
+      const updatedBuckets = {}
+      Object.keys(base.records || {}).forEach((bucket) => {
+        updatedBuckets[bucket] = (base.records[bucket] || []).filter((r) => String(r.id) !== txIdStr)
+      })
+      return {
+        ...prev,
+        [targetArch]: {
+          ...base,
+          records: updatedBuckets
+        }
+      }
+    })
+
+    // 3. Persist to backend
+    const persistTxDelete = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        enqueueOfflineAction({
+          type: 'delete_tx',
+          txId: txIdStr
+        })
+        return
+      }
+      try {
+        await exbosApi.deleteTransaction(txIdStr)
+      } catch (err) {
+        console.warn('Transaction delete backend note:', err.message)
+      }
+    }
+    persistTxDelete()
   }
 
   const updateRecord = (archId, moduleName, recordId, updatedFields) => {
@@ -1542,6 +1595,7 @@ export function ExbosProvider({ children }) {
         transactions,
         addTransaction,
         editTransactionWithAudit,
+        deleteTransaction,
         integrations,
         setIntegrations,
         exportHistory,

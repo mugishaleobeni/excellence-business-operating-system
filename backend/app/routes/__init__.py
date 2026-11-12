@@ -1,6 +1,7 @@
 from flask import Flask
 from app.routes.auth import auth_bp
 from app.routes.health import health_bp
+from app.routes.integrations import integrations_bp
 from app.routes.storage import storage_bp
 from app.routes.super_admin import super_admin_bp
 from app.routes.tools import tools_bp
@@ -17,11 +18,13 @@ def register_blueprints(app: Flask) -> None:
     app.register_blueprint(transactions_bp)
     app.register_blueprint(super_admin_bp)
     app.register_blueprint(tools_bp)
+    app.register_blueprint(integrations_bp)
 
 
 __all__ = [
     "auth_bp",
     "health_bp",
+    "integrations_bp",
     "register_blueprints",
     "storage_bp",
     "super_admin_bp",
