@@ -14,7 +14,7 @@ export const KINYARWANDA_DICT = {
   'sign in': 'Injira',
   'sign out': 'Sohoka',
   'get started': 'Tangira Ubu',
-  'start free trial': 'Tangira Igerageza ry\'Ubuntu',
+  'start free trial': 'Tangira Ugerageze Ni Ubuntu',
   'create account': 'Fungura Konti',
   'back to home': 'Subira Ahabanza',
   'cancel': 'Hagarika',
@@ -44,7 +44,60 @@ export const KINYARWANDA_DICT = {
   'loading...': 'Birimo gufungura...',
 
   // Landing Page & Marketing
-  'all-in-one business operating system': 'Sisitemu Ikomatanya Ibikorwa by\'Ubucuruzi',
+  'start free': 'Tangira ku Buntu',
+  'build a business that survives.': 'Ubaka Ubucuruzi Buramba.',
+  'build a business that': 'Ubaka Ubucuruzi',
+  'survives.': 'Buramba.',
+  'and grows.': 'Kandi Bugatera Imbere.',
+  'great businesses need more than great ideas. understand your costs, manage your operations, track performance, and make smarter decisions with excellence bos.':
+    'Ubucuruzi bukomeye bukenera ibirenze ibitekerezo byiza. Sobanukirwa ibiguzi byawe, yobora ibikorwa, ukurikirane imikorere, kandi ufate ibyemezo byiza ukoresheje EXCELLENCE BOS.',
+  'plan smarter. operate better. grow stronger.': 'Teganya Neza. Kora Neza. Komera Kurushaho.',
+  'why choose exbos?': 'Kuki Wahitamo ExBOS?',
+  'smarter business management. less complexity. better decisions.':
+    'Imiyoborere myiza y\'ubucuruzi. Imbogamizi nke. Ibyemezo byiza.',
+  'explore exbos': 'Menya ExBOS',
+  'smart inventory': 'Ububiko Bwubwenge',
+  'track products, stock levels, purchases, and sales.':
+    'Kurikirana ibicuruzwa, ingano mu bubiko, ibyaguzwe, n\'ibyagurishijwe.',
+  'sales & profit insights': 'Isesengura ry\'Icuruzwa n\'Inyungu',
+  'understand your sales, expenses, and business performance.':
+    'Sobanukirwa ibyagurishijwe, ibikoreshwa, n\'imikorere y\'ubucuruzi bwawe.',
+  'cash flow forecasting': 'Iteganyamigambi ry\'Amafaranga',
+  'plan ahead and understand your future cash needs.':
+    'Teganya mbere kandi usobanukirwe amafaranga uzakenera mu gihe kizaza.',
+  'customer management': 'Imicungire y\'Abakiriya',
+  'keep customer information and transaction histories organized.':
+    'Bika amakuru y\'abakiriya n\'amateka y\'ibikorwa ku murongo.',
+  'six business architectures · one intelligent platform':
+    'Imiterere 6 y\'Ubucuruzi · Sisitemu Imwe y\'Ubwenge',
+  'built for the way you do business.': 'Yubatswe ku Buryo Ukora Ubucuruzi Bwawe.',
+  'every business operates differently. discover how exbos adapts to the way you produce, sell, serve, and grow.':
+    'Buri bucuruzi bukora mu buryo butandukanye. Menya uko ExBOS ihuza n\'uko ukora, ugurisha, utanga serivisi, kandi utera imbere.',
+  'architecture': 'Imiterere',
+  'dedicated seo guide': 'Inyoborabikorwa',
+  'you make it. we help you manage it.': 'Urabikora. Tugufasha Kubiyobora.',
+  'from raw materials to finished products, exbos helps manufacturers manage production, calculate costs, track inventory, and monitor sales.':
+    'Kuva ku bikoresho fatizo kugeza ku bicuruzwa byuzuye, ExBOS ifasha abakora ibintu gucunga umusaruro, kubara ibiguzi, gukurikirana ububiko, no kugenzura icuruzwa.',
+  'highlighted capabilities': 'Ubushobozi bw\'Ibanze',
+  'raw materials': 'Ibikoresho Fatizo',
+  'finished goods': 'Ibicuruzwa Byuzuye',
+  'profitability': 'Inyungu',
+  'ideal for:': 'Bikwiriye:',
+  'see how it works': 'Reba Uko Bikora',
+  'get started with': 'Tangira na',
+  '— don\'t just run your business. understand it.': '— Ntukayobore ubucuruzi gusa. Busobanukirwe.',
+  'livestock & animal farming': 'Ubworozi n\'Ubuhinzi',
+  'hybrid business': 'Ubucuruzi Buvanze',
+  'service-based': 'Serivisi',
+  'livestock': 'Ubworozi',
+  'explore business financial tools': 'Reba Ibikoresho by\'Imari y\'Ubucuruzi',
+  'calculate before you invest. know your real cost of survival.':
+    'Bara Mbere yo Gushora Imari. Menya Ikiguzi Nyacyo cyo Kubaho k\'Ubucuruzi.',
+  'many businesses do not fail due to bad ideas—they fail because the founder does not know the real cost of survival. use our 5 financial planning tools below:':
+    'Ubucuruzi bwinshi ntibuhomba kubera ibitekerezo bibi—buhomba kuko nyirabwo atazi ikiguzi nyacyo cyo kubaho. Koresha ibikoresho 5 byo guteganya imari bikurikira:',
+  'interactive financial planner': 'Umufasha wo Guteganya Imari',
+  'survival budget planner': 'Ingengo y\'Imari yo Kubaho (Amezi 6)',
+  'all-in-one business operating system': 'Sisitemu Ifatanya Ibikorwa by\'Ubucuruzi Ahantu Hamwe',
   'run your entire business from one intelligent workspace': 'Yobora ubucuruzi bwawe bwose mu kigo kimwe cy\'ikoranabuhanga',
   'explore features': 'Reba Imikorere',
   'why choose exbos': 'Kuki Wahitamo ExBOS',
@@ -52,9 +105,23 @@ export const KINYARWANDA_DICT = {
   'financial tools': 'Ibikoresho by\'Imari',
   'profit & loss': 'Inyungu n\'Igihombo',
   'break-even calculator': 'Ibara ry\'Icyo Ucuruza Ngo Udahomba',
+  'platform & features': 'Sisitemu n\'Imikorere',
+  'about exbos': 'Ibyerekeye ExBOS',
+  'resources & guides': 'Ibikoresho & Inyoborabikorwa',
+  'models & financial tools': 'Imiterere n\'Ibikoresho by\'Imari',
+  'business models (01–06)': 'Ubwoko bw\'Ubucuruzi (01–06)',
+  'business financial tools': 'Ibikoresho by\'Imari y\'Ubucuruzi',
+  'pricing plans (rwf)': 'Ibiciro (RWF)',
+  'transparent rwf pricing controlled live by super admin': 'Ibiciro Bisobanutse mu Mafranga y\'u Rwanda (RWF)',
+  'everything you need to know about excellence bos': 'Byose Ukeneye Kumenya kuri EXCELLENCE BOS',
+  'whatsapp business': 'WhatsApp Business',
+  'gmail & pdf dispatch': 'Kohereza kuri Gmail & PDF',
+  'request integration': 'Saba Ihuza',
+  'account & access': 'Konti no Kwinjira',
+  'language / ururimi': 'Ururimi',
 
   // Auth Pages
-  'welcome back': 'Murakaza Neza Nanone',
+  'welcome back': 'Murakaza Neza!!',
   'sign in to your workspace': 'Injira mu kigo cyawe cy\'ubucuruzi',
   'email address': 'Imeri yawe',
   'password': 'Ijambobanga',
@@ -292,7 +359,7 @@ const DYNAMIC_PATTERNS = [
  */
 export function translateToKinyarwanda(text) {
   if (!text || typeof text !== 'string') return text
-  const trimmed = text.trim()
+  const trimmed = text.trim().replace(/\s+/g, ' ')
   if (!trimmed) return text
 
   const lower = trimmed.toLowerCase()

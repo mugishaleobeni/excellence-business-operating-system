@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 // Lightweight motion shim for zero-dependency build reliability
 const motion = new Proxy({}, {
-  get: (_, tag) => forwardRef(({ animate, initial, exit, transition, whileHover, whileTap, variants, ...props }, ref) => {
+  get: (_, tag) => forwardRef(({ animate, initial, exit, transition, whileHover, whileTap, whileInView, viewport, variants, ...props }, ref) => {
     const Tag = tag
     return <Tag ref={ref} {...props} />
   })
