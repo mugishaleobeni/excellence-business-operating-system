@@ -8,6 +8,7 @@ import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import SuperAdminPage from './pages/SuperAdminPage'
 import GlobalToastContainer from './components/common/GlobalToastContainer'
+import GlobalKinyarwandaTranslator from './components/common/GlobalKinyarwandaTranslator'
 import PreloaderScreen from './components/common/PreloaderScreen'
 import {
   FeaturesPage,
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="*" element={<LandingPage />} />
         </Routes>
         <GlobalToastContainer />
+        <GlobalKinyarwandaTranslator />
       </BrowserRouter>
     </ExbosProvider>
   )
