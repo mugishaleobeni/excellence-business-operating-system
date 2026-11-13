@@ -21,14 +21,47 @@ export function useLiveDashboardData({
     const suppliersList = Array.isArray(records['Suppliers']) ? records['Suppliers'] : []
     const productionList = Array.isArray(records['Production']) ? records['Production'] : []
 
-    const inTx = archTransactions
-      .filter((t) => t.type === 'in')
-      .reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
-    const outTx = archTransactions
-      .filter((t) => t.type === 'out')
-      .reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
+    const saleIds = new Set(salesList.map((s) => String(s.id)))
+    const purchaseIds = new Set(purchasesList.map((p) => String(p.id)))
+    const expenseIds = new Set(expensesList.map((e) => String(e.id)))
 
-    // Compute strictly from live database records and transactions
+    const standaloneInTxs = archTransactions.filter((t) => {
+      if (t.type !== 'in') return false
+      if (t.recordId && saleIds.has(String(t.recordId))) return false
+      if (t.sourceModule === 'Sales') return false
+      if (
+        t.source === 'Live Dashboard' &&
+        typeof t.category === 'string' &&
+        t.category.startsWith('Sales (')
+      ) {
+        return false
+      }
+      return true
+    })
+
+    const standaloneOutTxs = archTransactions.filter((t) => {
+      if (t.type !== 'out') return false
+      if (
+        t.recordId &&
+        (purchaseIds.has(String(t.recordId)) || expenseIds.has(String(t.recordId)))
+      ) {
+        return false
+      }
+      if (t.sourceModule === 'Purchases' || t.sourceModule === 'Expenses') return false
+      if (
+        t.source === 'Live Dashboard' &&
+        typeof t.category === 'string' &&
+        (t.category.startsWith('Purchases (') || t.category.startsWith('Expenses ('))
+      ) {
+        return false
+      }
+      return true
+    })
+
+    const inTx = standaloneInTxs.reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
+    const outTx = standaloneOutTxs.reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
+
+    // Compute strictly from live database records and standalone transactions (no double-counting)
     const totalSales =
       salesList.reduce((acc, s) => acc + (Number(s.amountRWF || s.totalAmount || s.amount) || 0), 0) + inTx
 

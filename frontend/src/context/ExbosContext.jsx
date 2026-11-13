@@ -256,6 +256,106 @@ export function ExbosProvider({ children }) {
   // Preselected Architecture for Registration Flow
   const [preselectedArchitecture, setPreselectedArchitecture] = useState('buy-and-sell')
 
+  // Multi-Branch State (Default Main HQ + sub-branches created in Settings)
+  const [branches, setBranches] = useState(() => {
+    try {
+      const saved = localStorage.getItem('exbos_branches')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const [activeBranchId, setActiveBranchId] = useState(() => {
+    try {
+      return localStorage.getItem('exbos_active_branch') || 'main'
+    } catch {
+      return 'main'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_branches', JSON.stringify(branches))
+    } catch {}
+  }, [branches])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('exbos_active_branch', activeBranchId)
+    } catch {}
+  }, [activeBranchId])
+
+  useEffect(() => {
+    if (!user?.email) {
+      setBranches([])
+      setActiveBranchId('main')
+      return
+    }
+    exbosApi.getBranches().then((res) => {
+      if (res?.ok && Array.isArray(res?.data?.branches)) {
+        setBranches(res.data.branches)
+        if (!res.data.branches.some((b) => b.id === activeBranchId)) {
+          setActiveBranchId('main')
+        }
+      }
+    }).catch(() => {})
+  }, [user?.email])
+
+  const activeBranch = useMemo(() => {
+    return (
+      branches.find((b) => b.id === activeBranchId) || {
+        id: 'main',
+        name: user?.businessName ? `${user.businessName} (Main HQ)` : 'Main HQ',
+        architectureId: user?.architectureId || 'buy-and-sell',
+        isMain: true
+      }
+    )
+  }, [branches, activeBranchId, user])
+
+  const switchBranch = (branchId) => {
+    setActiveBranchId(branchId || 'main')
+  }
+
+  const createBranch = async ({ name, location, architectureId }) => {
+    const trimmed = String(name || '').trim()
+    if (!trimmed) return { ok: false, error: 'Branch name is required.' }
+    const targetArch = architectureId || user?.architectureId || 'buy-and-sell'
+    try {
+      const res = await exbosApi.createBranch({
+        name: trimmed,
+        location: location || user?.location || 'Rwanda',
+        architectureId: targetArch
+      })
+      if (res?.ok && res?.data?.branch) {
+        const created = res.data.branch
+        setBranches((prev) => {
+          const list = prev.length > 0 ? prev : [activeBranch]
+          return [...list.filter((b) => b.id !== created.id), created]
+        })
+        return { ok: true, branch: created }
+      }
+    } catch {}
+    const localBranch = {
+      id: `br-${Date.now().toString().slice(-6)}`,
+      name: trimmed,
+      location: location || 'Rwanda',
+      architectureId: targetArch,
+      isMain: false,
+      createdAt: new Date().toISOString()
+    }
+    setBranches((prev) => [...prev, localBranch])
+    return { ok: true, branch: localBranch }
+  }
+
+  const deleteBranch = async (branchId) => {
+    if (!branchId || branchId === 'main') return
+    setBranches((prev) => prev.filter((b) => b.id !== branchId))
+    if (activeBranchId === branchId) setActiveBranchId('main')
+    try {
+      await exbosApi.deleteBranch(branchId)
+    } catch {}
+  }
+
   // Saved Financial Tool Analyses (Starts clean; populated from backend / user entries)
   const [savedAnalyses, setSavedAnalyses] = useState(() => {
     try {
@@ -831,6 +931,7 @@ export function ExbosProvider({ children }) {
     const entry = {
       id: recordId,
       date: todayStr,
+      branchId: newItem?.branchId || activeBranchId || 'main',
       ...newItem
     }
 
@@ -894,25 +995,49 @@ export function ExbosProvider({ children }) {
     })
 
     if (moduleName === 'Sales' && Number(newItem.amountRWF) > 0) {
-      addTransaction({
-        architectureId: targetArch,
-        title: newItem.title || 'Sale Entry',
-        type: 'in',
-        category: `${moduleName} (${newItem.subPage || 'General'})`,
-        amountRWF: Number(newItem.amountRWF),
-        account: newItem.paymentMethod || 'Cash / MoMo Till',
-        source: 'Live Dashboard'
-      })
+      const statusLower = String(newItem.status || '').toLowerCase()
+      const paidAmt =
+        newItem.paidAmountRWF !== undefined
+          ? Number(newItem.paidAmountRWF) || 0
+          : statusLower.includes('unpaid') || statusLower.includes('credit')
+          ? 0
+          : statusLower.includes('part')
+          ? Math.round(Number(newItem.amountRWF) / 2)
+          : Number(newItem.amountRWF) || 0
+      if (paidAmt > 0) {
+        addTransaction({
+          architectureId: targetArch,
+          recordId: entry.id,
+          sourceModule: 'Sales',
+          title: newItem.title || 'Sale Entry',
+          type: 'in',
+          category: `${moduleName} (${newItem.subPage || 'General'})`,
+          amountRWF: paidAmt,
+          account: newItem.paymentMethod || 'Cash / MoMo Till',
+          source: 'Live Dashboard'
+        })
+      }
     } else if (moduleName === 'Purchases' && Number(newItem.amountRWF) > 0) {
-      addTransaction({
-        architectureId: targetArch,
-        title: newItem.title || 'Purchase Entry',
-        type: 'out',
-        category: `${moduleName} (${newItem.subPage || 'General'})`,
-        amountRWF: Number(newItem.amountRWF),
-        account: 'Supplier / Cash Account',
-        source: 'Live Dashboard'
-      })
+      const statusLower = String(newItem.status || '').toLowerCase()
+      const paidAmt =
+        newItem.paidAmountRWF !== undefined
+          ? Number(newItem.paidAmountRWF) || 0
+          : statusLower.includes('unpaid') || statusLower.includes('credit')
+          ? 0
+          : Number(newItem.amountRWF) || 0
+      if (paidAmt > 0) {
+        addTransaction({
+          architectureId: targetArch,
+          recordId: entry.id,
+          sourceModule: 'Purchases',
+          title: newItem.title || 'Purchase Entry',
+          type: 'out',
+          category: `${moduleName} (${newItem.subPage || 'General'})`,
+          amountRWF: paidAmt,
+          account: newItem.paymentMethod || 'Supplier / Cash Account',
+          source: 'Live Dashboard'
+        })
+      }
     }
 
     // Persist to MongoDB with offline queue fallback
@@ -979,7 +1104,13 @@ export function ExbosProvider({ children }) {
     const recIdStr = String(recordId)
 
     // Simultaneously purge from transactions in case the record is linked to cashflow ledger
-    setTransactions((prev) => prev.filter((tx) => String(tx.id) !== recIdStr))
+    const linkedTxIds = transactions
+      .filter((tx) => String(tx.id) === recIdStr || String(tx.recordId || '') === recIdStr)
+      .map((tx) => String(tx.id))
+
+    setTransactions((prev) =>
+      prev.filter((tx) => String(tx.id) !== recIdStr && String(tx.recordId || '') !== recIdStr)
+    )
 
     const persistDelete = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -994,6 +1125,11 @@ export function ExbosProvider({ children }) {
       const res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recIdStr)
       // Also attempt backend transaction purge if it exists in ledger collection
       exbosApi.deleteTransaction(recIdStr).catch(() => {})
+      linkedTxIds.forEach((txId) => {
+        if (txId !== recIdStr) {
+          exbosApi.deleteTransaction(txId).catch(() => {})
+        }
+      })
 
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
         enqueueOfflineAction({
@@ -1481,6 +1617,9 @@ export function ExbosProvider({ children }) {
     const record = {
       id: tx.id || `TX-${Math.floor(1000 + Math.random() * 9000)}`,
       architectureId: tx.architectureId || user?.architectureId || 'buy-and-sell',
+      branchId: tx.branchId || activeBranchId || 'main',
+      recordId: tx.recordId || null,
+      sourceModule: tx.sourceModule || null,
       title: tx.title || (tx.type === 'out' ? 'Business Expense' : 'Direct Sale'),
       type: tx.type || 'in',
       category: tx.category || 'Sales Revenue',
@@ -1554,6 +1693,32 @@ export function ExbosProvider({ children }) {
     })
   }
 
+  const scopedTransactions = useMemo(() => {
+    const target = activeBranchId || 'main'
+    return transactions.filter((tx) => (tx.branchId || 'main') === target)
+  }, [transactions, activeBranchId])
+
+  const scopedWorkspaces = useMemo(() => {
+    const target = activeBranchId || 'main'
+    const out = {}
+    Object.keys(workspaces || {}).forEach((archKey) => {
+      const ws = workspaces[archKey]
+      if (!ws) return
+      const filteredRecords = {}
+      Object.keys(ws.records || {}).forEach((bucket) => {
+        const arr = ws.records[bucket]
+        filteredRecords[bucket] = Array.isArray(arr)
+          ? arr.filter((r) => (r.branchId || 'main') === target)
+          : arr
+      })
+      out[archKey] = {
+        ...ws,
+        records: filteredRecords
+      }
+    })
+    return out
+  }, [workspaces, activeBranchId])
+
   return (
     <ExbosContext.Provider
       value={{
@@ -1574,6 +1739,12 @@ export function ExbosProvider({ children }) {
         login,
         registerNewBusiness,
         logout,
+        branches,
+        activeBranchId,
+        activeBranch,
+        switchBranch,
+        createBranch,
+        deleteBranch,
         pendingCalculator,
         savePendingCalculatorState,
         preselectedArchitecture,
@@ -1592,7 +1763,8 @@ export function ExbosProvider({ children }) {
         setBusinesses,
         superAdminBroadcast,
         setSuperAdminBroadcast,
-        transactions,
+        transactions: scopedTransactions,
+        allTransactions: transactions,
         addTransaction,
         editTransactionWithAudit,
         deleteTransaction,
@@ -1600,13 +1772,14 @@ export function ExbosProvider({ children }) {
         setIntegrations,
         exportHistory,
         setExportHistory,
-        workspaces,
+        workspaces: scopedWorkspaces,
+        allWorkspaces: workspaces,
         updateWorkspace,
         addRecord,
         updateRecord,
         deleteRecord,
         resetWorkspaceData,
-        demoWorkspaces: workspaces,
+        demoWorkspaces: scopedWorkspaces,
         updateDemoWorkspace: updateWorkspace,
         addDemoRecord: addRecord,
         updateDemoRecord: updateRecord,

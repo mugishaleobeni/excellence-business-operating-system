@@ -6,6 +6,8 @@ import apiClient from '../../utils/apiClient'
 import ProductQrCode from '../../utils/qrCodeGenerator'
 import LanguageDropdown from '../common/LanguageDropdown'
 import UniversalModuleTable from './UniversalModuleTable'
+import UnpaidCustomersReminderPanel from './views/UnpaidCustomersReminderPanel'
+import BranchSettingsCard from './settings/BranchSettingsCard'
 import AnimalRegistryWorkspace from './animal/AnimalRegistryWorkspace'
 import DeleteConfirmModal from '../common/DeleteConfirmModal'
 import {
@@ -232,11 +234,22 @@ export default function InteractiveModulePanel({
   const records = useMemo(() => {
     let list = [...rawModuleRecords]
 
-    // If bucket is Sales or Expenses or Purchases, integrate transactions recorded
+    // If bucket is Sales or Expenses or Purchases, integrate standalone transactions recorded outside the module
     if (transactions && transactions.length > 0) {
+      const seenIds = new Set(list.map((r) => String(r.id)))
       const matchingTxs = transactions.filter((tx) => {
         const txArch = tx.architectureId || 'buy-and-sell'
         if (txArch !== activeArchId) return false
+        if (tx.recordId && seenIds.has(String(tx.recordId))) return false
+        if (tx.sourceModule && tx.sourceModule === bucketKey) return false
+        // Skip legacy module-originated transactions that were saved without recordId
+        if (
+          tx.source === 'Live Dashboard' &&
+          typeof tx.category === 'string' &&
+          tx.category.startsWith(`${bucketKey} (`)
+        ) {
+          return false
+        }
         if (bucketKey === 'Sales' && tx.type === 'in') return true
         if ((bucketKey === 'Purchases' || bucketKey === 'Expenses') && tx.type === 'out') return true
         return false
@@ -257,11 +270,10 @@ export default function InteractiveModulePanel({
       })
 
       // Deduplicate by ID
-      const seenIds = new Set(list.map((r) => r.id))
       matchingTxs.forEach((mtx) => {
-        if (!seenIds.has(mtx.id)) {
+        if (!seenIds.has(String(mtx.id))) {
           list.unshift(mtx)
-          seenIds.add(mtx.id)
+          seenIds.add(String(mtx.id))
         }
       })
     }
@@ -1599,6 +1611,9 @@ export default function InteractiveModulePanel({
           </form>
         </div>
 
+        {/* Multi-Branch Management (Creates branches appearing in sidebar navigation) */}
+        <BranchSettingsCard activeArchId={activeArchId} currentArch={currentArch} />
+
         {/* Danger Zone: Account Deletion */}
         <div className="rounded-2xl border-2 border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-[#040C26]/95 p-6 sm:p-7 space-y-4 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-500/20 pb-4">
@@ -1987,6 +2002,13 @@ export default function InteractiveModulePanel({
                 <span>+ New Category</span>
               </button>
             </div>
+          )}
+
+          {(activeModule === 'Customers' || activeModule === 'Sales') && (
+            <UnpaidCustomersReminderPanel
+              activeArchId={activeArchId}
+              hideFinancials={hideFinancials}
+            />
           )}
 
           <UniversalModuleTable
@@ -2430,19 +2452,6 @@ export default function InteractiveModulePanel({
         activePage={activePage}
         onSaveSale={(salePayload, selectedProd) => {
           addDemoRecord(activeArchId, "Sales", salePayload)
-          if (salePayload.amountRWF > 0 && (salePayload.status === "Paid in Full" || salePayload.status === "Paid")) {
-            addTransaction({
-              architectureId: activeArchId,
-              title: `Sale: ${salePayload.productTitle || salePayload.title || 'Product'} (${salePayload.quantity || 1} ${salePayload.unit || 'units'})`,
-              amountRWF: salePayload.amountRWF,
-              amount: salePayload.amountRWF,
-              type: "in",
-              account: salePayload.paymentMethod || 'Cash in Hand (Main Till)',
-              channel: salePayload.paymentMethod,
-              category: "Sales Revenue",
-              subPage: activePage || "Sales"
-            })
-          }
           if (selectedProd) {
             const curStock = Number(selectedProd.quantity || selectedProd.currentStock) || 0
             const newStock = Math.max(0, curStock - salePayload.quantity)
@@ -2511,19 +2520,6 @@ export default function InteractiveModulePanel({
         activePage={activePage}
         onSavePurchase={(purchasePayload, selectedProd, remaining) => {
           addDemoRecord(activeArchId, "Purchases", purchasePayload)
-          if (purchasePayload.paidAmountRWF > 0) {
-            addTransaction({
-              architectureId: activeArchId,
-              title: `Purchase: ${purchasePayload.productTitle || purchasePayload.title || 'Product'} (${purchasePayload.quantity || 1} ${purchasePayload.unit || 'units'})`,
-              amountRWF: purchasePayload.paidAmountRWF,
-              amount: purchasePayload.paidAmountRWF,
-              type: "out",
-              account: purchasePayload.paymentMethod || 'Cash in Hand (Main Till)',
-              channel: purchasePayload.paymentMethod,
-              category: "Inventory Restock",
-              subPage: activePage || "Purchases"
-            })
-          }
           if (selectedProd) {
             const curStock = Number(selectedProd.quantity || selectedProd.currentStock) || 0
             const newStock = curStock + purchasePayload.quantity

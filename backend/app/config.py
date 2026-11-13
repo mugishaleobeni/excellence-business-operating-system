@@ -48,6 +48,12 @@ class BaseConfig:
         "http://127.0.0.1:5173/dashboard?module=Documents"
     )
 
+    WHATSAPP_ACCESS_TOKEN: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
+    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+    WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "exbos-whatsapp-verify-2026")
+    WHATSAPP_OFFICIAL_NUMBER: str = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+    META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")
+
     CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(

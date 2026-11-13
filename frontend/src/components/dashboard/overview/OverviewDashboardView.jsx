@@ -4,7 +4,9 @@ import { DASHBOARD_QUICK_ACTIONS } from '../data/dashboardConstants'
 import IndustryStatusBanner from './IndustryStatusBanner'
 import OverviewMetricsGrid from './OverviewMetricsGrid'
 import CashFlowCurveChart from './CashFlowCurveChart'
+import BranchPerformanceCenterPanel from './BranchPerformanceCenterPanel'
 import RecentActivityTable from './RecentActivityTable'
+import { useExbos } from '../../../context/ExbosContext'
 import WidgetCustomizerModal from '../layout/WidgetCustomizerModal'
 import LiveWorkflowModal from '../modals/LiveWorkflowModal'
 import MobileFintechDashboardHeader from '../layout/MobileFintechDashboardHeader'
@@ -37,6 +39,7 @@ export default function OverviewDashboardView({
 }) {
   const [addCardModalOpen, setAddCardModalOpen] = useState(false)
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false)
+  const { activeBranch } = useExbos()
 
   const quickActions =
     DASHBOARD_QUICK_ACTIONS[activeArchId] ||
@@ -64,10 +67,11 @@ export default function OverviewDashboardView({
       <div className="hidden lg:flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="font-orbitron text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Dashboard Overview
+            {activeBranch && !activeBranch.isMain ? `${activeBranch.name} · Overview` : 'Dashboard Overview'}
           </h2>
           <p className="text-xs sm:text-sm text-[#9EDCFF]/80 mt-1">
             Real-time financial status &amp; operational workflows · {currentArch?.name || 'Enterprise'}
+            {activeBranch?.name ? ` · ${activeBranch.name}` : ''}
           </p>
         </div>
 
@@ -124,6 +128,12 @@ export default function OverviewDashboardView({
         isCardVisible={isCardVisible}
         widgetStyle={widgetStyle}
         handleRemoveCard={handleRemoveCard}
+      />
+
+      {/* Main HQ Center: GitHub Contribution Heatmap & Best Performing Branch Graph */}
+      <BranchPerformanceCenterPanel
+        activeArchId={activeArchId}
+        hideFinancials={hideFinancials}
       />
 
       {/* Manage / Customize Widgets Modal Dialog */}

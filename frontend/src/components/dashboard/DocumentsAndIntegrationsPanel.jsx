@@ -309,39 +309,60 @@ export default function DocumentsAndIntegrationsPanel({
     }
   }
 
+  const [waMetaConfigured, setWaMetaConfigured] = useState(false)
+  const [waConnecting, setWaConnecting] = useState(false)
+
+  useEffect(() => {
+    exbosApi.whatsappStatus().then((res) => {
+      if (res?.ok && res?.data) {
+        setWaMetaConfigured(Boolean(res.data.metaConfigured))
+      }
+    }).catch(() => {})
+  }, [])
+
+  const handleConnectWhatsApp = async () => {
+    setWaConnecting(true)
+    try {
+      const res = await exbosApi.whatsappConnect({
+        phone: integrations?.whatsapp?.linkedBusinessPhone,
+        architectureId: activeArchId
+      })
+      if (res?.ok && res?.data) {
+        setWaMessages((prev) => [
+          ...prev,
+          { from: 'bot', text: res.data.welcomeMessage || 'Official ExBOS WhatsApp connected & welcome message sent!' }
+        ])
+      }
+    } finally {
+      setWaConnecting(false)
+    }
+  }
+
+  const sendWhatsAppCommand = async (rawMsg) => {
+    const msg = String(rawMsg || '').trim()
+    if (!msg) return
+    const next = [...waMessages, { from: 'owner', text: msg }]
+    setWaMessages(next)
+    setWaInput('')
+
+    try {
+      const res = await exbosApi.whatsappSimulate({ message: msg })
+      if (res?.ok && res?.data?.reply) {
+        setWaMessages([...next, { from: 'bot', text: res.data.reply }])
+        return
+      }
+    } catch {}
+
+    setWaMessages([
+      ...next,
+      { from: 'bot', text: 'Unable to reach WhatsApp engine right now. Please verify backend connection.' }
+    ])
+  }
+
   const handleWhatsAppSend = (e) => {
     e.preventDefault()
     if (!waInput.trim()) return
-    const msg = waInput.trim()
-    const next = [...waMessages, { from: 'owner', text: msg }]
-    const lower = msg.toLowerCase()
-
-    if (lower.includes('export') || lower.includes('drive')) {
-      next.push({
-        from: 'bot',
-        text: `Verified business identity. Exporting "${reportType}" (${selectedFormat}) directly to Google Drive folder "${integrations.googleDrive.folderName}".`
-      })
-      triggerExportAction('Google Drive via WhatsApp')
-    } else if (lower.includes('sold') || lower.includes('sale')) {
-      addTransaction({
-        title: `WhatsApp Recorded: ${msg}`,
-        type: 'in',
-        category: 'Sales Revenue',
-        amountRWF: 120000,
-        source: 'WhatsApp'
-      })
-      next.push({
-        from: 'bot',
-        text: '✓ Sale of 120,000 RWF recorded to your Dashboard & Cash Ledger with source tag: WhatsApp.'
-      })
-    } else {
-      next.push({
-        from: 'bot',
-        text: 'Summary: Today Money In: +750,000 RWF | Money Out: −368,000 RWF | Spendable Cash + MoMo + Bank: 4,820,000 RWF. PDF report attached.'
-      })
-    }
-    setWaMessages(next)
-    setWaInput('')
+    sendWhatsAppCommand(waInput.trim())
   }
 
   return (
@@ -734,24 +755,52 @@ export default function DocumentsAndIntegrationsPanel({
 
         {/* C. EXCELLENCE BOS Official WhatsApp Integration */}
         <div className="sapphire-analytics-card p-6 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
               <MessageSquare className="w-5 h-5" />
             </div>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-orbitron font-bold">
-              Official ExBOS Number Linked
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-orbitron font-bold">
+              {waMetaConfigured ? 'Meta Cloud API Live' : 'Official ExBOS Linked (Ready for Meta)'}
             </span>
           </div>
-          <div>
-            <h3 className="font-orbitron text-base font-bold text-[#071544] dark:text-white">
-              EXCELLENCE BOS WhatsApp
-            </h3>
-            <p className="text-[11px] text-slate-600 dark:text-slate-300">
-              Linked Phone: <strong>{integrations.whatsapp.linkedBusinessPhone}</strong> (No Meta developer app required by customer).
-            </p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="font-orbitron text-base font-bold text-[#071544] dark:text-white">
+                EXCELLENCE BOS WhatsApp
+              </h3>
+              <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                Linked Phone: <strong>{integrations.whatsapp.linkedBusinessPhone}</strong> · Structured Menu &amp; Commands
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleConnectWhatsApp}
+              disabled={waConnecting}
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-400/30 text-[10px] font-bold text-emerald-300 cursor-pointer whitespace-nowrap"
+            >
+              {waConnecting ? 'Sending...' : 'Send Welcome'}
+            </button>
           </div>
 
-          <div className="max-h-28 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-white/70 dark:bg-[#03091F]/70 border border-[#9EDCFF]/20 text-[11px]">
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { label: '0 Menu', cmd: '0' },
+              { label: '1 Products', cmd: '1' },
+              { label: '5 Report', cmd: '5' },
+              { label: '6 Unpaid', cmd: '6' }
+            ].map((q) => (
+              <button
+                key={q.cmd}
+                type="button"
+                onClick={() => sendWhatsAppCommand(q.cmd)}
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-[10px] font-semibold text-[#9EDCFF] cursor-pointer"
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="max-h-36 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-white/70 dark:bg-[#03091F]/70 border border-[#9EDCFF]/20 text-[11px] whitespace-pre-line">
             {waMessages.map((m, i) => (
               <div
                 key={i}
@@ -771,7 +820,7 @@ export default function DocumentsAndIntegrationsPanel({
               type="text"
               value={waInput}
               onChange={(e) => setWaInput(e.target.value)}
-              placeholder='Try: "Sold items 120,000" or "Export Drive"'
+              placeholder='Try: "1", "5", "SALE 1 iPhone 300000", "UNPAID"'
               className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#071544] border border-blue-200 dark:border-[#9EDCFF]/30 text-xs text-[#071544] dark:text-white"
             />
             <button type="submit" className="btn-sapphire px-3 py-2 text-xs">

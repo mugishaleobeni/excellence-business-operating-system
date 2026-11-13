@@ -152,7 +152,25 @@ export const exbosApi = {
   disconnectGoogleDrive: () =>
     apiRequest('/integrations/google-drive/disconnect', { method: 'POST' }),
   disconnectGmail: () =>
-    apiRequest('/integrations/gmail/disconnect', { method: 'POST' })
+    apiRequest('/integrations/gmail/disconnect', { method: 'POST' }),
+  whatsappStatus: () => apiRequest(withScope('/whatsapp/status')),
+  whatsappConnect: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/connect'), { method: 'POST', body: payload }),
+  whatsappSimulate: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/simulate'), { method: 'POST', body: payload }),
+  whatsappGetUnpaid: (archId) =>
+    apiRequest(withScope(`/whatsapp/unpaid?archId=${encodeURIComponent(archId || 'buy-and-sell')}`)),
+  whatsappSendReminders: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/reminders/send'), { method: 'POST', body: payload }),
+  whatsappVerifyPayment: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/reminders/verify'), { method: 'POST', body: payload }),
+  getBranches: () => apiRequest(withScope('/branches')),
+  createBranch: (payload = {}) =>
+    apiRequest(withScope('/branches'), { method: 'POST', body: payload }),
+  deleteBranch: (branchId) =>
+    apiRequest(withScope(`/branches/${branchId}`), { method: 'DELETE' }),
+  getBranchAnalytics: (archId) =>
+    apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`))
 }
 
 export const apiClient = exbosApi

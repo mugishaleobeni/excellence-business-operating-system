@@ -49,7 +49,7 @@ export default function DashboardTopNav({
   navigateToModulePage,
   handleModuleClick
 }) {
-  const { demoWorkspaces, transactions } = useExbos()
+  const { demoWorkspaces, transactions, activeBranch } = useExbos()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchContainerRef = useRef(null)
 
@@ -256,6 +256,14 @@ export default function DashboardTopNav({
           <span className="whitespace-nowrap text-[#218DFF] font-semibold text-[10px] sm:text-xs truncate max-w-[85px] sm:max-w-none">
             {currentArch.name}
           </span>
+          {activeBranch?.name && (
+            <>
+              <span className="text-white/30 shrink-0 text-[10px]">/</span>
+              <span className="whitespace-nowrap text-emerald-300 font-semibold text-[10px] sm:text-xs truncate max-w-[110px] sm:max-w-none">
+                {activeBranch.name}
+              </span>
+            </>
+          )}
           <span className="text-white/30 shrink-0 text-[10px]">/</span>
           <span className="whitespace-nowrap text-[#9EDCFF] font-medium text-[10px] sm:text-xs truncate max-w-[95px] sm:max-w-none">
             {activeModule === 'Documents' ? 'Documents' : activeModule}

@@ -5,8 +5,10 @@ import {
   LayoutDashboard,
   Sun,
   Moon,
-  LogOut
+  LogOut,
+  GitBranch
 } from 'lucide-react'
+import { useExbos } from '../../../context/ExbosContext'
 
 export default function ContextualSidebar({
   sidebarCollapsed,
@@ -34,6 +36,7 @@ export default function ContextualSidebar({
   toggleTheme,
   onLogout
 }) {
+  const { branches = [], activeBranchId = 'main', switchBranch } = useExbos()
   const allModules = useMemo(() => {
     const combined = [...(mainModules || []), ...(pinnedModules || [])]
     if (combined.length > 0) return combined
@@ -212,6 +215,49 @@ export default function ContextualSidebar({
                 <strong className="block text-xs font-bold text-white truncate">
                   {currentArch.number} · {currentArch.name}
                 </strong>
+              </div>
+
+              {/* Branch Navigation Switcher (Main HQ + Branches created in Settings) */}
+              <div className="px-3 py-2 rounded-xl bg-white/5 border border-white/15 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[9px] font-orbitron uppercase tracking-wider text-[#9EDCFF]/75 flex items-center gap-1">
+                    <GitBranch className="w-3 h-3 text-[#218DFF]" />
+                    <span>Branch</span>
+                  </span>
+                  <span className="text-[9px] font-mono text-slate-300">
+                    {Math.max(1, branches.length)}
+                  </span>
+                </div>
+                {branches.length > 0 ? (
+                  <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
+                    {branches.map((b) => {
+                      const isSel = b.id === activeBranchId
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => switchBranch && switchBranch(b.id)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-between gap-1.5 cursor-pointer transition-all ${
+                            isSel
+                              ? 'bg-[#218DFF]/25 border border-[#9EDCFF]/50 text-white'
+                              : 'bg-transparent border border-transparent text-slate-300 hover:bg-white/10 hover:text-white'
+                          }`}
+                        >
+                          <span className="truncate">{b.name}</span>
+                          {b.isMain && (
+                            <span className="text-[8px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 shrink-0">
+                              HQ
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-[11px] font-semibold text-white truncate">
+                    {activeBusinessName} (Main HQ)
+                  </div>
+                )}
               </div>
             </div>
 

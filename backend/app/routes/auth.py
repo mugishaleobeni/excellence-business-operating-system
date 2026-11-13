@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, request
 from flask_jwt_extended import (
@@ -323,6 +324,51 @@ def register_business(validated_data: RegisterBusinessSchema):
         {"$set": {"key": "active_user_snapshot", "value": clean_user, "updated_at": now_iso}},
         upsert=True,
     )
+
+    # Auto-connect Official ExBOS WhatsApp & send Welcome Message if opted in
+    try:
+        raw_payload = request.get_json(silent=True) or {}
+        enable_wa = raw_payload.get("enableWhatsAppLink", True)
+        if enable_wa and validated_data.phone:
+            from app.services.whatsapp_client import (
+                build_welcome_message,
+                normalize_phone,
+                send_whatsapp_message,
+            )
+
+            norm_phone = normalize_phone(validated_data.phone)
+            official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+            if norm_phone:
+                db.integrations.update_one(
+                    {"userEmail": email_lower},
+                    {
+                        "$set": {
+                            "userEmail": email_lower,
+                            "whatsapp": {
+                                "id": "whatsapp",
+                                "connected": True,
+                                "officialNumber": official_num,
+                                "linkedBusinessPhone": norm_phone,
+                                "connectedAt": now_iso,
+                            },
+                            "updated_at": now_iso,
+                        }
+                    },
+                    upsert=True,
+                )
+                welcome_msg = build_welcome_message(
+                    validated_data.businessName,
+                    arch_id,
+                    official_num,
+                )
+                send_whatsapp_message(
+                    norm_phone,
+                    welcome_msg,
+                    db=db,
+                    metadata={"type": "registration_welcome", "userEmail": email_lower},
+                )
+    except Exception as wa_exc:
+        logger.warning("Auto WhatsApp welcome skipped: %s", wa_exc)
 
     logger.info(
         "Registered business '%s' (%s) for user %s | architectureId=%s | enabledActivities=%s",
