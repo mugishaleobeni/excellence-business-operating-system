@@ -101,8 +101,9 @@ function getActiveScopeQuery() {
     const saved = localStorage.getItem('exbos_user')
     if (saved) {
       const parsed = JSON.parse(saved)
-      if (parsed?.email) {
-        return `?scopeKey=${encodeURIComponent(String(parsed.email).toLowerCase())}`
+      const scopeEmail = parsed?.ownerScopeKey || parsed?.email
+      if (scopeEmail) {
+        return `?scopeKey=${encodeURIComponent(String(scopeEmail).toLowerCase())}`
       }
     }
   } catch {
@@ -185,8 +186,12 @@ export const exbosApi = {
   getBranches: () => apiRequest(withScope('/branches')),
   createBranch: (payload = {}) =>
     apiRequest(withScope('/branches'), { method: 'POST', body: payload }),
+  updateBranch: (branchId, payload = {}) =>
+    apiRequest(withScope(`/branches/${branchId}`), { method: 'PATCH', body: payload }),
   deleteBranch: (branchId) =>
     apiRequest(withScope(`/branches/${branchId}`), { method: 'DELETE' }),
+  assignBranchManager: (branchId, payload = {}) =>
+    apiRequest(withScope(`/branches/${branchId}/assign-manager`), { method: 'POST', body: payload }),
   getBranchAnalytics: (archId) =>
     apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`))
 }

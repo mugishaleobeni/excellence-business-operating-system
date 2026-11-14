@@ -258,6 +258,7 @@ export function ExbosProvider({ children }) {
 
   // Multi-Branch State (Default Main HQ + sub-branches created in Settings)
   const [branches, setBranches] = useState(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine) return []
     try {
       const saved = localStorage.getItem('exbos_branches')
       return saved ? JSON.parse(saved) : []
@@ -275,7 +276,11 @@ export function ExbosProvider({ children }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem('exbos_branches', JSON.stringify(branches))
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        localStorage.setItem('exbos_branches', JSON.stringify(branches))
+      } else {
+        localStorage.removeItem('exbos_branches')
+      }
     } catch {}
   }, [branches])
 
@@ -294,12 +299,14 @@ export function ExbosProvider({ children }) {
     exbosApi.getBranches().then((res) => {
       if (res?.ok && Array.isArray(res?.data?.branches)) {
         setBranches(res.data.branches)
-        if (!res.data.branches.some((b) => b.id === activeBranchId)) {
+        if (user?.assignedBranchId && res.data.branches.some((b) => b.id === user.assignedBranchId)) {
+          setActiveBranchId(user.assignedBranchId)
+        } else if (!res.data.branches.some((b) => b.id === activeBranchId)) {
           setActiveBranchId('main')
         }
       }
     }).catch(() => {})
-  }, [user?.email])
+  }, [user?.email, user?.assignedBranchId])
 
   const activeBranch = useMemo(() => {
     return (
@@ -327,14 +334,21 @@ export function ExbosProvider({ children }) {
         architectureId: targetArch
       })
       if (res?.ok && res?.data?.branch) {
-        const created = res.data.branch
+        const created = res.branch || res.data.branch
         setBranches((prev) => {
           const list = prev.length > 0 ? prev : [activeBranch]
           return [...list.filter((b) => b.id !== created.id), created]
         })
         return { ok: true, branch: created }
       }
-    } catch {}
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        return { ok: false, error: res?.data?.error || 'Failed to create branch on server.' }
+      }
+    } catch (err) {
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        return { ok: false, error: err?.message || 'Failed to create branch on server.' }
+      }
+    }
     const localBranch = {
       id: `br-${Date.now().toString().slice(-6)}`,
       name: trimmed,
@@ -347,13 +361,51 @@ export function ExbosProvider({ children }) {
     return { ok: true, branch: localBranch }
   }
 
-  const deleteBranch = async (branchId) => {
-    if (!branchId || branchId === 'main') return
-    setBranches((prev) => prev.filter((b) => b.id !== branchId))
-    if (activeBranchId === branchId) setActiveBranchId('main')
+  const updateBranch = async (branchId, updates) => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
     try {
-      await exbosApi.deleteBranch(branchId)
-    } catch {}
+      const res = await exbosApi.updateBranch(branchId, updates)
+      if (res?.ok && res?.data?.branch) {
+        const updated = res.data.branch
+        setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...updated } : b)))
+        return { ok: true, branch: updated }
+      }
+      return { ok: false, error: res?.data?.error || 'Failed to update branch.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to update branch.' }
+    }
+  }
+
+  const assignBranchManager = async (branchId, payload) => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
+    try {
+      const frontendOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://exbos.pages.dev'
+      const res = await exbosApi.assignBranchManager(branchId, { ...payload, frontendOrigin })
+      if (res?.ok && res?.data) {
+        if (res.data.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...res.data.branch } : b)))
+        }
+        return { ok: true, ...res.data }
+      }
+      return { ok: false, error: res?.data?.error || 'Failed to assign branch manager.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to assign branch manager.' }
+    }
+  }
+
+  const deleteBranch = async (branchId) => {
+    if (!branchId || branchId === 'main') return { ok: false, error: 'Main HQ cannot be deleted.' }
+    try {
+      const res = await exbosApi.deleteBranch(branchId)
+      if (res?.ok || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        setBranches((prev) => prev.filter((b) => b.id !== branchId))
+        if (activeBranchId === branchId) setActiveBranchId('main')
+        return { ok: true }
+      }
+      return { ok: false, error: res?.data?.error || 'Failed to delete branch.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to delete branch.' }
+    }
   }
 
   // Saved Financial Tool Analyses (Starts clean; populated from backend / user entries)
@@ -441,8 +493,9 @@ export function ExbosProvider({ children }) {
     }
   })
 
-  // Business Transactions with Edit Audit Trail (Starts clean; records update live on entry)
+  // Business Transactions with Edit Audit Trail (Starts clean; records load from backend when online)
   const [transactions, setTransactions] = useState(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine) return []
     try {
       const saved = localStorage.getItem('exbos_transactions')
       return saved ? sanitizeUserTransactions(JSON.parse(saved)) : []
@@ -523,7 +576,13 @@ export function ExbosProvider({ children }) {
   }, [superAdminBroadcast])
 
   useEffect(() => {
-    localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
+    try {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
+      } else {
+        localStorage.removeItem('exbos_transactions')
+      }
+    } catch {}
   }, [transactions])
 
   // Active Trade / Craft for Make & Sell Architecture
@@ -626,6 +685,9 @@ export function ExbosProvider({ children }) {
   const isHydratedRef = useRef(false)
 
   const [workspaces, setWorkspaces] = useState(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      return createCleanWorkspaces()
+    }
     try {
       const saved = localStorage.getItem('exbos_workspaces_v2')
       if (saved) return sanitizeUserWorkspaces(JSON.parse(saved))
@@ -639,7 +701,8 @@ export function ExbosProvider({ children }) {
   useEffect(() => {
     let isMounted = true
     isHydratedRef.current = false
-    const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
+    const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
+    const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
     fetch(resolveStorageUrl(scopeParam), {
       headers: getAuthHeaders()
     })
@@ -690,16 +753,22 @@ export function ExbosProvider({ children }) {
     }
   }, [user?.email])
 
-  // Persist live user data to both localStorage and Flask + MongoDB Atlas backend (only after hydration)
+  // Persist live user data directly to Flask + MongoDB Atlas backend when online; only cache in browser when offline
   useEffect(() => {
     try {
-      localStorage.setItem('exbos_workspaces_v2', JSON.stringify(workspaces))
-      localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        localStorage.setItem('exbos_workspaces_v2', JSON.stringify(workspaces))
+        localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
+      } else {
+        localStorage.removeItem('exbos_workspaces_v2')
+        localStorage.removeItem('exbos_transactions')
+      }
     } catch {}
 
     if (!isHydratedRef.current) return
 
-    const scopeParam = user?.email ? `?scopeKey=${encodeURIComponent(user.email.toLowerCase())}` : ''
+    const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
+    const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
     const payload = JSON.stringify({
       workspaces,
       transactions,
@@ -1707,12 +1776,20 @@ export function ExbosProvider({ children }) {
       enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
     } else {
       exbosApi.createTransaction(txPayload).then((res) => {
-        if (!res?.ok && (res?.status === 0 || res?.status >= 500 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
-          if (res?.status >= 500) setDbConnected(false)
+        if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
           enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+        } else if (!res?.ok) {
+          if (res?.status >= 500) setDbConnected(false)
+          addToast({
+            type: 'error',
+            title: 'Backend Save Failed',
+            message: res?.data?.error || 'Could not save transaction to MongoDB.'
+          })
         }
       }).catch(() => {
-        enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+        }
       })
     }
     return record
@@ -1823,6 +1900,8 @@ export function ExbosProvider({ children }) {
         activeBranch,
         switchBranch,
         createBranch,
+        updateBranch,
+        assignBranchManager,
         deleteBranch,
         pendingCalculator,
         savePendingCalculatorState,

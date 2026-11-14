@@ -23,9 +23,6 @@ export default function BranchPerformanceCenterPanel({
     switchBranch
   } = useExbos()
 
-  // Only the Main HQ Dashboard visualizes cross-branch performance
-  if (activeBranchId !== 'main') return null
-
   const [viewMode, setViewMode] = useState('both') // 'both' | 'heatmap' | 'bar' | 'profit'
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL')
   const [backendAnalytics, setBackendAnalytics] = useState(null)
@@ -162,6 +159,10 @@ export default function BranchPerformanceCenterPanel({
       totalBranchRev: perfList.reduce((a, b) => a + b.revenueRWF, 0)
     }
   }, [allWorkspaces, activeArchId, branches, selectedBranchFilter])
+
+  const customBranches = branches.filter((b) => !b.isMain && b.id !== 'main')
+  // Only the Main HQ Dashboard visualizes cross-branch performance, and only when at least 1 custom branch exists
+  if (activeBranchId !== 'main' || customBranches.length === 0) return null
 
   const displayBranches = computed.perfList
   const best = computed.bestBranch || backendAnalytics?.bestBranch

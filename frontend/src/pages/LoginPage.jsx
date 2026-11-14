@@ -41,8 +41,17 @@ export default function LoginPage({ isForgotPassword = false }) {
     }
   }, [user, isForgotPassword, returnTo, navigate])
 
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(() => searchParams.get('email') || '')
   const [password, setPassword] = useState('')
+
+  useEffect(() => {
+    const branchParam = searchParams.get('branch')
+    if (branchParam) {
+      try {
+        localStorage.setItem('exbos_active_branch', branchParam)
+      } catch {}
+    }
+  }, [searchParams])
   const [showPassword, setShowPassword] = useState(false)
   const [staySignedIn, setStaySignedIn] = useState(true)
   const [submitting, setSubmitting] = useState(false)

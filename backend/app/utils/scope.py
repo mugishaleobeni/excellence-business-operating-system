@@ -16,14 +16,19 @@ def resolve_scope_key(db=None, fallback_user: dict | None = None) -> str:
         verify_jwt_in_request(optional=True)
         jwt_email = get_jwt_identity()
         if isinstance(jwt_email, str) and jwt_email.strip():
-            return jwt_email.strip().lower()
+            norm_email = jwt_email.strip().lower()
+            if db is not None:
+                user_doc = db.users.find_one({"email": norm_email}, {"ownerScopeKey": 1})
+                if user_doc and user_doc.get("ownerScopeKey"):
+                    return str(user_doc["ownerScopeKey"]).strip().lower()
+            return norm_email
     except Exception:
         pass
 
     if isinstance(fallback_user, dict):
-        u_email = (fallback_user.get("email") or "").strip().lower()
-        if u_email:
-            return u_email
+        u_scope = (fallback_user.get("ownerScopeKey") or fallback_user.get("email") or "").strip().lower()
+        if u_scope:
+            return u_scope
 
     arg_scope = (request.args.get("scopeKey") or "").strip().lower()
     if arg_scope and arg_scope != "default":

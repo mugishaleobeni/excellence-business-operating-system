@@ -239,13 +239,7 @@ export default function RegisterPage() {
           showToast(res.error || 'Could not send verification email.', 'Registration Error')
           return
         }
-        const sentFlag = res.data?.data?.emailSent
-        const fallbackCode = res.data?.data?.verificationCode || ''
-        if (!sentFlag && fallbackCode) {
-          setServerOtpHint(fallbackCode)
-        } else {
-          setServerOtpHint('')
-        }
+        setServerOtpHint('')
         setMaxCompletedStep((prev) => Math.max(prev, 2))
         setStep(2)
       } finally {
@@ -314,11 +308,7 @@ export default function RegisterPage() {
         fullName: form.fullName.trim()
       })
       if (res.ok) {
-        const sentFlag = res.data?.data?.emailSent
-        const fallbackCode = res.data?.data?.verificationCode || ''
-        if (!sentFlag && fallbackCode) {
-          setServerOtpHint(fallbackCode)
-        }
+        setServerOtpHint('')
         setForm((prev) => ({ ...prev, verificationCode: '' }))
         setCodeStatus('idle')
         setEmailVerified(false)
@@ -667,11 +657,6 @@ export default function RegisterPage() {
                 <div>
                   We sent a 6-digit verification code to{' '}
                   <strong className="text-white">{form.email}</strong>. Enter the code below to verify your email address.
-                  {serverOtpHint && (
-                    <div className="mt-1.5 text-xs text-amber-300 font-mono">
-                      Offline SMTP Fallback Code: <strong>{serverOtpHint}</strong>
-                    </div>
-                  )}
                 </div>
                 <button
                   type="button"

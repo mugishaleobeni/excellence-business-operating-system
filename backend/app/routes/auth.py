@@ -115,7 +115,6 @@ def send_email_verification(validated_data: SendVerificationSchema):
         data={
             "email": email_lower,
             "emailSent": email_sent,
-            "verificationCode": code,
             "expiresInMinutes": 15,
         },
         message=f"6-digit verification code sent to {email_lower}.",
@@ -383,7 +382,8 @@ def register_business(validated_data: RegisterBusinessSchema):
 
     access_token = create_access_token(identity=email_lower)
     refresh_token = create_refresh_token(identity=email_lower)
-    user_workspaces = _load_user_workspaces(db, email_lower)
+    workspace_scope = (user_doc.get("ownerScopeKey") or email_lower).strip().lower()
+    user_workspaces = _load_user_workspaces(db, workspace_scope)
 
     return success_response(
         data={
@@ -451,7 +451,8 @@ def login_user(validated_data: LoginSchema):
 
     access_token = create_access_token(identity=email_lower)
     refresh_token = create_refresh_token(identity=email_lower)
-    user_workspaces = _load_user_workspaces(db, email_lower)
+    workspace_scope = (user_doc.get("ownerScopeKey") or email_lower).strip().lower()
+    user_workspaces = _load_user_workspaces(db, workspace_scope)
 
     return success_response(
         data={

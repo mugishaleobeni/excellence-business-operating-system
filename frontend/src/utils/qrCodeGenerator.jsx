@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { QrCode, Copy, Check, Download, Printer } from 'lucide-react'
+import { resolveApiBase } from './apiClient'
 
 /**
  * Format standard scannable product information for any camera / QR code scanner
@@ -35,12 +36,12 @@ export function formatProductQrData(product = {}, businessName = '') {
  */
 export function getQrCodeSvgUrl(text, boxSize = 8, border = 2) {
   const enc = encodeURIComponent(String(text || '').trim())
-  return `/api/v1/workspaces/qrcode?text=${enc}&box_size=${boxSize}&border=${border}&format=svg`
+  return `${resolveApiBase()}/workspaces/qrcode?text=${enc}&box_size=${boxSize}&border=${border}&format=svg`
 }
 
 export function getQrCodePngUrl(text, boxSize = 8, border = 2) {
   const enc = encodeURIComponent(String(text || '').trim())
-  return `/api/v1/workspaces/qrcode?text=${enc}&box_size=${boxSize}&border=${border}&format=png`
+  return `${resolveApiBase()}/workspaces/qrcode?text=${enc}&box_size=${boxSize}&border=${border}&format=png`
 }
 
 /**
