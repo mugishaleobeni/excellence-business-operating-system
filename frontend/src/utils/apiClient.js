@@ -20,20 +20,38 @@ export function isTokenValid(token) {
   }
 }
 
-function resolveApiBase() {
+const PRODUCTION_BACKEND_ORIGIN = 'https://exbos.onrender.com'
+
+function isLocalHost(host) {
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host.startsWith('192.168.') ||
+    host.startsWith('10.')
+  )
+}
+
+export function resolveBackendOrigin() {
+  const envBase = (import.meta?.env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '')
+  if (envBase) {
+    return envBase.replace(/\/api\/v1$/, '')
+  }
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname || '127.0.0.1'
-    return `http://${host}:5000/api/v1`
+    if (isLocalHost(host)) {
+      return `http://${host}:5000`
+    }
+    return PRODUCTION_BACKEND_ORIGIN
   }
-  return '/api/v1'
+  return PRODUCTION_BACKEND_ORIGIN
+}
+
+export function resolveApiBase() {
+  return `${resolveBackendOrigin()}/api/v1`
 }
 
 export function resolveStorageUrl(scopeParam = '') {
-  if (typeof window !== 'undefined' && window.location) {
-    const host = window.location.hostname || '127.0.0.1'
-    return `http://${host}:5000/api/storage${scopeParam}`
-  }
-  return `/api/storage${scopeParam}`
+  return `${resolveBackendOrigin()}/api/storage${scopeParam}`
 }
 
 export function getAuthHeaders() {

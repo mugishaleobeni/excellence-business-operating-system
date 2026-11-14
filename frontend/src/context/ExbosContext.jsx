@@ -10,7 +10,7 @@ import { SERVICE_PRESETS } from '../components/dashboard/services/data/servicePr
 import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/agriculturePresets'
 import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
 import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
-import { exbosApi, getAuthHeaders, resolveStorageUrl, isTokenValid } from '../utils/apiClient'
+import { exbosApi, getAuthHeaders, resolveApiBase, resolveStorageUrl, isTokenValid } from '../utils/apiClient'
 
 const ExbosContext = createContext(null)
 
@@ -1352,12 +1352,9 @@ export function ExbosProvider({ children }) {
       if (user?.email) {
         exbosApi.updateProfile({ activeTradePresetId: tradeKey, architectureId: 'make-and-sell' }).catch(() => {})
       }
-      fetch('/api/v1/workspaces/make-and-sell/preset', {
+      fetch(`${resolveApiBase()}/workspaces/make-and-sell/preset`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(localStorage.getItem('token') ? { Authorization: `Bearer ${localStorage.getItem('token')}` } : {})
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ presetId: tradeKey, businessName: preset.businessName, attentionHeadline: preset.attentionHeadline })
       }).catch(() => {})
     } catch {}
