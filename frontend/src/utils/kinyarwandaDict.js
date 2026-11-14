@@ -158,7 +158,7 @@ export const KINYARWANDA_DICT = {
   'sales': 'Ibyagurishijwe',
   'sales modules': 'Ibice by\'Icuruzwa',
   'all sales': 'Ibyagurishijwe Byose',
-  'sales trends': 'Imigendekere y\'Icuruzwa',
+  'sales trends': 'Imigendekere y\'Ibicuruzwa',
   'purchases': 'Ibyaguzwe',
   'purchases modules': 'Ibice by\'Ibyaguzwe',
   'all purchases': 'Ibyaguzwe Byose',
@@ -257,7 +257,7 @@ export const KINYARWANDA_DICT = {
   'branch name *': 'Izina ry\'Ishami *',
   'branch name': 'Izina ry\'Ishami',
   'location': 'Aho Riherereye',
-  '+ create branch': '+ Hanga Ishami',
+  '+ create branch': '+ Fungura Ishami',
   'switch': 'Hindura',
   'main hq': 'Icyicaro Gikuru',
   'main hq · branch activity & best performer': 'Icyicaro Gikuru · Imikorere y\'Amashami',
@@ -274,7 +274,7 @@ export const KINYARWANDA_DICT = {
 
   // WhatsApp & Unpaid Reminders
   'remind all unpaid': 'Ibutsa Bose Batarishyura',
-  'send reminder': 'Ohereza Ibutsa',
+  'send reminder': 'Ibutsa',
   'verify paid': 'Emeza ko Yishyuye',
   'send welcome': 'Ohereza Ikaze',
   '0 menu': '0 Ibikubiyemo',

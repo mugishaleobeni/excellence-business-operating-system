@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 _mongo_client: MongoClient | None = None
 _mongo_db: Database | None = None
+_db_ready: bool = False
+_mongo_uri: str = ""
+_mongo_db_name: str = "exbos_db"
+_client_kwargs: dict[str, Any] = {}
 
 
 def serialize_doc(doc: Any) -> Any:
@@ -44,54 +48,67 @@ def serialize_doc(doc: Any) -> Any:
     return doc
 
 
-def init_db(app) -> Database:
-    """
-    Initialize the PyMongo client with Atlas connection pooling parameters:
-    maxPoolSize=50, minPoolSize=10, serverSelectionTimeoutMS=5000.
-    Automatically enables TLS when connecting to a mongodb+srv:// Atlas URI.
-    """
-    global _mongo_client, _mongo_db
+def _connect_and_verify() -> Database:
+    global _mongo_client, _mongo_db, _db_ready
+    if _mongo_db is None:
+        _mongo_client = MongoClient(_mongo_uri, **_client_kwargs)
+        _mongo_db = _mongo_client[_mongo_db_name]
+    if not _db_ready:
+        ensure_indexes(_mongo_db)
+        seed_initial_collections(_mongo_db)
+        _db_ready = True
+    return _mongo_db
 
-    mongo_uri: str = app.config["MONGO_URI"]
-    db_name: str = app.config["MONGO_DB_NAME"]
-    is_srv = mongo_uri.startswith("mongodb+srv://")
 
-    client_kwargs: dict[str, Any] = {
+def init_db(app) -> Database | None:
+    """
+    Initialize the PyMongo client with Atlas connection pooling parameters.
+    Never falls back to an in-memory RAM database: if MongoDB is unreachable,
+    database operations will raise PyMongoError and return HTTP 503.
+    """
+    global _mongo_uri, _mongo_db_name, _client_kwargs, _mongo_client, _mongo_db, _db_ready
+
+    _mongo_uri = app.config["MONGO_URI"]
+    _mongo_db_name = app.config["MONGO_DB_NAME"]
+    is_srv = _mongo_uri.startswith("mongodb+srv://")
+
+    _client_kwargs = {
         "maxPoolSize": app.config.get("MONGO_MAX_POOL_SIZE", 50),
         "minPoolSize": app.config.get("MONGO_MIN_POOL_SIZE", 1),
-        "serverSelectionTimeoutMS": app.config.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", 15000),
-        "connectTimeoutMS": app.config.get("MONGO_CONNECT_TIMEOUT_MS", 15000),
-        "socketTimeoutMS": app.config.get("MONGO_SOCKET_TIMEOUT_MS", 20000),
+        "serverSelectionTimeoutMS": app.config.get("MONGO_SERVER_SELECTION_TIMEOUT_MS", 5000),
+        "connectTimeoutMS": app.config.get("MONGO_CONNECT_TIMEOUT_MS", 5000),
+        "socketTimeoutMS": app.config.get("MONGO_SOCKET_TIMEOUT_MS", 15000),
         "retryWrites": True,
         "retryReads": True,
     }
     if is_srv:
-        client_kwargs["tls"] = True
+        _client_kwargs["tls"] = True
+
+    _mongo_client = None
+    _mongo_db = None
+    _db_ready = False
 
     try:
-        _mongo_client = MongoClient(mongo_uri, **client_kwargs)
-        _mongo_db = _mongo_client[db_name]
-        ensure_indexes(_mongo_db)
-        seed_initial_collections(_mongo_db)
-        logger.info("MongoDB connected and indexes verified on database '%s'.", db_name)
+        _connect_and_verify()
+        logger.info("MongoDB connected and indexes verified on database '%s'.", _mongo_db_name)
     except PyMongoError as exc:
-        logger.warning(
-            "MongoDB Atlas unreachable (%s). Falling back to resilient in-memory store.",
+        _mongo_client = None
+        _mongo_db = None
+        _db_ready = False
+        logger.error(
+            "MongoDB Atlas unreachable (%s). In-memory RAM fallback is disabled; "
+            "requests requiring database access will return 503 until MongoDB is reachable.",
             exc,
         )
-        from app.memory_db import InMemoryDatabase
-
-        _mongo_db = InMemoryDatabase(db_name)
-        seed_initial_collections(_mongo_db)
 
     return _mongo_db
 
 
 def get_db() -> Database:
-    """Return the active MongoDB database instance."""
-    if _mongo_db is None:
+    """Return the active MongoDB database instance, connecting lazily if needed."""
+    if not _mongo_uri:
         raise RuntimeError("Database has not been initialized. Call init_db(app) first.")
-    return _mongo_db
+    return _connect_and_verify()
 
 
 def ensure_indexes(db: Database) -> None:

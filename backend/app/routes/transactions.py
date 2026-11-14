@@ -15,30 +15,7 @@ transactions_bp = Blueprint(
 )
 
 
-def _resolve_scope_key(db=None) -> str:
-    arg_scope = (request.args.get("scopeKey") or "").strip().lower()
-    if arg_scope and arg_scope != "default":
-        return arg_scope
-
-    try:
-        verify_jwt_in_request(optional=True)
-        jwt_email = get_jwt_identity()
-        if isinstance(jwt_email, str) and jwt_email.strip():
-            return jwt_email.strip().lower()
-    except Exception:
-        pass
-
-    if db is not None:
-        snap = db.platform_config.find_one({"key": "active_user_snapshot"})
-        if snap and isinstance(snap.get("value"), dict):
-            snap_email = (snap["value"].get("email") or "").strip().lower()
-            if snap_email:
-                return snap_email
-        latest_user = db.users.find_one({}, sort=[("created_at", -1)])
-        if latest_user and latest_user.get("email"):
-            return str(latest_user["email"]).strip().lower()
-
-    return arg_scope or "default"
+from app.utils.scope import resolve_scope_key as _resolve_scope_key
 
 
 def _normalize_tx_type(raw_type: str | None) -> str:

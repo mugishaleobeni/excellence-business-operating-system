@@ -2,6 +2,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from pymongo.errors import PyMongoError
 from werkzeug.exceptions import HTTPException
 
 from app.config import BaseConfig, get_config
@@ -88,6 +89,15 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
         return error_response(
             error="HTTP method not allowed for this endpoint.",
             status_code=405,
+        )
+
+    @app.errorhandler(PyMongoError)
+    def handle_pymongo_error(err: PyMongoError):
+        app.logger.error("MongoDB operation failed: %s", err)
+        return error_response(
+            error="Database unavailable: data could not be saved to MongoDB. Please verify database connectivity.",
+            details=[{"message": str(err)}] if app.config.get("DEBUG") else None,
+            status_code=503,
         )
 
     @app.errorhandler(Exception)

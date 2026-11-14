@@ -12,7 +12,10 @@ import {
   Truck,
   ArrowRight,
   Layers,
-  FileText
+  FileText,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
 import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
@@ -49,7 +52,16 @@ export default function DashboardTopNav({
   navigateToModulePage,
   handleModuleClick
 }) {
-  const { demoWorkspaces, transactions, activeBranch } = useExbos()
+  const {
+    demoWorkspaces,
+    transactions,
+    activeBranch,
+    isOnline,
+    dbConnected,
+    syncStatus,
+    offlineQueueCount,
+    checkConnectionHealth
+  } = useExbos()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchContainerRef = useRef(null)
 
@@ -270,8 +282,54 @@ export default function DashboardTopNav({
           </span>
         </div>
 
-        {/* Right: Craft Badge + Notifications + Sign Out */}
+        {/* Right: Sync Detector + Craft Badge + Notifications + Sign Out */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto">
+          {/* Online / Offline & Database Sync Detector */}
+          <button
+            type="button"
+            onClick={() => checkConnectionHealth && checkConnectionHealth()}
+            title={
+              !isOnline
+                ? 'Device is offline. Changes are saved locally and will auto-sync when online.'
+                : !dbConnected
+                ? 'Database unreachable. Changes are queued locally and will auto-sync once MongoDB reconnects.'
+                : syncStatus === 'syncing'
+                ? 'Synchronizing local changes to MongoDB...'
+                : offlineQueueCount > 0
+                ? `${offlineQueueCount} pending local changes. Click to sync now.`
+                : 'Online and synchronized with MongoDB'
+            }
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold border transition-all cursor-pointer ${
+              !isOnline
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                : !dbConnected || syncStatus === 'db_error'
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                : syncStatus === 'syncing'
+                ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                : offlineQueueCount > 0
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+                : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+            }`}
+          >
+            {!isOnline ? (
+              <WifiOff className="w-3 h-3 shrink-0" />
+            ) : syncStatus === 'syncing' ? (
+              <RefreshCw className="w-3 h-3 shrink-0 animate-spin" />
+            ) : (
+              <Wifi className="w-3 h-3 shrink-0" />
+            )}
+            <span>
+              {!isOnline
+                ? `Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} local)` : ' · Local'}`
+                : !dbConnected || syncStatus === 'db_error'
+                ? `DB Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} queued)` : ''}`
+                : syncStatus === 'syncing'
+                ? 'Syncing...'
+                : offlineQueueCount > 0
+                ? `Pending (${offlineQueueCount})`
+                : 'Online · Synced'}
+            </span>
+          </button>
           {/* Active Trade Badges */}
           {currentArch?.id === 'make-and-sell' && (
             <div className="hidden sm:block">

@@ -745,7 +745,16 @@ export function ExbosProvider({ children }) {
   const [isOnline, setIsOnline] = useState(() =>
     typeof navigator !== 'undefined' ? navigator.onLine : true
   )
-  const [syncStatus, setSyncStatus] = useState('synced') // 'synced' | 'syncing' | 'offline' | 'pending'
+  const [dbConnected, setDbConnected] = useState(true)
+  const [syncStatus, setSyncStatus] = useState('synced') // 'synced' | 'syncing' | 'offline' | 'pending' | 'db_error'
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => {
+    try {
+      const q = localStorage.getItem('exbos_offline_queue')
+      return q ? JSON.parse(q).length : 0
+    } catch {
+      return 0
+    }
+  })
 
   const getOfflineQueue = () => {
     try {
@@ -760,19 +769,20 @@ export function ExbosProvider({ children }) {
     try {
       localStorage.setItem('exbos_offline_queue', JSON.stringify(q))
     } catch {}
+    setOfflineQueueCount(Array.isArray(q) ? q.length : 0)
   }
 
   const enqueueOfflineAction = (action) => {
     const queue = getOfflineQueue()
     queue.push(action)
     saveOfflineQueue(queue)
-    setSyncStatus('pending')
+    setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending')
   }
 
   const flushOfflineQueue = async () => {
     const queue = getOfflineQueue()
     if (!queue || queue.length === 0) {
-      setSyncStatus('synced')
+      setSyncStatus((prev) => (prev === 'offline' || prev === 'db_error' ? prev : 'synced'))
       return
     }
 
@@ -785,6 +795,8 @@ export function ExbosProvider({ children }) {
         let res
         if (item.type === 'add') {
           res = await exbosApi.addModuleRecord(item.archId, item.moduleName, item.entry)
+        } else if (item.type === 'add_tx') {
+          res = await exbosApi.createTransaction(item.payload)
         } else if (item.type === 'update') {
           res = await exbosApi.updateModuleRecord(item.archId, item.moduleName, item.recordId, item.updatedFields)
         } else if (item.type === 'delete') {
@@ -796,7 +808,11 @@ export function ExbosProvider({ children }) {
         }
         if (res?.ok) {
           processedCount++
-        } else if (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+        } else if (
+          res?.status === 0 ||
+          res?.status >= 500 ||
+          (typeof navigator !== 'undefined' && !navigator.onLine)
+        ) {
           remaining.push(item)
         }
       } catch {
@@ -806,16 +822,50 @@ export function ExbosProvider({ children }) {
 
     saveOfflineQueue(remaining)
     if (remaining.length === 0) {
+      setDbConnected(true)
       setSyncStatus('synced')
       if (processedCount > 0) {
         addToast({
           type: 'success',
           title: 'Database Synchronized',
-          message: `${processedCount} offline update${processedCount === 1 ? ' was' : 's were'} synchronized with the database.`
+          message: `${processedCount} offline update${processedCount === 1 ? ' was' : 's were'} synchronized with MongoDB.`
         })
       }
     } else {
-      setSyncStatus('pending')
+      setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending')
+    }
+  }
+
+  const checkConnectionHealth = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setIsOnline(false)
+      setSyncStatus('offline')
+      return false
+    }
+    try {
+      const res = await exbosApi.health()
+      if (res?.status === 0) {
+        setIsOnline(false)
+        setSyncStatus('offline')
+        return false
+      }
+      setIsOnline(true)
+      if (res?.status === 503 || !res?.ok) {
+        setDbConnected(false)
+        setSyncStatus(getOfflineQueue().length > 0 ? 'pending' : 'db_error')
+        return false
+      }
+      setDbConnected(true)
+      if (getOfflineQueue().length > 0) {
+        await flushOfflineQueue()
+      } else {
+        setSyncStatus('synced')
+      }
+      return true
+    } catch {
+      setIsOnline(false)
+      setSyncStatus('offline')
+      return false
     }
   }
 
@@ -827,7 +877,7 @@ export function ExbosProvider({ children }) {
         title: 'Network Restored',
         message: 'Internet connection re-established. Synchronizing pending updates...'
       })
-      flushOfflineQueue()
+      checkConnectionHealth()
     }
 
     const handleOffline = () => {
@@ -843,13 +893,19 @@ export function ExbosProvider({ children }) {
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
 
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      flushOfflineQueue()
-    }
+    checkConnectionHealth()
+
+    const heartbeat = setInterval(() => {
+      const hasPending = getOfflineQueue().length > 0
+      if (!navigator.onLine || hasPending || !dbConnected) {
+        checkConnectionHealth()
+      }
+    }, 20000)
 
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      clearInterval(heartbeat)
     }
   }, [])
 
@@ -1058,9 +1114,17 @@ export function ExbosProvider({ children }) {
       }
 
       const res = await exbosApi.addModuleRecord(targetArch, moduleName, entry)
-      if (res?.ok) return
+      if (res?.ok) {
+        setDbConnected(true)
+        return
+      }
+
+      if (res?.status >= 500) {
+        setDbConnected(false)
+      }
 
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+        setIsOnline(false)
         enqueueOfflineAction({
           type: 'add',
           archId: targetArch,
@@ -1089,8 +1153,11 @@ export function ExbosProvider({ children }) {
       })
       addToast({
         type: 'warning',
-        title: 'Saved Locally',
-        message: `"${entry.title || entry.name || entry.id}" saved locally. Will retry syncing to the database automatically.`
+        title: res?.status === 503 ? 'Database Unavailable — Saved Locally' : 'Saved Locally',
+        message:
+          res?.status === 503
+            ? `"${entry.title || entry.name || entry.id}" could not reach MongoDB right now. Saved locally and will auto-sync when database reconnects.`
+            : `"${entry.title || entry.name || entry.id}" saved locally. Will retry syncing to the database automatically.`
       })
     }
     persistRecord()
@@ -1635,10 +1702,22 @@ export function ExbosProvider({ children }) {
       editHistory: []
     }
     setTransactions((prev) => [record, ...prev.filter((item) => item.id !== record.id)])
-    exbosApi.createTransaction({
+    const txPayload = {
       ...record,
       type: record.type === 'out' || record.type === 'OUTFLOW' ? 'OUTFLOW' : 'INFLOW'
-    })
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+    } else {
+      exbosApi.createTransaction(txPayload).then((res) => {
+        if (!res?.ok && (res?.status === 0 || res?.status >= 500 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+          if (res?.status >= 500) setDbConnected(false)
+          enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+        }
+      }).catch(() => {
+        enqueueOfflineAction({ type: 'add_tx', payload: txPayload })
+      })
+    }
     return record
   }
 
@@ -1732,8 +1811,11 @@ export function ExbosProvider({ children }) {
         addToast,
         removeToast,
         isOnline,
+        dbConnected,
         syncStatus,
+        offlineQueueCount,
         flushOfflineQueue,
+        checkConnectionHealth,
         user,
         setUser,
         login,
