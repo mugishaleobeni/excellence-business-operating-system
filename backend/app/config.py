@@ -51,7 +51,7 @@ class BaseConfig:
     WHATSAPP_ACCESS_TOKEN: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "exbos-whatsapp-verify-2026")
-    WHATSAPP_OFFICIAL_NUMBER: str = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+    WHATSAPP_OFFICIAL_NUMBER: str = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
     META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")
 
     CORS_ORIGINS: list[str] = [

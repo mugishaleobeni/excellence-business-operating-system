@@ -59,7 +59,7 @@ def whatsapp_status():
     """Return Meta Cloud API readiness and user's WhatsApp connection status."""
     db = get_db()
     user_doc = _resolve_active_user(db)
-    official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+    official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
     linked_phone = normalize_phone(user_doc.get("phone", "")) if user_doc else ""
     integ = None
     if user_doc:
@@ -155,7 +155,7 @@ def connect_official_whatsapp():
     user_email = user_doc.get("email")
     arch_id = payload.get("architectureId") or user_doc.get("architectureId") or "buy-and-sell"
     business_name = user_doc.get("businessName") or user_doc.get("name") or "ExBOS Business"
-    official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+    official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
     now_iso = datetime.now(timezone.utc).isoformat()
 
     db.users.update_one({"email": user_email}, {"$set": {"phone": normalized, "enableWhatsAppLink": True}})

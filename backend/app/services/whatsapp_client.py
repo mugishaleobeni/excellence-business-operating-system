@@ -47,7 +47,7 @@ def is_meta_configured() -> bool:
 def build_welcome_message(
     business_name: str,
     architecture_id: str = "buy-and-sell",
-    official_number: str = "+250 781 963 981",
+    official_number: str = "+250 792 946 680",
 ) -> str:
     """Build the official ExBOS WhatsApp welcome message and structured menu."""
     arch_label = ARCH_LABELS.get(architecture_id, "Buy & Sell")
@@ -126,10 +126,42 @@ def send_whatsapp_message(
                 result["status"] = "sent"
                 result["providerId"] = msg_ids[0].get("id") if msg_ids else None
             else:
-                err_msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
-                result["status"] = "failed"
-                result["error"] = err_msg
-                logger.warning("Meta WhatsApp send error to %s: %s", normalized, err_msg)
+                err_obj = data.get("error") or {}
+                err_code = err_obj.get("code")
+                err_msg = err_obj.get("message") or f"HTTP {resp.status_code}"
+                # If outside 24h customer-initiated window (131047) or business-initiated text blocked,
+                # automatically fall back to an approved Meta template (default: hello_world).
+                template_name = os.getenv("WHATSAPP_WELCOME_TEMPLATE", "hello_world").strip()
+                template_lang = os.getenv("WHATSAPP_WELCOME_TEMPLATE_LANG", "en_US").strip()
+                if template_name and (err_code in (131047, 131026) or "24" in err_msg or "re-engagement" in err_msg.lower()):
+                    tpl_payload = {
+                        "messaging_product": "whatsapp",
+                        "recipient_type": "individual",
+                        "to": normalized.lstrip("+"),
+                        "type": "template",
+                        "template": {
+                            "name": template_name,
+                            "language": {"code": template_lang},
+                        },
+                    }
+                    tpl_resp = requests.post(url, json=tpl_payload, headers=headers, timeout=12)
+                    tpl_data = tpl_resp.json() if tpl_resp.content else {}
+                    if tpl_resp.ok:
+                        msg_ids = tpl_data.get("messages") or []
+                        result["sent"] = True
+                        result["status"] = "sent_template_fallback"
+                        result["templateUsed"] = template_name
+                        result["providerId"] = msg_ids[0].get("id") if msg_ids else None
+                        result["note"] = f"Free-form text blocked ({err_msg}); sent template '{template_name}'."
+                    else:
+                        tpl_err = (tpl_data.get("error") or {}).get("message") or f"HTTP {tpl_resp.status_code}"
+                        result["status"] = "failed"
+                        result["error"] = f"Text: {err_msg} | Template ({template_name}): {tpl_err}"
+                        logger.warning("Meta WhatsApp send error to %s: %s", normalized, result["error"])
+                else:
+                    result["status"] = "failed"
+                    result["error"] = err_msg
+                    logger.warning("Meta WhatsApp send error to %s: %s", normalized, err_msg)
         except Exception as exc:
             result["status"] = "failed"
             result["error"] = str(exc)

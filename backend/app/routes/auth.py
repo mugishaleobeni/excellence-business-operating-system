@@ -326,6 +326,7 @@ def register_business(validated_data: RegisterBusinessSchema):
     )
 
     # Auto-connect Official ExBOS WhatsApp & send Welcome Message if opted in
+    wa_result = None
     try:
         raw_payload = request.get_json(silent=True) or {}
         enable_wa = raw_payload.get("enableWhatsAppLink", True)
@@ -337,7 +338,7 @@ def register_business(validated_data: RegisterBusinessSchema):
             )
 
             norm_phone = normalize_phone(validated_data.phone)
-            official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 781 963 981")
+            official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
             if norm_phone:
                 db.integrations.update_one(
                     {"userEmail": email_lower},
@@ -361,7 +362,7 @@ def register_business(validated_data: RegisterBusinessSchema):
                     arch_id,
                     official_num,
                 )
-                send_whatsapp_message(
+                wa_result = send_whatsapp_message(
                     norm_phone,
                     welcome_msg,
                     db=db,
@@ -369,6 +370,7 @@ def register_business(validated_data: RegisterBusinessSchema):
                 )
     except Exception as wa_exc:
         logger.warning("Auto WhatsApp welcome skipped: %s", wa_exc)
+        wa_result = {"sent": False, "status": "error", "error": str(wa_exc)}
 
     logger.info(
         "Registered business '%s' (%s) for user %s | architectureId=%s | enabledActivities=%s",
@@ -390,6 +392,7 @@ def register_business(validated_data: RegisterBusinessSchema):
             "user": clean_user,
             "business": serialize_doc(biz_doc),
             "workspaces": user_workspaces,
+            "whatsappWelcome": wa_result,
         },
         message="Business registered and workspace initialized in MongoDB Atlas.",
         status_code=201,
