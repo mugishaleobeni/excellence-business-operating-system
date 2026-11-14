@@ -185,7 +185,7 @@ export default function BranchPerformanceCenterPanel({
               )}
             </h3>
             <p className="text-xs text-slate-300">
-              GitHub-style daily business activity heatmap &amp; cross-branch performance graph.
+              ExBOS daily activity pulse &amp; cross-branch performance graph.
             </p>
           </div>
         </div>
@@ -210,7 +210,7 @@ export default function BranchPerformanceCenterPanel({
           <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
             {[
               { id: 'both', label: 'Both', icon: Layers },
-              { id: 'heatmap', label: 'GitHub Grid', icon: Grid3X3 },
+              { id: 'heatmap', label: 'Activity Pulse', icon: Grid3X3 },
               { id: 'bar', label: 'Branch Graph', icon: BarChart3 },
               { id: 'profit', label: 'Profit Share', icon: TrendingUp }
             ].map((tab) => {

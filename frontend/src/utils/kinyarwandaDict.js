@@ -265,6 +265,7 @@ export const KINYARWANDA_DICT = {
   'best performing branch ranking': 'Urutonde rw\'Amashami Akora Neza Cyane',
   'branch net profit comparison': 'Igereranya ry\'Inyungu y\'Amashami',
   'both': 'Byombi',
+  'activity pulse': 'Imbonerahamwe y\'Ibikorwa',
   'github grid': 'Imbonerahamwe',
   'branch graph': 'Igishushanyo cy\'Amashami',
   'profit share': 'Inyungu',
