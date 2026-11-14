@@ -29,10 +29,10 @@ class BaseConfig:
     MONGO_MAX_POOL_SIZE: int = int(os.getenv("MONGO_MAX_POOL_SIZE", "50"))
     MONGO_MIN_POOL_SIZE: int = int(os.getenv("MONGO_MIN_POOL_SIZE", "1"))
     MONGO_SERVER_SELECTION_TIMEOUT_MS: int = int(
-        os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "5000")
+        os.getenv("MONGO_SERVER_SELECTION_TIMEOUT_MS", "15000")
     )
     MONGO_CONNECT_TIMEOUT_MS: int = int(
-        os.getenv("MONGO_CONNECT_TIMEOUT_MS", "5000")
+        os.getenv("MONGO_CONNECT_TIMEOUT_MS", "15000")
     )
     MONGO_SOCKET_TIMEOUT_MS: int = int(
         os.getenv("MONGO_SOCKET_TIMEOUT_MS", "20000")
