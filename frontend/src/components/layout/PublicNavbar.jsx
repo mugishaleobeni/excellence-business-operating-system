@@ -140,6 +140,8 @@ export default function PublicNavbar() {
           <img
             src={exbosLogo}
             alt="EXCELLENCE BOS Logo"
+            width={48}
+            height={48}
             className="h-11 sm:h-12 w-auto object-contain"
           />
         </Link>

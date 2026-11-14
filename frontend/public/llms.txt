@@ -1,0 +1,12 @@
+# ExBOS — Excellence Business Operations System
+
+> Intelligent multi-architecture business operations platform built by PYLARIX for SMEs, retailers, manufacturers, service providers, hospitality businesses, and agribusinesses.
+
+## Core Pages
+- [Home](https://exbos.pages.dev/): Platform overview, six business architectures, and financial survival tools.
+- [Features](https://exbos.pages.dev/features): Sales, inventory, expenses, customer debt reminders, WhatsApp automation, and multi-branch analytics.
+- [Business Models](https://exbos.pages.dev/business-models): Make & Sell, Buy & Sell, Service-Based, Agriculture & Livestock, Food & Hospitality, and Hybrid.
+- [Pricing](https://exbos.pages.dev/pricing): Forever Free and growth plans in RWF.
+- [Resources](https://exbos.pages.dev/resources): Guides and business survival tools.
+- [Sign In](https://exbos.pages.dev/login): Access your ExBOS workspace.
+- [Create Account](https://exbos.pages.dev/signup): Start your ExBOS business workspace.

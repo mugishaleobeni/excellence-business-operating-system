@@ -88,7 +88,15 @@ export default function LandingPage() {
               className={`absolute inset-0 w-full h-full hero-bg-media transition-opacity duration-700 ${
                 heroVideoEnded ? 'opacity-0 pointer-events-none' : 'opacity-100'
               }`}
-            />
+            >
+              <track
+                kind="captions"
+                src="/captions/hero-en.vtt"
+                srcLang="en"
+                label="English"
+                default
+              />
+            </video>
 
             {/* Directional Sapphire Shadow Overlay so video/image & text remain clear */}
             <div

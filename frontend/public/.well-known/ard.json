@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0",
+  "name": "ExBOS — Excellence Business Operations System",
+  "description": "Multi-architecture business operations platform by PYLARIX for sales, inventory, expenses, customer credit, WhatsApp alerts, and multi-branch analytics.",
+  "url": "https://exbos.pages.dev",
+  "provider": {
+    "name": "PYLARIX",
+    "url": "https://pylarix.com"
+  },
+  "documentation": "https://exbos.pages.dev/llms.txt",
+  "resources": [
+    {
+      "name": "Landing & Platform Overview",
+      "url": "https://exbos.pages.dev/",
+      "type": "webpage"
+    },
+    {
+      "name": "Features",
+      "url": "https://exbos.pages.dev/features",
+      "type": "webpage"
+    },
+    {
+      "name": "Business Models",
+      "url": "https://exbos.pages.dev/business-models",
+      "type": "webpage"
+    },
+    {
+      "name": "Pricing",
+      "url": "https://exbos.pages.dev/pricing",
+      "type": "webpage"
+    },
+    {
+      "name": "Backend API Health",
+      "url": "https://exbos.onrender.com/api/v1/health",
+      "type": "api"
+    }
+  ]
+}

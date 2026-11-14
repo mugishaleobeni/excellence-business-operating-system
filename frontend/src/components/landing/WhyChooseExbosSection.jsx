@@ -204,6 +204,8 @@ export default function WhyChooseExbosSection() {
               <img
                 src={womanImage}
                 alt="Confident entrepreneur managing her business on ExBOS with her smartphone"
+                width={1247}
+                height={1261}
                 className="w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[440px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_22px_40px_rgba(3,9,31,0.65)]"
                 draggable={false}
               />
@@ -297,7 +299,7 @@ export default function WhyChooseExbosSection() {
 
           {/* Interactive Controls: Progress Dots + Backward / Pause-Play / Forward */}
           <div className="pt-2 lg:pl-12 flex flex-wrap items-center justify-between gap-3 max-w-[420px]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               {SIX_EXBOS_FEATURES.map((feature, idx) => {
                 const isActive = idx === slideOffset
                 return (
@@ -307,12 +309,16 @@ export default function WhyChooseExbosSection() {
                     aria-label={`Feature ${idx + 1}: ${feature.title}`}
                     title={feature.title}
                     onClick={() => setSlideOffset(idx)}
-                    className={`h-2 rounded-full transition-all cursor-pointer border-0 ${
-                      isActive
-                        ? 'w-7 bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)]'
-                        : 'w-2 bg-white/35 hover:bg-white/65'
-                    }`}
-                  />
+                    className="min-w-[24px] min-h-[24px] p-2 flex items-center justify-center cursor-pointer border-0 bg-transparent"
+                  >
+                    <span
+                      className={`block h-2 rounded-full transition-all ${
+                        isActive
+                          ? 'w-7 bg-white shadow-[0_0_10px_rgba(255,255,255,0.9)]'
+                          : 'w-2 bg-white/35 hover:bg-white/65'
+                      }`}
+                    />
+                  </button>
                 )
               })}
             </div>
