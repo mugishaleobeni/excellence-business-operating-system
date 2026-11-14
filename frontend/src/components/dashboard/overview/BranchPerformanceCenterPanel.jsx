@@ -74,9 +74,10 @@ export default function BranchPerformanceCenterPanel({
       }
     })
 
+    const fallbackBid = statsMap.main ? 'main' : branchList[0]?.id
     const resolveBid = (rec) => {
-      const raw = rec?.branchId || 'main'
-      return statsMap[raw] ? raw : 'main'
+      const raw = rec?.branchId || fallbackBid
+      return statsMap[raw] ? raw : fallbackBid
     }
 
     const dailyMap = {}
@@ -90,6 +91,7 @@ export default function BranchPerformanceCenterPanel({
 
     salesList.forEach((s) => {
       const bid = resolveBid(s)
+      if (!bid || !statsMap[bid]) return
       const amt = Number(s.amountRWF || s.totalAmount || 0)
       statsMap[bid].revenueRWF += amt
       statsMap[bid].salesCount += 1
@@ -100,6 +102,7 @@ export default function BranchPerformanceCenterPanel({
 
     purchasesList.forEach((p) => {
       const bid = resolveBid(p)
+      if (!bid || !statsMap[bid]) return
       statsMap[bid].purchasesRWF += Number(p.amountRWF || 0)
       if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
         addDay(p.date, 0)
@@ -108,6 +111,7 @@ export default function BranchPerformanceCenterPanel({
 
     expensesList.forEach((e) => {
       const bid = resolveBid(e)
+      if (!bid || !statsMap[bid]) return
       statsMap[bid].expensesRWF += Number(e.amountRWF || 0)
       if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
         addDay(e.date, 0)
