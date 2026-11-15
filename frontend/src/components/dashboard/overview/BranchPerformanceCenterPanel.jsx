@@ -31,8 +31,9 @@ export default function BranchPerformanceCenterPanel({
     apiClient
       .getBranchAnalytics(activeArchId)
       .then((res) => {
-        if (res?.ok && res?.data) {
-          setBackendAnalytics(res.data)
+        const analyticsData = res?.data?.data || res?.data
+        if (res?.ok && analyticsData) {
+          setBackendAnalytics(analyticsData)
         }
       })
       .catch(() => {})

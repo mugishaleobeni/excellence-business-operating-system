@@ -297,11 +297,12 @@ export function ExbosProvider({ children }) {
       return
     }
     exbosApi.getBranches().then((res) => {
-      if (res?.ok && Array.isArray(res?.data?.branches)) {
-        setBranches(res.data.branches)
-        if (user?.assignedBranchId && res.data.branches.some((b) => b.id === user.assignedBranchId)) {
+      const branchList = res?.data?.data?.branches || res?.data?.branches
+      if (res?.ok && Array.isArray(branchList)) {
+        setBranches(branchList)
+        if (user?.assignedBranchId && branchList.some((b) => b.id === user.assignedBranchId)) {
           setActiveBranchId(user.assignedBranchId)
-        } else if (!res.data.branches.some((b) => b.id === activeBranchId)) {
+        } else if (!branchList.some((b) => b.id === activeBranchId)) {
           setActiveBranchId('main')
         }
       }
@@ -333,8 +334,8 @@ export function ExbosProvider({ children }) {
         location: location || user?.location || 'Rwanda',
         architectureId: targetArch
       })
-      if (res?.ok && res?.data?.branch) {
-        const created = res.branch || res.data.branch
+      const created = res?.data?.data?.branch || res?.data?.branch || res?.branch
+      if (res?.ok && created) {
         setBranches((prev) => {
           const list = prev.length > 0 ? prev : [activeBranch]
           return [...list.filter((b) => b.id !== created.id), created]
@@ -342,7 +343,7 @@ export function ExbosProvider({ children }) {
         return { ok: true, branch: created }
       }
       if (typeof navigator === 'undefined' || navigator.onLine) {
-        return { ok: false, error: res?.data?.error || 'Failed to create branch on server.' }
+        return { ok: false, error: res?.error || res?.data?.error || 'Failed to create branch on server.' }
       }
     } catch (err) {
       if (typeof navigator === 'undefined' || navigator.onLine) {
@@ -365,12 +366,12 @@ export function ExbosProvider({ children }) {
     if (!branchId) return { ok: false, error: 'Branch ID is required.' }
     try {
       const res = await exbosApi.updateBranch(branchId, updates)
-      if (res?.ok && res?.data?.branch) {
-        const updated = res.data.branch
+      const updated = res?.data?.data?.branch || res?.data?.branch
+      if (res?.ok && updated) {
         setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...updated } : b)))
         return { ok: true, branch: updated }
       }
-      return { ok: false, error: res?.data?.error || 'Failed to update branch.' }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to update branch.' }
     } catch (err) {
       return { ok: false, error: err?.message || 'Failed to update branch.' }
     }
@@ -381,13 +382,14 @@ export function ExbosProvider({ children }) {
     try {
       const frontendOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://exbos.pages.dev'
       const res = await exbosApi.assignBranchManager(branchId, { ...payload, frontendOrigin })
-      if (res?.ok && res?.data) {
-        if (res.data.branch) {
-          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...res.data.branch } : b)))
+      const resultData = res?.data?.data || res?.data
+      if (res?.ok && resultData) {
+        if (resultData.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...resultData.branch } : b)))
         }
-        return { ok: true, ...res.data }
+        return { ok: true, ...resultData }
       }
-      return { ok: false, error: res?.data?.error || 'Failed to assign branch manager.' }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to assign branch manager.' }
     } catch (err) {
       return { ok: false, error: err?.message || 'Failed to assign branch manager.' }
     }

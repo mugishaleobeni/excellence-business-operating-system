@@ -80,9 +80,15 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
     let response
     try {
       response = await fetch(`${apiBase}${endpoint}`, options)
-    } catch {
-      // Fallback to relative path if direct port 5000 is unreachable
-      response = await fetch(`/api/v1${endpoint}`, options)
+    } catch (firstErr) {
+      if (typeof window !== 'undefined' && isLocalHost(window.location?.hostname || '')) {
+        // Fallback to Vite proxy on localhost if direct port 5000 is unreachable
+        response = await fetch(`/api/v1${endpoint}`, options)
+      } else {
+        // Retry once against production backend in case of transient connection reset
+        await new Promise((r) => setTimeout(r, 600))
+        response = await fetch(`${apiBase}${endpoint}`, options)
+      }
     }
     const data = await response.json().catch(() => null)
     return {

@@ -85,7 +85,11 @@ def list_branches():
     items = list(db.branches.find({"scopeKey": scope_key}, {"_id": 0}).sort("createdAt", 1))
     # Always keep Main HQ first
     items.sort(key=lambda b: (0 if b.get("isMain") or b.get("id") == "main" else 1, b.get("createdAt", "")))
-    return success_response(data={"branches": items}, message="Branches loaded.")
+    return success_response(
+        data={"branches": items},
+        extra={"branches": items},
+        message="Branches loaded.",
+    )
 
 
 @branches_bp.route("", methods=["POST"])
@@ -118,7 +122,12 @@ def create_branch():
         "updatedAt": now_iso,
     }
     db.branches.insert_one(dict(branch_doc))
-    return success_response(data={"branch": branch_doc}, message=f"Branch '{name}' created.", status_code=201)
+    return success_response(
+        data={"branch": branch_doc},
+        extra={"branch": branch_doc},
+        message=f"Branch '{name}' created.",
+        status_code=201,
+    )
 
 
 @branches_bp.route("/<branch_id>", methods=["PATCH"])
@@ -148,7 +157,11 @@ def update_branch(branch_id: str):
 
     db.branches.update_one({"scopeKey": scope_key, "id": branch_id}, {"$set": updates})
     updated = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
-    return success_response(data={"branch": updated}, message="Branch updated.")
+    return success_response(
+        data={"branch": updated},
+        extra={"branch": updated},
+        message="Branch updated.",
+    )
 
 
 @branches_bp.route("/<branch_id>/assign-manager", methods=["POST"])
@@ -267,14 +280,16 @@ def assign_branch_manager(branch_id: str):
         except Exception as exc:
             logger.debug("Optional WhatsApp invite skipped: %s", exc)
 
+    result_payload = {
+        "branch": updated_branch,
+        "manager": manager_meta,
+        "loginLink": login_link,
+        "emailSent": email_sent,
+        "whatsappSent": whatsapp_sent,
+    }
     return success_response(
-        data={
-            "branch": updated_branch,
-            "manager": manager_meta,
-            "loginLink": login_link,
-            "emailSent": email_sent,
-            "whatsappSent": whatsapp_sent,
-        },
+        data=result_payload,
+        extra=result_payload,
         message=f"Branch Manager '{manager_name}' assigned to '{branch_name}'.",
         status_code=200,
     )
