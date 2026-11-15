@@ -1611,6 +1611,141 @@ export default function InteractiveModulePanel({
           </form>
         </div>
 
+        {/* Security, Active Session & 2-Step Verification on Login */}
+        <div className="rounded-2xl p-6 sm:p-8 border bg-white dark:bg-[#0D1528] border-slate-200 dark:border-slate-800/80 shadow-sm space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#218DFF]/15 border border-[#218DFF]/30 flex items-center justify-center text-[#218DFF] shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white font-orbitron">
+                  Session &amp; 2-Step Login Verification
+                </h4>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  Manage your active workspace session and protect account sign-ins with a 6-digit email verification code.
+                </p>
+              </div>
+            </div>
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider self-start sm:self-center ${
+                user?.twoFactorEnabled
+                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  : 'bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  user?.twoFactorEnabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                }`}
+              />
+              {user?.twoFactorEnabled ? '2-Step Verification Enabled' : '2-Step Verification Disabled'}
+            </span>
+          </div>
+
+          {/* 2-Step Email Verification Toggle Box */}
+          <div className="p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>2-Step Email Verification on Login</span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
+                When enabled, signing in with your email and password will send a 6-digit verification code to{' '}
+                <strong className="text-slate-800 dark:text-slate-200">{user?.email || 'your email'}</strong> before granting access to your dashboard.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const nextEnabled = !Boolean(user?.twoFactorEnabled)
+                try {
+                  const res = await apiClient.updateProfile({ twoFactorEnabled: nextEnabled })
+                  if (!res?.ok) {
+                    throw new Error(res?.error || 'Could not update 2-Step Verification setting.')
+                  }
+                  if (updateUserProfile) {
+                    updateUserProfile({ twoFactorEnabled: nextEnabled })
+                  }
+                  addToast &&
+                    addToast({
+                      type: 'success',
+                      title: nextEnabled ? '2-Step Verification Enabled' : '2-Step Verification Disabled',
+                      message: nextEnabled
+                        ? `A 6-digit email verification code will now be required whenever you sign in as ${user?.email}.`
+                        : '2-Step Email Verification on login has been turned off.'
+                    })
+                } catch (err) {
+                  addToast &&
+                    addToast({
+                      type: 'error',
+                      title: 'Update Failed',
+                      message: err?.message || 'Unable to update 2-Step Verification right now.'
+                    })
+                }
+              }}
+              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
+                user?.twoFactorEnabled
+                  ? 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-600 dark:text-rose-300 border border-rose-500/30'
+                  : 'btn-sapphire-clean'
+              }`}
+            >
+              {user?.twoFactorEnabled ? 'Disable 2-Step Verification' : 'Enable 2-Step Verification'}
+            </button>
+          </div>
+
+          {/* Active Session Details & Sign Out */}
+          <div className="p-4 sm:p-5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-6 flex-1">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Signed-In Account
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate mt-0.5">
+                  {user?.email || 'Active User'}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {user?.role || 'Business Owner'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Session Security
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Encrypted Cloud JWT</span>
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Backend-verified session
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Last Verified Login
+                </div>
+                <div className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white mt-0.5">
+                  {user?.lastLoginAt
+                    ? String(user.lastLoginAt).slice(0, 16).replace('T', ' ')
+                    : 'Current Active Session'}
+                </div>
+                <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Browser &amp; API synchronized
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (logout) logout()
+                navigate('/login')
+              }}
+              className="px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-700 hover:bg-slate-200/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors cursor-pointer shrink-0"
+            >
+              Sign Out Session
+            </button>
+          </div>
+        </div>
+
         {/* Multi-Branch Management (Creates branches appearing in sidebar navigation) */}
         <BranchSettingsCard activeArchId={activeArchId} currentArch={currentArch} />
 

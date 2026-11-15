@@ -1705,8 +1705,19 @@ export function ExbosProvider({ children }) {
     const res = await exbosApi.login({
       email: (credentials.email || '').trim().toLowerCase(),
       password: credentials.password || '',
-      architectureId: credentials.architectureId || undefined
+      architectureId: credentials.architectureId || undefined,
+      otpCode: credentials.otpCode || undefined
     })
+
+    if (res.ok && res.data?.data?.requiresTwoFactor) {
+      return {
+        requiresTwoFactor: true,
+        email: res.data.data.email,
+        emailSent: res.data.data.emailSent,
+        expiresInMinutes: res.data.data.expiresInMinutes || 15,
+        message: res.data.message || 'Verification code sent to your email.'
+      }
+    }
 
     if (!res.ok || !res.data?.data?.user) {
       throw new Error(res.error || 'Invalid email or password.')

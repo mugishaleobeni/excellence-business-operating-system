@@ -56,6 +56,8 @@ export default function LoginPage({ isForgotPassword = false }) {
   const [staySignedIn, setStaySignedIn] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false)
+  const [twoFactorCode, setTwoFactorCode] = useState('')
 
   // Forgot password steps (1: Request OTP, 2: Enter OTP & New Password, 3: Completed)
   const [forgotStep, setForgotStep] = useState(1)
@@ -70,13 +72,30 @@ export default function LoginPage({ isForgotPassword = false }) {
       setErrorMsg('Please enter your registered email address and password.')
       return
     }
+    if (twoFactorRequired && twoFactorCode.trim().length < 6) {
+      setErrorMsg('Please enter the 6-digit verification code sent to your email.')
+      return
+    }
 
     setSubmitting(true)
     try {
       const authenticatedUser = await login({
         email: email.trim().toLowerCase(),
-        password
+        password,
+        otpCode: twoFactorRequired ? twoFactorCode.trim() : undefined
       })
+
+      if (authenticatedUser?.requiresTwoFactor) {
+        setTwoFactorRequired(true)
+        setTwoFactorCode('')
+        addToast({
+          type: 'info',
+          title: '2-Step Verification Required',
+          message: authenticatedUser.message || `A 6-digit verification code was sent to ${email.trim().toLowerCase()}.`
+        })
+        return
+      }
+
       const targetArch = authenticatedUser.architectureId || 'buy-and-sell'
       try {
         localStorage.setItem('exbos_active_arch', targetArch)
@@ -343,12 +362,66 @@ export default function LoginPage({ isForgotPassword = false }) {
                     </Link>
                   </div>
 
+                  {twoFactorRequired && (
+                    <div className="p-3.5 rounded-xl bg-[#218DFF]/15 border border-[#218DFF]/40 space-y-2.5 animate-fade-in">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#9EDCFF] font-orbitron">
+                          2-Step Email Verification
+                        </span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setSubmitting(true)
+                              await login({
+                                email: email.trim().toLowerCase(),
+                                password
+                              })
+                              addToast({
+                                type: 'info',
+                                title: 'Verification Code Resent',
+                                message: `A new 6-digit code was sent to ${email.trim().toLowerCase()}.`
+                              })
+                            } catch (err) {
+                              setErrorMsg(err?.message || 'Failed to resend verification code.')
+                            } finally {
+                              setSubmitting(false)
+                            }
+                          }}
+                          disabled={submitting}
+                          className="text-[11px] font-semibold text-[#9EDCFF] hover:text-white underline bg-transparent border-0 cursor-pointer"
+                        >
+                          Resend Code
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-200 leading-relaxed">
+                        Enter the 6-digit verification code sent to <strong className="text-white">{email}</strong> to complete sign-in.
+                      </p>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={twoFactorCode}
+                        onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="Enter 6-digit code"
+                        autoFocus
+                        className="w-full py-2.5 px-3.5 rounded-xl bg-slate-950/70 border border-[#218DFF]/50 text-white placeholder-slate-400 text-center text-base font-bold tracking-[0.35em] font-orbitron focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
+                  )}
+
                   <button
                     type="submit"
                     disabled={submitting}
                     className="w-full btn-sapphire py-3.5 text-sm font-orbitron disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <span>{submitting ? 'Authenticating...' : 'Sign In to Workspace'}</span>
+                    <span>
+                      {submitting
+                        ? 'Authenticating...'
+                        : twoFactorRequired
+                        ? 'Verify Code & Sign In'
+                        : 'Sign In to Workspace'}
+                    </span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </form>

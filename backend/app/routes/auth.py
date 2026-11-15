@@ -424,7 +424,82 @@ def login_user(validated_data: LoginSchema):
             status_code=401,
         )
 
-    updates = {"updated_at": now_iso}
+    # 2-Step Email Verification on Login (when enabled in user settings)
+    if bool(user_doc.get("twoFactorEnabled")):
+        otp_code = (validated_data.otpCode or "").strip()
+        now_dt = datetime.now(timezone.utc)
+        if not otp_code:
+            code = generate_numeric_code(6)
+            db.email_verifications.insert_one(
+                {
+                    "email": email_lower,
+                    "code": code,
+                    "purpose": "login_2fa",
+                    "verified": False,
+                    "created_at": now_dt,
+                    "expires_at": now_dt + timedelta(minutes=15),
+                }
+            )
+            user_name = user_doc.get("name") or user_doc.get("businessName") or "Business Owner"
+            html_body = f"""
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #040D29; color: #ffffff; border-radius: 16px; padding: 32px; border: 1px solid #218DFF;">
+                <h2 style="color: #9EDCFF; margin-top: 0;">ExBOS Login 2-Step Verification</h2>
+                <p style="color: #cbd5e1; font-size: 15px; line-height: 1.6;">
+                    Hello <strong>{user_name}</strong>, use the 6-digit security code below to complete signing in to your ExBOS account:
+                </p>
+                <div style="margin: 24px 0; padding: 20px; background: #0B194C; border: 2px solid #218DFF; border-radius: 12px; text-align: center;">
+                    <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #ffffff; font-family: monospace;">{code}</span>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px;">
+                    This code expires in 15 minutes. If you did not attempt to sign in, please change your password immediately.
+                </p>
+            </div>
+            """
+            text_body = f"Your ExBOS 2-Step Login Verification code is: {code} (valid for 15 minutes)."
+            email_sent = send_gmail_email(
+                to_email=email_lower,
+                subject=f"ExBOS Login Verification Code: {code}",
+                html_body=html_body,
+                text_body=text_body,
+            )
+            return success_response(
+                data={
+                    "requiresTwoFactor": True,
+                    "email": email_lower,
+                    "emailSent": email_sent,
+                    "expiresInMinutes": 15,
+                },
+                message=f"6-digit login verification code sent to {email_lower}.",
+                status_code=200,
+            )
+
+        otp_doc = db.email_verifications.find_one(
+            {"email": email_lower, "code": otp_code, "purpose": "login_2fa"},
+            sort=[("created_at", -1)],
+        )
+        if not otp_doc:
+            return error_response(
+                error="Invalid 6-digit verification code. Please check your email and try again.",
+                status_code=400,
+            )
+        exp = otp_doc.get("expires_at")
+        if exp:
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if now_dt > exp:
+                return error_response(
+                    error="Verification code has expired. Please request a new code.",
+                    status_code=400,
+                )
+        db.email_verifications.update_one(
+            {"_id": otp_doc["_id"]},
+            {"$set": {"verified": True, "verified_at": now_iso}},
+        )
+
+    updates = {
+        "updated_at": now_iso,
+        "lastLoginAt": now_iso,
+    }
     user_arch = user_doc.get("architectureId") or "buy-and-sell"
     if user_arch != "hybrid" and user_doc.get("enabledActivities") == ["buy-and-sell", "services"]:
         updates["enabledActivities"] = [user_arch]

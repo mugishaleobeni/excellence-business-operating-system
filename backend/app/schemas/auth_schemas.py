@@ -61,6 +61,7 @@ class LoginSchema(BaseModel):
 
     email: EmailStr
     password: str = Field(..., min_length=1, max_length=128)
+    otpCode: Optional[str] = Field(default=None, max_length=10)
     architectureId: Optional[str] = Field(default=None)
     name: Optional[str] = Field(default=None)
     businessName: Optional[str] = Field(default=None)
@@ -83,6 +84,7 @@ class UpdateProfileSchema(BaseModel):
     language: Optional[str] = Field(default=None)
     plan: Optional[str] = Field(default=None)
     enabledActivities: Optional[list[str]] = Field(default=None)
+    twoFactorEnabled: Optional[bool] = Field(default=None)
 
 
 class ForgotPasswordSchema(BaseModel):
