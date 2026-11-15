@@ -13,41 +13,79 @@ export default function SalesTrendsView({
   const [graphTimeframe, setGraphTimeframe] = useState('Days')
   const [activeCurveIndex, setActiveCurveIndex] = useState(6)
 
-  // Compute realistic, dynamic datasets for Days, Weeks, Months incorporating actual recorded sales
+  // Compute dynamic datasets for Days, Weeks, Months from actual recorded sales
   const chartDatasets = useMemo(() => {
     const salesRecords = records || []
-    const totalRecordedSales = salesRecords.reduce((acc, r) => acc + (Number(r.amountRWF) || 0), 0)
-    const totalRecordedProfit = salesRecords.reduce((acc, r) => acc + (Number(r.profitRWF) || Math.round((Number(r.amountRWF) || 0) * 0.35)), 0)
-    const baseDailySales = Math.max(totalRecordedSales > 0 ? Math.round(totalRecordedSales / 7) : 580000, 240000)
-    const baseDailyProfit = Math.max(totalRecordedProfit > 0 ? Math.round(totalRecordedProfit / 7) : 190000, 80000)
+    const now = new Date()
 
-    const Days = [
-      { label: 'Mon', fullDate: 'Oct 27, 2026', sales: Math.round(baseDailySales * 0.72), profit: Math.round(baseDailyProfit * 0.72), units: 14, orders: 8, change: '+12%' },
-      { label: 'Tue', fullDate: 'Oct 28, 2026', sales: Math.round(baseDailySales * 0.95), profit: Math.round(baseDailyProfit * 0.94), units: 19, orders: 11, change: '+18%' },
-      { label: 'Wed', fullDate: 'Oct 29, 2026', sales: Math.round(baseDailySales * 0.84), profit: Math.round(baseDailyProfit * 0.85), units: 16, orders: 9, change: '-4%' },
-      { label: 'Thu', fullDate: 'Oct 30, 2026', sales: Math.round(baseDailySales * 1.25), profit: Math.round(baseDailyProfit * 1.22), units: 28, orders: 15, change: '+32%' },
-      { label: 'Fri', fullDate: 'Oct 31, 2026', sales: Math.round(baseDailySales * 1.55), profit: Math.round(baseDailyProfit * 1.50), units: 36, orders: 21, change: '+45%' },
-      { label: 'Sat', fullDate: 'Nov 01, 2026', sales: Math.round(baseDailySales * 1.35), profit: Math.round(baseDailyProfit * 1.38), units: 30, orders: 18, change: '+22%' },
-      { label: 'Sun (Today)', fullDate: 'Nov 02, 2026', sales: Math.max(totalRecordedSales, Math.round(baseDailySales * 1.42)), profit: Math.max(totalRecordedProfit, Math.round(baseDailyProfit * 1.45)), units: 32, orders: 19, change: '+29%' }
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun (Today)']
+    const daysBuckets = dayLabels.map((lbl, idx) => {
+      const d = new Date(now)
+      d.setDate(now.getDate() - (6 - idx))
+      return {
+        label: lbl,
+        fullDate: d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+        sales: 0,
+        profit: 0,
+        units: 0,
+        orders: 0,
+        change: '+0%'
+      }
+    })
+
+    const weeksBuckets = [
+      { label: 'Week 1', fullDate: '3 Weeks Ago', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
+      { label: 'Week 2', fullDate: '2 Weeks Ago', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
+      { label: 'Week 3', fullDate: 'Last Week', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
+      { label: 'Current Week', fullDate: 'This Week', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' }
     ]
 
-    const Weeks = [
-      { label: 'Week 41', fullDate: 'Oct 05 - Oct 11', sales: Math.round(baseDailySales * 5.4), profit: Math.round(baseDailyProfit * 5.2), units: 112, orders: 64, change: '+10%' },
-      { label: 'Week 42', fullDate: 'Oct 12 - Oct 18', sales: Math.round(baseDailySales * 6.2), profit: Math.round(baseDailyProfit * 6.1), units: 135, orders: 78, change: '+16%' },
-      { label: 'Week 43', fullDate: 'Oct 19 - Oct 25', sales: Math.round(baseDailySales * 7.1), profit: Math.round(baseDailyProfit * 7.0), units: 158, orders: 92, change: '+24%' },
-      { label: 'Week 44 (Current)', fullDate: 'Oct 26 - Nov 02', sales: Math.round(baseDailySales * 8.0), profit: Math.round(baseDailyProfit * 7.9), units: 175, orders: 102, change: '+34%' }
-    ]
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const monthsBuckets = Array.from({ length: 6 }, (_, idx) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - idx), 1)
+      const mName = monthNames[d.getMonth()]
+      return {
+        label: idx === 5 ? `${mName} (Current)` : mName,
+        fullDate: `${mName} ${d.getFullYear()}`,
+        sales: 0,
+        profit: 0,
+        units: 0,
+        orders: 0,
+        change: '+0%'
+      }
+    })
 
-    const Months = [
-      { label: 'Jun', fullDate: 'June 2026', sales: Math.round(baseDailySales * 22), profit: Math.round(baseDailyProfit * 21), units: 480, orders: 280, change: '+8%' },
-      { label: 'Jul', fullDate: 'July 2026', sales: Math.round(baseDailySales * 25), profit: Math.round(baseDailyProfit * 24), units: 540, orders: 310, change: '+14%' },
-      { label: 'Aug', fullDate: 'August 2026', sales: Math.round(baseDailySales * 27), profit: Math.round(baseDailyProfit * 26), units: 590, orders: 345, change: '+18%' },
-      { label: 'Sep', fullDate: 'September 2026', sales: Math.round(baseDailySales * 30), profit: Math.round(baseDailyProfit * 29), units: 660, orders: 390, change: '+22%' },
-      { label: 'Oct', fullDate: 'October 2026', sales: Math.round(baseDailySales * 34), profit: Math.round(baseDailyProfit * 33), units: 750, orders: 435, change: '+28%' },
-      { label: 'Nov (Current)', fullDate: 'November 2026', sales: Math.round(baseDailySales * 38), profit: Math.round(baseDailyProfit * 37), units: 820, orders: 480, change: '+36%' }
-    ]
+    salesRecords.forEach((r) => {
+      const amt = Number(r.amountRWF ?? r.totalAmountRWF ?? 0) || 0
+      if (amt <= 0) return
+      const prof = Number(r.profitRWF) || Math.round(amt * 0.35)
+      const qty = Number(r.quantity) || 1
+      const rawDate = r.date || r.createdAt
+      const parsed = rawDate ? new Date(rawDate) : now
+      const validDate = isNaN(parsed.getTime()) ? now : parsed
+      const diffDays = Math.max(0, Math.floor((now.getTime() - validDate.getTime()) / (1000 * 60 * 60 * 24)))
 
-    return { Days, Weeks, Months }
+      const dayIdx = Math.max(0, 6 - Math.min(6, diffDays))
+      daysBuckets[dayIdx].sales += amt
+      daysBuckets[dayIdx].profit += prof
+      daysBuckets[dayIdx].units += qty
+      daysBuckets[dayIdx].orders += 1
+
+      const weekIdx = Math.max(0, 3 - Math.min(3, Math.floor(diffDays / 7)))
+      weeksBuckets[weekIdx].sales += amt
+      weeksBuckets[weekIdx].profit += prof
+      weeksBuckets[weekIdx].units += qty
+      weeksBuckets[weekIdx].orders += 1
+
+      const monthDiff = (now.getFullYear() - validDate.getFullYear()) * 12 + (now.getMonth() - validDate.getMonth())
+      const monthIdx = Math.max(0, 5 - Math.min(5, Math.max(0, monthDiff)))
+      monthsBuckets[monthIdx].sales += amt
+      monthsBuckets[monthIdx].profit += prof
+      monthsBuckets[monthIdx].units += qty
+      monthsBuckets[monthIdx].orders += 1
+    })
+
+    return { Days: daysBuckets, Weeks: weeksBuckets, Months: monthsBuckets }
   }, [records])
 
   const currentData = chartDatasets[graphTimeframe] || chartDatasets.Days
@@ -113,30 +151,77 @@ export default function SalesTrendsView({
   ]
 
   const buildCustomPath = (data, valueKey) => {
-    if (!data || data.length === 0) return { linePath: '', areaPath: '', points: [] }
-    const stepX = (svgWidth - paddingLeft - paddingRight) / (data.length - 1)
+    if (!data || data.length === 0) return { linePath: '', leadInPath: '', areaPath: '', points: [] }
+    const usableW = svgWidth - paddingLeft - paddingRight
+    const stepX = usableW / Math.max(data.length - 1, 1)
+    const baselineY = svgHeight - paddingBottom
+    const getY = (val) => {
+      const norm = (val - minVal) / range
+      return baselineY - norm * (svgHeight - paddingTop - paddingBottom)
+    }
+
     const points = data.map((d, i) => {
       const x = paddingLeft + i * stepX
-      const norm = (d[valueKey] - minVal) / range
-      const y = (svgHeight - paddingBottom) - norm * (svgHeight - paddingTop - paddingBottom)
+      const y = getY(d[valueKey] || 0)
       return { x, y, data: d }
     })
 
-    let d = `M ${points[0].x} ${points[0].y}`
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i === 0 ? i : i - 1]
-      const p1 = points[i]
-      const p2 = points[i + 1]
-      const p3 = points[i + 2 < points.length ? i + 2 : i + 1]
-      const cp1x = p1.x + (p2.x - p0.x) / 6
-      const cp1y = p1.y + (p2.y - p0.y) / 6
-      const cp2x = p2.x - (p3.x - p1.x) / 6
-      const cp2y = p2.y - (p3.y - p1.y) / 6
-      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
+    const pulseVertices = []
+    const maxSeriesVal = Math.max(...data.map((d) => Math.abs(Number(d[valueKey]) || 0)), 0)
+
+    for (let i = 0; i < data.length; i++) {
+      const val = Number(data[i]?.[valueKey]) || 0
+      const cx = points[i].x
+      const cy = points[i].y
+
+      if (i === 0) {
+        pulseVertices.push({ x: cx, y: val > 0 ? getY(val * 0.15) : baselineY })
+      }
+
+      if (val > 0) {
+        const leftBaseX = i === 0 ? cx : cx - stepX * 0.42
+        const preSpikeX = i === 0 ? cx + stepX * 0.08 : cx - stepX * 0.24
+        const preValleyX = i === 0 ? cx + stepX * 0.14 : cx - stepX * 0.14
+        const shoulderX = cx + stepX * 0.08
+        const rightValleyX = i === data.length - 1 ? cx : cx + stepX * 0.18
+        const echoPeakX = i === data.length - 1 ? cx : cx + stepX * 0.28
+        const rightBaseX = i === data.length - 1 ? cx : cx + stepX * 0.40
+
+        if (i > 0) {
+          pulseVertices.push({ x: leftBaseX, y: baselineY })
+          pulseVertices.push({ x: preSpikeX, y: getY(val * 0.34) })
+          pulseVertices.push({ x: preValleyX, y: getY(val * 0.06) })
+        }
+        pulseVertices.push({ x: cx, y: cy })
+        if (i < data.length - 1) {
+          if (val >= maxSeriesVal * 0.6) {
+            pulseVertices.push({ x: shoulderX, y: getY(val * 0.46) })
+            pulseVertices.push({ x: shoulderX + stepX * 0.05, y: getY(val * 0.46) })
+          }
+          pulseVertices.push({ x: rightValleyX, y: baselineY })
+          pulseVertices.push({ x: echoPeakX, y: getY(val * 0.28) })
+          pulseVertices.push({ x: rightBaseX, y: baselineY })
+        }
+      } else {
+        pulseVertices.push({ x: cx, y: baselineY })
+      }
     }
 
-    const areaPath = `${d} L ${points[points.length - 1].x} ${svgHeight - paddingBottom} L ${points[0].x} ${svgHeight - paddingBottom} Z`
-    return { linePath: d, areaPath, points }
+    pulseVertices.sort((a, b) => a.x - b.x)
+    const clamped = pulseVertices.map((pt) => ({
+      x: Math.max(paddingLeft, Math.min(svgWidth - paddingRight, pt.x)),
+      y: Math.min(baselineY, Math.max(paddingTop, pt.y))
+    }))
+
+    let d = `M ${clamped[0].x} ${clamped[0].y}`
+    for (let i = 1; i < clamped.length; i++) {
+      d += ` L ${clamped[i].x} ${clamped[i].y}`
+    }
+
+    const leadInY = Math.max(paddingTop, baselineY - (maxSeriesVal > 0 ? 18 : 4))
+    const leadInPath = `M ${Math.max(paddingLeft - 10, 4)} ${leadInY} L ${clamped[0].x} ${clamped[0].y}`
+    const areaPath = `${d} L ${clamped[clamped.length - 1].x} ${baselineY} L ${clamped[0].x} ${baselineY} Z`
+    return { linePath: d, leadInPath, areaPath, points }
   }
 
   const salesCurve = buildCustomPath(currentData, 'sales')
@@ -356,16 +441,16 @@ export default function SalesTrendsView({
               className="w-full h-64 sm:h-80 overflow-visible"
             >
               <defs>
-                {/* Wave Liquid Sapphire Gradient Fill */}
+                {/* Pulse Sapphire Area Fill */}
                 <linearGradient id="sapphireSalesGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.55" />
-                  <stop offset="60%" stopColor="#1045CA" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
+                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.28" />
+                  <stop offset="65%" stopColor="#1045CA" stopOpacity="0.12" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.03" />
                 </linearGradient>
 
-                {/* Profit Wave Fill */}
+                {/* Profit Pulse Fill */}
                 <linearGradient id="profitSalesGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.18" />
                   <stop offset="100%" stopColor="#10b981" stopOpacity="0.01" />
                 </linearGradient>
 
@@ -387,9 +472,8 @@ export default function SalesTrendsView({
                       y1={yPos}
                       x2={svgWidth - paddingRight}
                       y2={yPos}
-                      stroke={isBaseline ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)'}
-                      strokeDasharray={isBaseline ? 'none' : '4 4'}
-                      strokeWidth={isBaseline ? '1.5' : '1'}
+                      stroke={isBaseline ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}
+                      strokeWidth="1"
                     />
                     <text
                       x={paddingLeft - 12}
@@ -409,54 +493,55 @@ export default function SalesTrendsView({
               <path d={salesCurve.areaPath} fill="url(#sapphireSalesGrad)" />
               <path d={profitCurve.areaPath} fill="url(#profitSalesGrad)" />
 
-              {/* Secondary Profit Stroke */}
+              {/* Secondary Profit Pulse Stroke */}
               <path
                 d={profitCurve.linePath}
                 fill="none"
                 stroke="#10b981"
-                strokeWidth="2.5"
-                strokeOpacity="0.85"
-                strokeDasharray="5 3"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                strokeOpacity="0.8"
               />
 
-              {/* Primary Sales Wave Stroke */}
+              {/* Primary Sales Dotted Lead-In + Sharp Angular Pulse Stroke */}
+              {salesCurve.leadInPath && (
+                <path
+                  d={salesCurve.leadInPath}
+                  fill="none"
+                  stroke="#218DFF"
+                  strokeWidth="2.5"
+                  strokeDasharray="3 3"
+                  strokeLinecap="round"
+                />
+              )}
               <path
                 d={salesCurve.linePath}
                 fill="none"
                 stroke="#218DFF"
-                strokeWidth="3.5"
-                filter="url(#glowSapphireSales)"
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
               />
 
-              {/* Vertical Dashed Guideline to Hovered Point */}
+              {/* Subtle Hover Guideline & Indicator */}
               {activePoint && (
                 <>
                   <line
                     x1={activePoint.x}
-                    y1={activePoint.y}
+                    y1={paddingTop}
                     x2={activePoint.x}
                     y2={svgHeight - paddingBottom}
-                    stroke="rgba(158,220,255,0.55)"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 3"
+                    stroke="rgba(158,220,255,0.22)"
+                    strokeWidth="1"
                   />
                   <circle
                     cx={activePoint.x}
                     cy={activePoint.y}
-                    r="8.5"
+                    r="4.5"
                     fill="#218DFF"
                     stroke="#ffffff"
-                    strokeWidth="3"
-                    className="animate-pulse"
-                  />
-                  <circle
-                    cx={activePoint.x}
-                    cy={activePoint.y}
-                    r="15"
-                    fill="none"
-                    stroke="#218DFF"
-                    strokeWidth="1.5"
-                    strokeOpacity="0.4"
+                    strokeWidth="2"
                   />
                 </>
               )}

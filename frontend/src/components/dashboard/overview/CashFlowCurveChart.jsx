@@ -167,28 +167,51 @@ export default function CashFlowCurveChart({
       }))
     }
 
-    // Accumulate actual money in and out from real user transactions
-    const totalIn = archTransactions
-      .filter((t) => t.type === 'in')
-      .reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
-    const totalOut = archTransactions
-      .filter((t) => t.type === 'out')
-      .reduce((acc, t) => acc + (Number(t.amountRWF) || 0), 0)
+    // Group actual transactions into timeline buckets so real entries form genuine peaks (never a diagonal ramp)
+    const n = defaultData.length
+    const inBuckets = new Array(n).fill(0)
+    const outBuckets = new Array(n).fill(0)
+    const now = new Date()
 
-    // Distribute across timeline buckets based on dates or progressive weighted trajectory
+    archTransactions.forEach((t) => {
+      const amt = Number(t.amountRWF ?? t.amount ?? 0) || 0
+      if (amt <= 0) return
+      const rawDate = t.date || t.timestamp || t.createdAt
+      const parsed = rawDate ? new Date(rawDate) : now
+      const validDate = isNaN(parsed.getTime()) ? now : parsed
+      const diffDays = Math.max(0, Math.floor((now.getTime() - validDate.getTime()) / (1000 * 60 * 60 * 24)))
+
+      let bucketIdx = n - 1
+      if (graphTimeframe === 'Days') {
+        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, diffDays))
+      } else if (graphTimeframe === 'Weeks') {
+        const diffWeeks = Math.floor(diffDays / 7)
+        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, diffWeeks))
+      } else {
+        const monthDiff =
+          (now.getFullYear() - validDate.getFullYear()) * 12 + (now.getMonth() - validDate.getMonth())
+        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, Math.max(0, monthDiff)))
+      }
+
+      if (t.type === 'out' || t.type === 'OUTFLOW') {
+        outBuckets[bucketIdx] += amt
+      } else {
+        inBuckets[bucketIdx] += amt
+      }
+    })
+
     let runningNet = 0
     return defaultData.map((d, idx) => {
-      const weight = (idx + 1) / defaultData.length
-      const inc = Math.round(totalIn * weight)
-      const exp = Math.round(totalOut * weight)
+      const inc = Math.round(inBuckets[idx])
+      const exp = Math.round(outBuckets[idx])
       const net = inc - exp
       runningNet += net
-      const prevInc = idx > 0 ? Math.round(totalIn * (idx / defaultData.length)) : 0
+      const prevInc = idx > 0 ? Math.round(inBuckets[idx - 1]) : 0
       const changePct =
-        prevInc > 0 && inc > prevInc
+        prevInc > 0 && inc >= prevInc
           ? `+${Math.round(((inc - prevInc) / prevInc) * 100)}%`
-          : inc > exp
-          ? `+${Math.round(((inc - exp) / (exp || 1)) * 100)}%`
+          : inc > 0 && prevInc === 0
+          ? '+100%'
           : '+0%'
 
       return {
@@ -302,32 +325,91 @@ export default function CashFlowCurveChart({
 
   const zeroY = getY(0)
 
-  // Spline Path Builder using Catmull-Rom smooth cubic bezier
+  // Sharp Angular Pulse Path Builder (matches modern analytics spike-area chart in ExBOS sapphire theme)
   const buildSplinePath = (data, valueKey) => {
-    if (!data || data.length === 0) return { linePath: '', areaPath: '', points: [] }
-    const stepX = (svgWidth - paddingLeft - paddingRight) / (data.length - 1)
+    if (!data || data.length === 0) return { linePath: '', leadInPath: '', areaPath: '', points: [] }
+    const usableW = svgWidth - paddingLeft - paddingRight
+    const stepX = usableW / Math.max(data.length - 1, 1)
+    const baselineY = Math.min(svgHeight - paddingBottom, zeroY)
+
+    // Anchor points corresponding to the timeline buckets (for tooltips & hover scrubbing)
     const points = data.map((d, i) => {
       const x = paddingLeft + i * stepX
       const y = getY(d[valueKey] || 0)
       return { x, y, data: d }
     })
 
-    let d = `M ${points[0].x} ${points[0].y}`
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[i === 0 ? i : i - 1]
-      const p1 = points[i]
-      const p2 = points[i + 1]
-      const p3 = points[i + 2 < points.length ? i + 2 : i + 1]
-      const cp1x = p1.x + (p2.x - p0.x) / 6
-      const cp1y = p1.y + (p2.y - p0.y) / 6
-      const cp2x = p2.x - (p3.x - p1.x) / 6
-      const cp2y = p2.y - (p3.y - p1.y) / 6
-      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`
+    // Build a high-resolution angular pulse profile between anchor buckets (sharp peaks + flat baseline valleys)
+    const pulseVertices = []
+    const subSteps = 8
+    const maxSeriesVal = Math.max(...data.map((d) => Math.abs(Number(d[valueKey]) || 0)), 0)
+
+    for (let i = 0; i < data.length; i++) {
+      const val = Number(data[i]?.[valueKey]) || 0
+      const cx = points[i].x
+      const cy = points[i].y
+
+      if (i === 0) {
+        // Left-edge lead-in valley before first point
+        pulseVertices.push({ x: cx, y: val > 0 ? getY(val * 0.15) : baselineY })
+      }
+
+      if (val > 0) {
+        // Sharp primary spike + secondary echo spikes matching the reference telemetry graph
+        const leftBaseX = i === 0 ? cx : cx - stepX * 0.42
+        const preSpikeX = i === 0 ? cx + stepX * 0.08 : cx - stepX * 0.24
+        const preValleyX = i === 0 ? cx + stepX * 0.14 : cx - stepX * 0.14
+        const shoulderX = cx + stepX * 0.08
+        const rightValleyX = i === data.length - 1 ? cx : cx + stepX * 0.18
+        const echoPeakX = i === data.length - 1 ? cx : cx + stepX * 0.28
+        const rightBaseX = i === data.length - 1 ? cx : cx + stepX * 0.40
+
+        if (i > 0) {
+          pulseVertices.push({ x: leftBaseX, y: baselineY })
+          pulseVertices.push({ x: preSpikeX, y: getY(val * 0.34) })
+          pulseVertices.push({ x: preValleyX, y: getY(val * 0.06) })
+        }
+        // Main sharp peak at bucket coordinate
+        pulseVertices.push({ x: cx, y: cy })
+        if (i < data.length - 1) {
+          if (val >= maxSeriesVal * 0.6) {
+            // Tall peak step-shoulder like the main spike in reference design
+            pulseVertices.push({ x: shoulderX, y: getY(val * 0.46) })
+            pulseVertices.push({ x: shoulderX + stepX * 0.05, y: getY(val * 0.46) })
+          }
+          pulseVertices.push({ x: rightValleyX, y: baselineY })
+          pulseVertices.push({ x: echoPeakX, y: getY(val * 0.28) })
+          pulseVertices.push({ x: rightBaseX, y: baselineY })
+        }
+      } else {
+        // Flat baseline with tiny micro-ripple if overall chart has activity
+        const micro = maxSeriesVal > 0 && i % 2 === 1 ? maxSeriesVal * 0.025 : 0
+        if (micro > 0 && i > 0 && i < data.length - 1) {
+          pulseVertices.push({ x: cx - stepX * 0.12, y: baselineY })
+          pulseVertices.push({ x: cx, y: getY(micro) })
+          pulseVertices.push({ x: cx + stepX * 0.12, y: baselineY })
+        } else {
+          pulseVertices.push({ x: cx, y: baselineY })
+        }
+      }
     }
 
-    const baselineY = Math.min(svgHeight - paddingBottom, zeroY)
-    const areaPath = `${d} L ${points[points.length - 1].x} ${baselineY} L ${points[0].x} ${baselineY} Z`
-    return { linePath: d, areaPath, points }
+    // Sort vertices monotonically by X so path never loops backward
+    pulseVertices.sort((a, b) => a.x - b.x)
+    const clamped = pulseVertices.map((pt) => ({
+      x: Math.max(paddingLeft, Math.min(svgWidth - paddingRight, pt.x)),
+      y: Math.min(baselineY, Math.max(paddingTop, pt.y))
+    }))
+
+    let d = `M ${clamped[0].x} ${clamped[0].y}`
+    for (let i = 1; i < clamped.length; i++) {
+      d += ` L ${clamped[i].x} ${clamped[i].y}`
+    }
+
+    const leadInY = Math.max(paddingTop, baselineY - (maxSeriesVal > 0 ? 18 : 4))
+    const leadInPath = `M ${Math.max(2, paddingLeft - 10)} ${leadInY} L ${clamped[0].x} ${clamped[0].y}`
+    const areaPath = `${d} L ${clamped[clamped.length - 1].x} ${baselineY} L ${clamped[0].x} ${baselineY} Z`
+    return { linePath: d, leadInPath, areaPath, points }
   }
 
   const incomeCurve = buildSplinePath(currentChartData, 'income')
@@ -768,22 +850,22 @@ export default function CashFlowCurveChart({
               className="w-full h-52 sm:h-80 overflow-visible"
             >
               <defs>
-                {/* Spline Area Gradients */}
+                {/* Pulse Area Gradients (ExBOS Sapphire Theme) */}
                 <linearGradient id="sapphireWaveGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.55" />
-                  <stop offset="60%" stopColor="#1045CA" stopOpacity="0.22" />
-                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
+                  <stop offset="0%" stopColor="#218DFF" stopOpacity="0.28" />
+                  <stop offset="65%" stopColor="#1045CA" stopOpacity="0.12" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.03" />
                 </linearGradient>
 
                 <linearGradient id="expenseWaveGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.01" />
+                  <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.02" />
                 </linearGradient>
 
                 <linearGradient id="cumulativeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.50" />
-                  <stop offset="50%" stopColor="#218DFF" stopOpacity="0.25" />
-                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.01" />
+                  <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                  <stop offset="65%" stopColor="#218DFF" stopOpacity="0.12" />
+                  <stop offset="100%" stopColor="#040C26" stopOpacity="0.02" />
                 </linearGradient>
 
                 {/* Bar Gradients */}
@@ -813,17 +895,7 @@ export default function CashFlowCurveChart({
                 </filter>
               </defs>
 
-              {/* Left Axis Spine */}
-              <line
-                x1={paddingLeft}
-                y1={paddingTop}
-                x2={paddingLeft}
-                y2={svgHeight - paddingBottom}
-                stroke="rgba(255,255,255,0.25)"
-                strokeWidth="1.5"
-              />
-
-              {/* Horizontal Y-Axis Gridlines & Range Markers */}
+              {/* Clean Horizontal Y-Axis Gridlines (Matching Reference Pulse Graph) */}
               {yAxisSteps.map((step, i) => {
                 const yPos = paddingTop + step.pct * (svgHeight - paddingTop - paddingBottom)
                 const isBaseline = i === yAxisSteps.length - 1
@@ -834,18 +906,8 @@ export default function CashFlowCurveChart({
                       y1={yPos}
                       x2={svgWidth - paddingRight}
                       y2={yPos}
-                      stroke={isBaseline ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'}
-                      strokeDasharray={isBaseline ? 'none' : '4 4'}
-                      strokeWidth={isBaseline ? '1.5' : '1'}
-                    />
-                    {/* Subtle axis tick pointing to HTML label */}
-                    <line
-                      x1={paddingLeft - 5}
-                      y1={yPos}
-                      x2={paddingLeft}
-                      y2={yPos}
-                      stroke={isBaseline ? '#9EDCFF' : 'rgba(255,255,255,0.45)'}
-                      strokeWidth="1.5"
+                      stroke={isBaseline ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}
+                      strokeWidth="1"
                     />
                   </g>
                 )
@@ -892,21 +954,35 @@ export default function CashFlowCurveChart({
                     d={expenseCurve.linePath}
                     fill="none"
                     stroke="#f43f5e"
-                    strokeWidth="2.5"
-                    strokeOpacity="0.8"
-                    strokeDasharray="5 3"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    strokeOpacity="0.85"
                   />
                 )}
 
-                {/* Primary Income Stroke */}
+                {/* Primary Income Dotted Lead-in + Sharp Angular Pulse Stroke */}
                 {(metricFocus === 'all' || metricFocus === 'income') && (
-                  <path
-                    d={incomeCurve.linePath}
-                    fill="none"
-                    stroke="#218DFF"
-                    strokeWidth="3.5"
-                    filter="url(#glowSapphire)"
-                  />
+                  <>
+                    {incomeCurve.leadInPath && (
+                      <path
+                        d={incomeCurve.leadInPath}
+                        fill="none"
+                        stroke="#218DFF"
+                        strokeWidth="2.5"
+                        strokeDasharray="3 3"
+                        strokeLinecap="round"
+                      />
+                    )}
+                    <path
+                      d={incomeCurve.linePath}
+                      fill="none"
+                      stroke="#218DFF"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                      strokeLinecap="round"
+                    />
+                  </>
                 )}
 
                 {/* Net Profit Flow Curve (when Focus === 'net') */}
@@ -915,48 +991,39 @@ export default function CashFlowCurveChart({
                     d={netCurve.linePath}
                     fill="none"
                     stroke="#10b981"
-                    strokeWidth="3.5"
-                    filter="url(#glowSapphire)"
+                    strokeWidth="2.5"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
                   />
                 )}
 
-                {/* Active Indicator & Guideline */}
+                {/* Subtle Active Hover Indicator */}
                 {activePoint && (
                   <>
                     <line
                       x1={activePoint.x}
-                      y1={activePoint.y}
+                      y1={paddingTop}
                       x2={activePoint.x}
                       y2={svgHeight - paddingBottom}
-                      stroke="#9EDCFF"
-                      strokeDasharray="4 4"
-                      strokeWidth="2"
-                      strokeOpacity="0.95"
+                      stroke="rgba(158,220,255,0.22)"
+                      strokeWidth="1"
                     />
                     <circle
                       cx={activePoint.x}
                       cy={activePoint.y}
-                      r="7"
-                      fill="#ffffff"
-                      stroke="#218DFF"
-                      strokeWidth="3.5"
-                    />
-                    <circle
-                      cx={activePoint.x}
-                      cy={activePoint.y}
-                      r="14"
+                      r="4.5"
                       fill="#218DFF"
-                      fillOpacity="0.25"
-                      className="animate-ping"
+                      stroke="#ffffff"
+                      strokeWidth="2"
                     />
                     {expenseCurve.points[safeIndex] && (metricFocus === 'all' || metricFocus === 'expense') && (
                       <circle
                         cx={expenseCurve.points[safeIndex].x}
                         cy={expenseCurve.points[safeIndex].y}
-                        r="5"
-                        fill="#ffffff"
-                        stroke="#f43f5e"
-                        strokeWidth="2.5"
+                        r="3.5"
+                        fill="#f43f5e"
+                        stroke="#ffffff"
+                        strokeWidth="1.5"
                       />
                     )}
                   </>
