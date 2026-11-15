@@ -10,3 +10,4 @@
 - [Resources](https://exbos.pages.dev/resources): Guides and business survival tools.
 - [Sign In](https://exbos.pages.dev/login): Access your ExBOS workspace.
 - [Create Account](https://exbos.pages.dev/signup): Start your ExBOS business workspace.
+
