@@ -381,7 +381,15 @@ export default function UniversalModuleTable({
 
                     // Render status as seamless table text with no badge/pill background
                     if (col.type === 'status') {
-                      const isLow = Number(row.quantity) <= (Number(row.lowStockAlert) || 5) || String(val || '').toLowerCase().includes('low') || String(val || '').toLowerCase().includes('warning')
+                      const isStockItem =
+                        row.lowStockAlert !== undefined ||
+                        row.currentStock !== undefined ||
+                        row.bucket === 'Inventory' ||
+                        row.bucket === 'Products'
+                      const isLow =
+                        (isStockItem && Number(row.quantity) <= (Number(row.lowStockAlert) || 5)) ||
+                        String(val || '').toLowerCase().includes('low') ||
+                        String(val || '').toLowerCase().includes('warning')
                       const isDead = String(val || '').toLowerCase().includes('dead')
                       return (
                         <td key={col.key} className="py-3.5 px-4 truncate">

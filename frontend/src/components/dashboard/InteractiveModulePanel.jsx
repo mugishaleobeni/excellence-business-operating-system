@@ -2129,12 +2129,13 @@ export default function InteractiveModulePanel({
                 </div>
               )}
 
-              {/* Prominent Low Stock Alert Banner if quantity <= lowStockAlert or status contains low/reorder/critical */}
-              {(Number(detailRow.quantity) <= (Number(detailRow.lowStockAlert) || 5) ||
-                String(detailRow.status || '').toLowerCase().includes('low') ||
-                String(detailRow.status || '').toLowerCase().includes('reorder') ||
-                String(detailRow.status || '').toLowerCase().includes('warning') ||
-                String(detailRow.status || '').toLowerCase().includes('critical')) && (
+              {/* Prominent Low Stock Alert Banner ONLY for Inventory/Product records when quantity <= lowStockAlert */}
+              {bucketKey === 'Inventory' &&
+                (Number(detailRow.quantity) <= (Number(detailRow.lowStockAlert) || 5) ||
+                  String(detailRow.status || '').toLowerCase().includes('low') ||
+                  String(detailRow.status || '').toLowerCase().includes('reorder') ||
+                  String(detailRow.status || '').toLowerCase().includes('warning') ||
+                  String(detailRow.status || '').toLowerCase().includes('critical')) && (
                 <div className="p-3.5 rounded-2xl bg-amber-500/15 border border-amber-400/40 text-amber-200 space-y-1.5 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
                   <div className="flex items-center justify-between">
                     <span className="font-orbitron font-extrabold text-xs text-amber-300 flex items-center gap-1.5 uppercase tracking-wide">
@@ -2451,10 +2452,10 @@ export default function InteractiveModulePanel({
         currentArch={currentArch}
         activePage={activePage}
         onSaveSale={(salePayload, selectedProd) => {
-          addDemoRecord(activeArchId, "Sales", salePayload)
+          const curStock = selectedProd ? (Number(selectedProd.quantity ?? selectedProd.currentStock) || 0) : 0
+          const newStock = selectedProd ? Math.max(0, curStock - (Number(salePayload.quantity) || 0)) : 0
+          addDemoRecord(activeArchId, "Sales", selectedProd ? { ...salePayload, remainingStockAfterSale: newStock } : salePayload)
           if (selectedProd) {
-            const curStock = Number(selectedProd.quantity || selectedProd.currentStock) || 0
-            const newStock = Math.max(0, curStock - salePayload.quantity)
             const shouldUpdateCatalog = Boolean(salePayload.updateCatalogPrice)
             const newPrice = shouldUpdateCatalog
               ? Number(salePayload.unitPriceRWF)
@@ -2519,17 +2520,18 @@ export default function InteractiveModulePanel({
         currentArch={currentArch}
         activePage={activePage}
         onSavePurchase={(purchasePayload, selectedProd, remaining) => {
-          addDemoRecord(activeArchId, "Purchases", purchasePayload)
+          const curStock = selectedProd ? (Number(selectedProd.quantity ?? selectedProd.currentStock) || 0) : 0
+          const newStock = selectedProd ? curStock + (Number(purchasePayload.quantity) || 0) : 0
+          addDemoRecord(activeArchId, "Purchases", selectedProd ? { ...purchasePayload, remainingStockAfterPurchase: newStock } : purchasePayload)
           if (selectedProd) {
-            const curStock = Number(selectedProd.quantity || selectedProd.currentStock) || 0
-            const newStock = curStock + purchasePayload.quantity
+            const lowThreshold = Number(selectedProd.lowStockAlert) || 5
             const purchaseUpdates = {
               quantity: newStock,
               currentStock: newStock,
               purchasePriceRWF: purchasePayload.unitPriceRWF,
               unitCostRWF: purchasePayload.unitPriceRWF,
               amountRWF: newStock * (Number(selectedProd.sellingPriceRWF) || purchasePayload.unitPriceRWF),
-              status: newStock > 0 ? "Active" : "Low Stock"
+              status: newStock <= 0 ? "Out of Stock" : (newStock <= lowThreshold ? "Low Stock" : "Active")
             }
             updateDemoRecord(activeArchId, "Inventory", selectedProd.id, purchaseUpdates)
             updateDemoRecord(activeArchId, "Products", selectedProd.id, purchaseUpdates)

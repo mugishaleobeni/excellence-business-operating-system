@@ -419,6 +419,81 @@ def create_module_record(
     if module_name in PRODUCT_BUCKETS:
         _mirror_product(db, scope_key, arch_id, record_doc, now_iso)
 
+    # Automatic server-side stock deduction on Sales and restock on Purchases
+    target_prod_id = str(raw_dump.get("productId") or "").strip()
+    target_prod_title = str(raw_dump.get("productTitle") or "").strip().lower()
+    delta_qty = float(raw_dump.get("quantity") or 0)
+
+    if module_name == "Sales" and delta_qty > 0 and (target_prod_id or target_prod_title):
+        for stock_bucket in ("Inventory", "Products"):
+            s_list = records_map.get(stock_bucket, [])
+            for idx, prod in enumerate(s_list):
+                p_id = str(prod.get("id") or "").strip()
+                p_title = str(prod.get("title") or prod.get("name") or "").strip().lower()
+                if (target_prod_id and p_id == target_prod_id) or (not target_prod_id and target_prod_title and p_title == target_prod_title):
+                    cur_stock = float(prod.get("quantity") if prod.get("quantity") is not None else (prod.get("currentStock") or 0))
+                    if raw_dump.get("remainingStockAfterSale") is not None:
+                        new_stock = max(0.0, float(raw_dump["remainingStockAfterSale"]))
+                    else:
+                        new_stock = max(0.0, cur_stock - delta_qty)
+                    new_stock_val = int(new_stock) if new_stock.is_integer() else new_stock
+                    low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
+                    sell_p = float(prod.get("sellingPriceRWF") or prod.get("unitPriceRWF") or 0)
+                    new_status = "Out of Stock" if new_stock <= 0 else ("Low Stock" if new_stock <= low_alert else "Active")
+                    updated_prod = {
+                        **prod,
+                        "quantity": new_stock_val,
+                        "currentStock": new_stock_val,
+                        "amountRWF": new_stock_val * sell_p if sell_p > 0 else prod.get("amountRWF", 0),
+                        "status": new_status,
+                        "updatedAt": now_iso,
+                    }
+                    s_list[idx] = updated_prod
+                    records_map[stock_bucket] = s_list
+                    db.module_records.update_one(
+                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "id": p_id},
+                        {"$set": {**updated_prod, "scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "updated_at": now_iso}},
+                        upsert=True,
+                    )
+                    _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
+
+    elif module_name == "Purchases" and delta_qty > 0 and (target_prod_id or target_prod_title):
+        for stock_bucket in ("Inventory", "Products", "RawMaterials"):
+            s_list = records_map.get(stock_bucket, [])
+            for idx, prod in enumerate(s_list):
+                p_id = str(prod.get("id") or "").strip()
+                p_title = str(prod.get("title") or prod.get("name") or "").strip().lower()
+                if (target_prod_id and p_id == target_prod_id) or (not target_prod_id and target_prod_title and p_title == target_prod_title):
+                    cur_stock = float(prod.get("quantity") if prod.get("quantity") is not None else (prod.get("currentStock") or 0))
+                    if raw_dump.get("remainingStockAfterPurchase") is not None:
+                        new_stock = max(0.0, float(raw_dump["remainingStockAfterPurchase"]))
+                    else:
+                        new_stock = cur_stock + delta_qty
+                    new_stock_val = int(new_stock) if new_stock.is_integer() else new_stock
+                    low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
+                    buy_cost = float(raw_dump.get("unitPriceRWF") or prod.get("purchasePriceRWF") or prod.get("unitCostRWF") or 0)
+                    sell_p = float(prod.get("sellingPriceRWF") or buy_cost)
+                    new_status = "Low Stock" if new_stock <= low_alert else "Active"
+                    updated_prod = {
+                        **prod,
+                        "quantity": new_stock_val,
+                        "currentStock": new_stock_val,
+                        "purchasePriceRWF": buy_cost or prod.get("purchasePriceRWF", 0),
+                        "unitCostRWF": buy_cost or prod.get("unitCostRWF", 0),
+                        "amountRWF": new_stock_val * sell_p,
+                        "status": new_status,
+                        "updatedAt": now_iso,
+                    }
+                    s_list[idx] = updated_prod
+                    records_map[stock_bucket] = s_list
+                    db.module_records.update_one(
+                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "id": p_id},
+                        {"$set": {**updated_prod, "scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "updated_at": now_iso}},
+                        upsert=True,
+                    )
+                    if stock_bucket in PRODUCT_BUCKETS:
+                        _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
+
     # Compute automatic workspace KPI updates and ledger transaction side-effects
     spendable = float(ws.get("spendableRWF", 0))
     monthly_rev = float(ws.get("monthlyRevenueRWF", 0))
@@ -599,7 +674,7 @@ def update_module_record(
     records_map[module_name] = bucket_list
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
-        {"$set": {"records": records_map, "updated_at": now_iso}},
+        {"$set": {f"records.{module_name}": bucket_list, "updated_at": now_iso}},
         upsert=True,
     )
     db.module_records.update_one(
