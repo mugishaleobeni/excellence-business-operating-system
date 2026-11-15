@@ -1659,12 +1659,9 @@ export default function InteractiveModulePanel({
               onClick={async () => {
                 const nextEnabled = !Boolean(user?.twoFactorEnabled)
                 try {
-                  const res = await apiClient.updateProfile({ twoFactorEnabled: nextEnabled })
-                  if (!res?.ok) {
-                    throw new Error(res?.error || 'Could not update 2-Step Verification setting.')
-                  }
-                  if (updateUserProfile) {
-                    updateUserProfile({ twoFactorEnabled: nextEnabled })
+                  const res = await updateUserProfile({ twoFactorEnabled: nextEnabled })
+                  if (res && !res.ok) {
+                    throw new Error(res.error || 'Could not update 2-Step Verification setting.')
                   }
                   addToast &&
                     addToast({

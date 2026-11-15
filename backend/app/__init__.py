@@ -68,6 +68,10 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
     # 3. Initialize MongoDB Atlas connection pool & indexes
     init_db(app)
 
+    # 3b. Start MongoDB Email Outbox Relay on SMTP-capable hosts
+    from app.utils.mailer import start_email_outbox_relay
+    start_email_outbox_relay(app)
+
     # 4. Register all modular Blueprints
     register_blueprints(app)
 

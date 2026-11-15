@@ -1748,8 +1748,11 @@ export function ExbosProvider({ children }) {
   const updateUserProfile = async (updates) => {
     const res = await exbosApi.updateProfile(updates)
     const updatedUser = res.ok && res.data?.data?.user ? res.data.data.user : null
-    setUser((prev) => {
-      const next = updatedUser || { ...(prev || {}), ...updates }
+    const next = updatedUser || { ...(user || {}), ...updates }
+    setUser(next)
+
+    const wsFields = ['name', 'businessName', 'email', 'phone', 'location', 'businessCategory']
+    if (updates && wsFields.some((k) => Object.prototype.hasOwnProperty.call(updates, k))) {
       const archId = next.architectureId || 'buy-and-sell'
       updateWorkspace(archId, {
         ownerName: next.name,
@@ -1759,8 +1762,8 @@ export function ExbosProvider({ children }) {
         location: next.location,
         category: next.businessCategory
       })
-      return next
-    })
+    }
+    return res
   }
 
   const registerNewBusiness = async (payload) => {

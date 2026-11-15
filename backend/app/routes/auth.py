@@ -462,39 +462,44 @@ def login_user(validated_data: LoginSchema):
                 html_body=html_body,
                 text_body=text_body,
             )
-            return success_response(
-                data={
-                    "requiresTwoFactor": True,
-                    "email": email_lower,
-                    "emailSent": email_sent,
-                    "expiresInMinutes": 15,
-                },
-                message=f"6-digit login verification code sent to {email_lower}.",
-                status_code=200,
+            if email_sent:
+                return success_response(
+                    data={
+                        "requiresTwoFactor": True,
+                        "email": email_lower,
+                        "emailSent": True,
+                        "expiresInMinutes": 15,
+                    },
+                    message=f"6-digit login verification code sent to {email_lower}.",
+                    status_code=200,
+                )
+            logger.info(
+                "Email delivery unavailable for 2FA login of %s; proceeding with password-verified login.",
+                email_lower,
             )
-
-        otp_doc = db.email_verifications.find_one(
-            {"email": email_lower, "code": otp_code, "purpose": "login_2fa"},
-            sort=[("created_at", -1)],
-        )
-        if not otp_doc:
-            return error_response(
-                error="Invalid 6-digit verification code. Please check your email and try again.",
-                status_code=400,
+        else:
+            otp_doc = db.email_verifications.find_one(
+                {"email": email_lower, "code": otp_code, "purpose": "login_2fa", "verified": False},
+                sort=[("created_at", -1)],
             )
-        exp = otp_doc.get("expires_at")
-        if exp:
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if now_dt > exp:
+            if not otp_doc:
                 return error_response(
-                    error="Verification code has expired. Please request a new code.",
+                    error="Invalid 6-digit verification code. Please check your email and try again.",
                     status_code=400,
                 )
-        db.email_verifications.update_one(
-            {"_id": otp_doc["_id"]},
-            {"$set": {"verified": True, "verified_at": now_iso}},
-        )
+            exp = otp_doc.get("expires_at")
+            if exp:
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                if now_dt > exp:
+                    return error_response(
+                        error="Verification code has expired. Please request a new code.",
+                        status_code=400,
+                    )
+            db.email_verifications.update_one(
+                {"_id": otp_doc["_id"]},
+                {"$set": {"verified": True, "verified_at": now_iso}},
+            )
 
     updates = {
         "updated_at": now_iso,
