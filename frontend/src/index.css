@@ -1276,11 +1276,12 @@ html.dark .cn-link:hover {
   }
   .dashboard-rail {
     width: 78px;
+    height: calc(100vh - 2.5rem);
     min-height: calc(100vh - 2.5rem);
     max-height: calc(100vh - 2.5rem);
     position: sticky;
     top: 1.25rem;
-    overflow-y: auto;
+    overflow: hidden;
   }
   .dashboard-sidebar {
     width: 268px;
@@ -1289,6 +1290,7 @@ html.dark .cn-link:hover {
     position: sticky;
     top: 1.25rem;
     overflow-y: auto;
+    overflow-x: hidden;
   }
 }
 
@@ -1700,6 +1702,52 @@ html.dark .cn-link:hover {
 }
 .exbos-workspace-scrollable-body::-webkit-scrollbar-thumb:hover {
   background: rgba(158, 220, 255, 0.45);
+}
+
+/* Contained Scrollbar for Navigation Rail & Secondary Sidebar (stays inside 28px rounded border) */
+.dashboard-rail-scroll,
+.dashboard-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(158, 220, 255, 0.28) transparent;
+}
+
+.dashboard-rail-scroll::-webkit-scrollbar,
+.dashboard-rail::-webkit-scrollbar {
+  width: 3.5px;
+  height: 0px;
+}
+
+.dashboard-sidebar::-webkit-scrollbar {
+  width: 4.5px;
+  height: 0px;
+}
+
+.dashboard-rail-scroll::-webkit-scrollbar:horizontal,
+.dashboard-rail::-webkit-scrollbar:horizontal,
+.dashboard-sidebar::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0px !important;
+}
+
+.dashboard-rail-scroll::-webkit-scrollbar-track,
+.dashboard-rail::-webkit-scrollbar-track,
+.dashboard-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+  margin-top: 22px;
+  margin-bottom: 22px;
+}
+
+.dashboard-rail-scroll::-webkit-scrollbar-thumb,
+.dashboard-rail::-webkit-scrollbar-thumb,
+.dashboard-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(158, 220, 255, 0.24);
+  border-radius: 9999px;
+}
+
+.dashboard-rail-scroll::-webkit-scrollbar-thumb:hover,
+.dashboard-rail::-webkit-scrollbar-thumb:hover,
+.dashboard-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(158, 220, 255, 0.5);
 }
 
 /* Scroll reveal & progress animation */
