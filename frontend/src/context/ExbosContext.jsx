@@ -1284,15 +1284,100 @@ export function ExbosProvider({ children }) {
       const cleanMap = createCleanWorkspaces()
       const base = prev[targetArch] || cleanMap[targetArch]
       if (!base) return prev
-      const filtered = (base.records?.[moduleName] || []).filter((r) => String(r.id) !== recIdStr)
+      const existingList = base.records?.[moduleName] || []
+      const deletedItem = existingList.find((r) => String(r.id) === recIdStr)
+      const filtered = existingList.filter((r) => String(r.id) !== recIdStr)
+      const nextRecords = {
+        ...base.records,
+        [moduleName]: filtered
+      }
+      const nextMetrics = { ...(base.metrics || {}) }
+
+      if (deletedItem) {
+        const delQty = Number(deletedItem.quantity) || 0
+        const delAmt = Number(deletedItem.amountRWF ?? deletedItem.totalAmountRWF ?? 0)
+        const targetProdId = String(deletedItem.productId || '').trim()
+        const targetProdTitle = String(deletedItem.productTitle || '').trim().toLowerCase()
+
+        if (moduleName === 'Sales') {
+          if (delQty > 0 && (targetProdId || targetProdTitle)) {
+            ;['Inventory', 'Products'].forEach((stockBucket) => {
+              const sList = nextRecords[stockBucket]
+              if (Array.isArray(sList)) {
+                nextRecords[stockBucket] = sList.map((prod) => {
+                  const pId = String(prod.id || '').trim()
+                  const pTitle = String(prod.title || prod.name || '').trim().toLowerCase()
+                  if (
+                    (targetProdId && pId === targetProdId) ||
+                    (!targetProdId && targetProdTitle && pTitle === targetProdTitle)
+                  ) {
+                    const curStock = Number(prod.quantity ?? prod.currentStock) || 0
+                    const newStock = curStock + delQty
+                    const lowAlert = Number(prod.lowStockAlert) || 5
+                    const sellP = Number(prod.sellingPriceRWF ?? prod.unitPriceRWF) || 0
+                    return {
+                      ...prod,
+                      quantity: newStock,
+                      currentStock: newStock,
+                      amountRWF: sellP > 0 ? newStock * sellP : prod.amountRWF,
+                      status: newStock <= 0 ? 'Out of Stock' : newStock <= lowAlert ? 'Low Stock' : 'Active'
+                    }
+                  }
+                  return prod
+                })
+              }
+            })
+          }
+          if (delAmt > 0) {
+            nextMetrics.monthlyRevenueRWF = Math.max(0, (Number(nextMetrics.monthlyRevenueRWF) || 0) - delAmt)
+            nextMetrics.spendableRWF = Math.max(0, (Number(nextMetrics.spendableRWF) || 0) - delAmt)
+            nextMetrics.todayMoneyInRWF = Math.max(0, (Number(nextMetrics.todayMoneyInRWF) || 0) - delAmt)
+            const profitRev = Number(deletedItem.profitRWF) || Math.round(delAmt * 0.35)
+            nextMetrics.netProfitRWF = (Number(nextMetrics.netProfitRWF) || 0) - profitRev
+            nextMetrics.todayProfitRWF = (Number(nextMetrics.todayProfitRWF) || 0) - profitRev
+          }
+        } else if (moduleName === 'Purchases') {
+          if (delQty > 0 && (targetProdId || targetProdTitle)) {
+            ;['Inventory', 'Products', 'RawMaterials'].forEach((stockBucket) => {
+              const sList = nextRecords[stockBucket]
+              if (Array.isArray(sList)) {
+                nextRecords[stockBucket] = sList.map((prod) => {
+                  const pId = String(prod.id || '').trim()
+                  const pTitle = String(prod.title || prod.name || '').trim().toLowerCase()
+                  if (
+                    (targetProdId && pId === targetProdId) ||
+                    (!targetProdId && targetProdTitle && pTitle === targetProdTitle)
+                  ) {
+                    const curStock = Number(prod.quantity ?? prod.currentStock) || 0
+                    const newStock = Math.max(0, curStock - delQty)
+                    const lowAlert = Number(prod.lowStockAlert) || 5
+                    const sellP = Number(prod.sellingPriceRWF ?? prod.purchasePriceRWF ?? prod.unitCostRWF) || 0
+                    return {
+                      ...prod,
+                      quantity: newStock,
+                      currentStock: newStock,
+                      amountRWF: sellP > 0 ? newStock * sellP : prod.amountRWF,
+                      status: newStock <= 0 ? 'Out of Stock' : newStock <= lowAlert ? 'Low Stock' : 'Active'
+                    }
+                  }
+                  return prod
+                })
+              }
+            })
+          }
+          if (delAmt > 0) {
+            nextMetrics.todayCostsRWF = Math.max(0, (Number(nextMetrics.todayCostsRWF) || 0) - delAmt)
+            nextMetrics.spendableRWF = (Number(nextMetrics.spendableRWF) || 0) + delAmt
+          }
+        }
+      }
+
       return {
         ...prev,
         [targetArch]: {
           ...base,
-          records: {
-            ...base.records,
-            [moduleName]: filtered
-          }
+          metrics: nextMetrics,
+          records: nextRecords
         }
       }
     })
