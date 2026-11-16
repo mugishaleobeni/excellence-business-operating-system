@@ -577,56 +577,61 @@ html.dark .sapphire-analytics-card {
 @keyframes lampExpand {
   0% {
     opacity: 0;
-    transform: scaleX(0.35) translateY(-12px);
+    transform: translate3d(0, -10px, 0) scaleX(0.38);
   }
   100% {
     opacity: 1;
-    transform: scaleX(1) translateY(0);
+    transform: translate3d(0, 0, 0) scaleX(1);
   }
 }
 
 @keyframes modalRise {
   0% {
     opacity: 0;
-    transform: translateY(18px) scale(0.96);
+    transform: translate3d(0, 14px, 0) scale3d(0.97, 0.97, 1);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
   }
 }
 
 .lamp-modal-card {
-  animation: modalRise 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  animation: modalRise 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .lamp-beam {
-  animation: lampExpand 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+  animation: lampExpand 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   background: radial-gradient(ellipse at top, rgba(33, 141, 255, 0.58) 0%, rgba(16, 69, 202, 0.22) 48%, transparent 78%);
 }
 
 /* AOS (Animate On Scroll) Lightweight Support */
 [data-aos] {
   opacity: 0;
-  transform: translateY(22px);
-  transition: opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+  backface-visibility: hidden;
+  transform: translate3d(0, 18px, 0);
+  transition: opacity 0.72s cubic-bezier(0.22, 1, 0.36, 1), transform 0.72s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 [data-aos="fade-right"] {
-  transform: translateX(-24px);
+  transform: translate3d(-20px, 0, 0);
 }
 
 [data-aos="fade-left"] {
-  transform: translateX(24px);
+  transform: translate3d(20px, 0, 0);
 }
 
 [data-aos="zoom-in"] {
-  transform: scale(0.94);
+  transform: scale3d(0.95, 0.95, 1);
 }
 
 [data-aos].aos-animate {
   opacity: 1;
-  transform: translate(0, 0) scale(1);
+  transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
 }
 
 @keyframes exbos-pulse {
@@ -1267,13 +1272,34 @@ html.dark .cn-link:hover {
   align-items: start;
 }
 
+.rail-short-label {
+  opacity: 1;
+  max-height: 16px;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    max-height 0.24s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .rail-full-label {
-  display: none;
+  display: inline-block;
+  opacity: 0;
+  max-width: 0;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translate3d(-6px, 0, 0);
+  transition:
+    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    max-width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (min-width: 1024px) {
   .dashboard-shell {
     grid-template-columns: auto 268px minmax(0, 1fr);
+    transition: grid-template-columns 0.34s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .dashboard-shell.is-collapsed {
     grid-template-columns: auto minmax(0, 1fr);
@@ -1286,7 +1312,25 @@ html.dark .cn-link:hover {
     position: sticky;
     top: 1.25rem;
     overflow: hidden;
-    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: width;
+    transition:
+      width 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .dashboard-rail .dashboard-rail-scroll {
+    transition: padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .dashboard-rail .rail-brand-link,
+  .dashboard-rail .rail-nav-btn {
+    transition:
+      width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      padding 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      gap 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      background-color 0.24s ease,
+      border-color 0.24s ease,
+      color 0.24s ease,
+      transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .dashboard-rail:hover {
     width: 214px;
@@ -1310,10 +1354,17 @@ html.dark .cn-link:hover {
     gap: 0.75rem !important;
   }
   .dashboard-rail:hover .rail-short-label {
-    display: none !important;
+    opacity: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    margin: 0 !important;
+    pointer-events: none !important;
   }
   .dashboard-rail:hover .rail-full-label {
-    display: inline-block !important;
+    opacity: 1 !important;
+    max-width: 150px !important;
+    max-height: 28px !important;
+    transform: translate3d(0, 0, 0) !important;
   }
   .dashboard-sidebar {
     width: 268px;
@@ -1323,6 +1374,9 @@ html.dark .cn-link:hover {
     top: 1.25rem;
     overflow-y: auto;
     overflow-x: hidden;
+    transition:
+      width 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+      padding 0.34s cubic-bezier(0.22, 1, 0.36, 1);
   }
 }
 
@@ -1790,21 +1844,24 @@ html.dark .cn-link:hover {
   height: 2px;
   background: linear-gradient(90deg, #218DFF 0%, #9EDCFF 50%, #ffffff 100%);
   box-shadow: 0 0 10px rgba(33, 141, 255, 0.8);
-  transition: width 0.1s cubic-bezier(0.1, 1, 0.1, 1);
+  will-change: width;
+  transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .anim-scroll-item {
-  animation: scrollFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  animation: scrollFadeIn 0.56s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes scrollFadeIn {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translate3d(0, 12px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
@@ -1822,7 +1879,11 @@ html.dark .cn-link:hover {
   border-radius: 14px;
   border: 1px solid rgba(158, 220, 255, 0.45);
   box-shadow: 0 4px 14px rgba(16, 69, 202, 0.35);
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    background-color 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
   cursor: pointer;
 }
 .btn-sapphire-clean:hover {
@@ -1831,7 +1892,7 @@ html.dark .cn-link:hover {
   box-shadow: 0 6px 18px rgba(33, 141, 255, 0.45);
 }
 .btn-sapphire-clean:active {
-  transform: scale(0.98);
+  transform: scale3d(0.98, 0.98, 1);
 }
 
 .exbos-glass-card {
