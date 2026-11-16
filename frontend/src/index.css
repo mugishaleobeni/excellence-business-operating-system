@@ -1267,12 +1267,16 @@ html.dark .cn-link:hover {
   align-items: start;
 }
 
+.rail-full-label {
+  display: none;
+}
+
 @media (min-width: 1024px) {
   .dashboard-shell {
-    grid-template-columns: 78px 268px minmax(0, 1fr);
+    grid-template-columns: auto 268px minmax(0, 1fr);
   }
   .dashboard-shell.is-collapsed {
-    grid-template-columns: 78px minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .dashboard-rail {
     width: 78px;
@@ -1282,6 +1286,34 @@ html.dark .cn-link:hover {
     position: sticky;
     top: 1.25rem;
     overflow: hidden;
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .dashboard-rail:hover {
+    width: 214px;
+  }
+  .dashboard-rail:hover .dashboard-rail-scroll {
+    align-items: stretch;
+    padding-left: 0.65rem;
+    padding-right: 0.65rem;
+  }
+  .dashboard-rail:hover .rail-nav-group {
+    align-items: stretch;
+  }
+  .dashboard-rail:hover .rail-brand-link,
+  .dashboard-rail:hover .rail-nav-btn {
+    width: 100% !important;
+    height: 2.85rem !important;
+    flex-direction: row !important;
+    justify-content: flex-start !important;
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+    gap: 0.75rem !important;
+  }
+  .dashboard-rail:hover .rail-short-label {
+    display: none !important;
+  }
+  .dashboard-rail:hover .rail-full-label {
+    display: inline-block !important;
   }
   .dashboard-sidebar {
     width: 268px;
@@ -1869,7 +1901,7 @@ html.dark .cn-link:hover {
 
 @media (min-width: 1024px) {
   .dashboard-shell.is-sidebar-compact {
-    grid-template-columns: 78px 76px minmax(0, 1fr) !important;
+    grid-template-columns: auto 76px minmax(0, 1fr) !important;
   }
 }
 
