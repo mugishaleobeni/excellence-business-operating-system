@@ -27,7 +27,9 @@ export default function MakeSellWorkspace({
     user,
     hideFinancials,
     workspaces,
-    updateWorkspace,
+    addDemoRecord,
+    updateDemoRecord,
+    deleteDemoRecord,
     addTransaction,
     addToast
   } = useExbos()
@@ -54,14 +56,29 @@ export default function MakeSellWorkspace({
       : DEFAULT_CATEGORIES
 
   const updateBucket = (bucketName, nextValueOrFn) => {
-    if (!updateWorkspace) return
     const currentList = Array.isArray(recordsMap[bucketName]) ? recordsMap[bucketName] : []
     const resolved =
       typeof nextValueOrFn === 'function' ? nextValueOrFn(currentList) : nextValueOrFn
-    updateWorkspace('make-and-sell', {
-      records: {
-        ...recordsMap,
-        [bucketName]: resolved
+    if (!Array.isArray(resolved)) return
+
+    const prevMap = new Map(currentList.map((item) => [String(item.id), item]))
+    const nextMap = new Map(resolved.map((item) => [String(item.id), item]))
+
+    // 1. Deleted items -> deleteDemoRecord (enforces branch permissions + MongoDB DELETE)
+    currentList.forEach((oldItem) => {
+      if (!nextMap.has(String(oldItem.id))) {
+        deleteDemoRecord && deleteDemoRecord('make-and-sell', bucketName, oldItem.id)
+      }
+    })
+
+    // 2. Added or updated items -> addDemoRecord / updateDemoRecord (tags branchId + MongoDB POST/PATCH)
+    resolved.forEach((newItem) => {
+      const idStr = String(newItem.id)
+      const prevItem = prevMap.get(idStr)
+      if (!prevItem) {
+        addDemoRecord && addDemoRecord('make-and-sell', bucketName, newItem)
+      } else if (JSON.stringify(prevItem) !== JSON.stringify(newItem)) {
+        updateDemoRecord && updateDemoRecord('make-and-sell', bucketName, newItem.id, newItem)
       }
     })
   }

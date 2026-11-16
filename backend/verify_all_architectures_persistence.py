@@ -9,6 +9,9 @@ def run_verification():
     db = get_db()
 
     test_email = "verify_all_arch@exbos.rw"
+    # Ensure clean slate for idempotent runs
+    for col in (db.users, db.businesses, db.workspaces, db.module_records, db.transactions, db.password_resets, db.products):
+        col.delete_many({"$or": [{"email": test_email}, {"scopeKey": test_email}]})
     headers = {}
 
     # 1. Send & Verify Email OTP + Register Business
@@ -193,7 +196,99 @@ def run_verification():
     ).get_json()["data"]
     assert any(t["id"] == "TX-TEST-999" for t in tx_list), "Transaction TX-TEST-999 not found"
 
-    print("ALL 6 ARCHITECTURES & SHARED MODULES PERSISTENCE VERIFIED SUCCESSFULLY!")
+    # 6. Verify Stock Deduction + Stock Restoration & KPI Reversal on DELETE across the 5 non-Buy&Sell architectures
+    # 6a. Hybrid: MixedSales deducts HybridItems stock and DELETE restores it + reverses KPI
+    r_hyb_sale = client.post(
+        f"/api/v1/workspaces/hybrid/records/MixedSales?scopeKey={test_email}",
+        json={
+            "id": "MSAL-HB-602",
+            "title": "SSD Upgrade Sale",
+            "totalAmountRWF": 195000,
+            "amountRWF": 195000,
+            "status": "Paid in Full",
+            "items": [{"itemId": "HYB-HB-601", "title": "Laptop SSD Upgrade", "quantity": 3}],
+        },
+        headers=headers,
+    )
+    assert r_hyb_sale.status_code == 201, f"Hybrid MixedSales POST failed: {r_hyb_sale.get_json()}"
+    ws_hyb = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "hybrid"})
+    hyb_item = next(i for i in ws_hyb["records"]["HybridItems"] if i["id"] == "HYB-HB-601")
+    assert hyb_item["currentStock"] == 7, f"Expected HybridItems stock 7 after sale of 3, got {hyb_item['currentStock']}"
+
+    r_hyb_del = client.delete(
+        f"/api/v1/workspaces/hybrid/records/MixedSales/MSAL-HB-602?scopeKey={test_email}",
+        headers=headers,
+    )
+    assert r_hyb_del.status_code == 200, f"Hybrid MixedSales DELETE failed: {r_hyb_del.get_json()}"
+    ws_hyb_after = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "hybrid"})
+    hyb_item_after = next(i for i in ws_hyb_after["records"]["HybridItems"] if i["id"] == "HYB-HB-601")
+    assert hyb_item_after["currentStock"] == 10, f"Expected HybridItems stock restored to 10, got {hyb_item_after['currentStock']}"
+
+    # 6b. Agriculture: FeedingLogs deducts Feeds stock and DELETE restores it
+    r_feed = client.post(
+        f"/api/v1/workspaces/agriculture/records/Feeds?scopeKey={test_email}",
+        json={"id": "FD-AG-401", "name": "Dairy Concentrates", "quantityKg": 100, "quantity": 100, "amountRWF": 50000},
+        headers=headers,
+    )
+    assert r_feed.status_code == 201
+    r_flog = client.post(
+        f"/api/v1/workspaces/agriculture/records/FeedingLogs?scopeKey={test_email}",
+        json={"id": "FDL-AG-402", "feedId": "FD-AG-401", "feedName": "Dairy Concentrates", "quantityUsed": 25, "costRWF": 12500},
+        headers=headers,
+    )
+    assert r_flog.status_code == 201
+    ws_ag = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "agriculture"})
+    fd_after_log = next(f for f in ws_ag["records"]["Feeds"] if f["id"] == "FD-AG-401")
+    assert fd_after_log["quantityKg"] == 75, f"Expected Feeds 75kg, got {fd_after_log['quantityKg']}"
+
+    r_flog_del = client.delete(
+        f"/api/v1/workspaces/agriculture/records/FeedingLogs/FDL-AG-402?scopeKey={test_email}",
+        headers=headers,
+    )
+    assert r_flog_del.status_code == 200
+    ws_ag_after = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "agriculture"})
+    fd_restored = next(f for f in ws_ag_after["records"]["Feeds"] if f["id"] == "FD-AG-401")
+    assert fd_restored["quantityKg"] == 100, f"Expected Feeds restored to 100kg, got {fd_restored['quantityKg']}"
+
+    # 6c. Make & Sell: Inventory deduction on Sales and restoration on DELETE
+    r_ms_inv = client.post(
+        f"/api/v1/workspaces/make-and-sell/records/Inventory?scopeKey={test_email}",
+        json={"id": "INV-MS-101", "title": "Artisan Bread Loaf", "quantity": 20, "sellingPriceRWF": 2000},
+        headers=headers,
+    )
+    assert r_ms_inv.status_code == 201
+    r_ms_sale = client.post(
+        f"/api/v1/workspaces/make-and-sell/records/Sales?scopeKey={test_email}",
+        json={"id": "SAL-MS-102", "productId": "INV-MS-101", "productTitle": "Artisan Bread Loaf", "quantity": 5, "amountRWF": 10000, "status": "Paid"},
+        headers=headers,
+    )
+    assert r_ms_sale.status_code == 201
+    ws_ms = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "make-and-sell"})
+    ms_item = next(i for i in ws_ms["records"]["Inventory"] if i["id"] == "INV-MS-101")
+    assert ms_item["quantity"] == 15, f"Expected Make&Sell Inventory 15, got {ms_item['quantity']}"
+    client.delete(f"/api/v1/workspaces/make-and-sell/records/Sales/SAL-MS-102?scopeKey={test_email}", headers=headers)
+    ws_ms_after = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "make-and-sell"})
+    ms_item_after = next(i for i in ws_ms_after["records"]["Inventory"] if i["id"] == "INV-MS-101")
+    assert ms_item_after["quantity"] == 20, f"Expected Make&Sell Inventory restored to 20, got {ms_item_after['quantity']}"
+
+    # 6d. Services & Food & Hospitality: DELETE reverses monthlyRevenueRWF
+    ws_sv_before = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "services"})
+    sv_rev_before = float(ws_sv_before.get("monthlyRevenueRWF") or 0)
+    client.delete(f"/api/v1/workspaces/services/records/Jobs/JOB-SV-301?scopeKey={test_email}", headers=headers)
+    ws_sv_after = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "services"})
+    assert float(ws_sv_after.get("monthlyRevenueRWF") or 0) == max(0.0, sv_rev_before - 35000.0)
+
+    ws_fh_before = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "food-and-hospitality"})
+    fh_rev_before = float(ws_fh_before.get("monthlyRevenueRWF") or 0)
+    client.delete(f"/api/v1/workspaces/food-and-hospitality/records/KitchenOrders/KOT-FH-501?scopeKey={test_email}", headers=headers)
+    ws_fh_after = db.workspaces.find_one({"scopeKey": test_email, "architectureId": "food-and-hospitality"})
+    assert float(ws_fh_after.get("monthlyRevenueRWF") or 0) == max(0.0, fh_rev_before - 30000.0)
+
+    # Clean up test tenant data
+    for col in (db.users, db.businesses, db.workspaces, db.module_records, db.transactions, db.password_resets, db.products):
+        col.delete_many({"$or": [{"email": test_email}, {"scopeKey": test_email}]})
+
+    print("ALL 6 ARCHITECTURES & SHARED MODULES PERSISTENCE + STOCK/KPI PARITY VERIFIED SUCCESSFULLY!")
 
 
 if __name__ == "__main__":

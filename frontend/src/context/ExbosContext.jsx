@@ -1560,6 +1560,65 @@ export function ExbosProvider({ children }) {
             nextMetrics.todayCostsRWF = Math.max(0, (Number(nextMetrics.todayCostsRWF) || 0) - delAmt)
             nextMetrics.spendableRWF = (Number(nextMetrics.spendableRWF) || 0) + delAmt
           }
+        } else if (['MixedSales', 'KitchenOrders', 'GuestFolios', 'Jobs', 'ServiceJobs'].includes(moduleName)) {
+          if (moduleName === 'MixedSales') {
+            const lineItems = Array.isArray(deletedItem.items) ? deletedItem.items : []
+            const hybList = nextRecords.HybridItems
+            if (Array.isArray(hybList) && lineItems.length > 0) {
+              nextRecords.HybridItems = hybList.map((item) => {
+                if (!item.trackStock) return item
+                const hId = String(item.id || '').trim()
+                const hTitle = String(item.title || item.name || '').trim().toLowerCase()
+                const matchedLi = lineItems.find((li) => {
+                  const liId = String(li.itemId || li.productId || li.id || '').trim()
+                  const liTitle = String(li.title || li.name || '').trim().toLowerCase()
+                  return (liId && hId === liId) || (!liId && liTitle && hTitle === liTitle)
+                })
+                if (!matchedLi) return item
+                const curS = Number(item.currentStock ?? item.quantity) || 0
+                const restored = curS + (Number(matchedLi.quantity) || 0)
+                return { ...item, currentStock: restored, quantity: restored }
+              })
+            }
+          }
+          if (delAmt > 0) {
+            const delStatus = String(deletedItem.status || '').toLowerCase()
+            const isCredit = ['credit', 'unpaid', 'pending', 'owed'].some((k) => delStatus.includes(k))
+            if (isCredit) {
+              nextMetrics.owedToMeRWF = Math.max(0, (Number(nextMetrics.owedToMeRWF) || 0) - delAmt)
+            } else {
+              nextMetrics.spendableRWF = Math.max(0, (Number(nextMetrics.spendableRWF) || 0) - delAmt)
+              nextMetrics.todayMoneyInRWF = Math.max(0, (Number(nextMetrics.todayMoneyInRWF) || 0) - delAmt)
+            }
+            nextMetrics.monthlyRevenueRWF = Math.max(0, (Number(nextMetrics.monthlyRevenueRWF) || 0) - delAmt)
+            const profitRev = Number(deletedItem.profitRWF) || Math.round(delAmt * 0.32)
+            nextMetrics.netProfitRWF = (Number(nextMetrics.netProfitRWF) || 0) - profitRev
+            nextMetrics.todayProfitRWF = (Number(nextMetrics.todayProfitRWF) || 0) - profitRev
+          }
+        } else if (['Expenses', 'Feeds', 'FeedingLogs', 'HealthRecords'].includes(moduleName)) {
+          if (moduleName === 'FeedingLogs') {
+            const feedId = String(deletedItem.feedId || '').trim()
+            const feedName = String(deletedItem.feedName || deletedItem.title || '').trim().toLowerCase()
+            const usedKg = Number(deletedItem.quantityUsed ?? deletedItem.quantity) || 0
+            if (Array.isArray(nextRecords.Feeds) && usedKg > 0 && (feedId || feedName)) {
+              nextRecords.Feeds = nextRecords.Feeds.map((fd) => {
+                const fId = String(fd.id || '').trim()
+                const fName = String(fd.name || fd.feedName || fd.title || '').trim().toLowerCase()
+                if ((feedId && fId === feedId) || (!feedId && feedName && fName === feedName)) {
+                  const curKg = Number(fd.quantityKg ?? fd.quantity) || 0
+                  const nextKg = curKg + usedKg
+                  return { ...fd, quantityKg: nextKg, quantity: nextKg }
+                }
+                return fd
+              })
+            }
+          }
+          if (delAmt > 0) {
+            nextMetrics.todayCostsRWF = Math.max(0, (Number(nextMetrics.todayCostsRWF) || 0) - delAmt)
+            nextMetrics.spendableRWF = (Number(nextMetrics.spendableRWF) || 0) + delAmt
+            nextMetrics.netProfitRWF = (Number(nextMetrics.netProfitRWF) || 0) + delAmt
+            nextMetrics.todayProfitRWF = (Number(nextMetrics.todayProfitRWF) || 0) + delAmt
+          }
         }
       }
 
@@ -2133,9 +2192,18 @@ export function ExbosProvider({ children }) {
     }
     setSavedAnalyses((prev) => {
       const updated = [item, ...prev]
-      localStorage.setItem('exbos_saved_analyses', JSON.stringify(updated))
+      try {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          localStorage.setItem('exbos_saved_analyses', JSON.stringify(updated))
+        } else {
+          localStorage.removeItem('exbos_saved_analyses')
+        }
+      } catch {}
       return updated
     })
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      exbosApi.saveAnalysis(item).catch(() => {})
+    }
   }
 
   const scopedTransactions = useMemo(() => {

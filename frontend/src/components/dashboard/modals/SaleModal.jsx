@@ -5,6 +5,7 @@ import CustomSelect from "../../common/CustomSelect";
 import SendDocumentModal from "../documents/SendDocumentModal";
 import DocumentPreviewModal from "../documents/DocumentPreviewModal";
 import { downloadDocumentFile } from "../documents/documentUtils";
+import { useExbos } from "../../../context/ExbosContext";
 
 export default function SaleModal({
   isOpen,
@@ -16,6 +17,7 @@ export default function SaleModal({
   activePage = "Sales",
   onSaveSale
 }) {
+  const { addDemoRecord } = useExbos();
   const [saleProductId, setSaleProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [saleUnitPrice, setSaleUnitPrice] = useState("");
@@ -225,10 +227,9 @@ export default function SaleModal({
       notes: `Sale recorded via ${salePaymentMethod}. Payment status: ${salePaymentStatus}.`
     };
 
-    try {
-      const existing = JSON.parse(localStorage.getItem("exbos_business_documents") || "[]");
-      localStorage.setItem("exbos_business_documents", JSON.stringify([newInvoiceDoc, ...existing]));
-    } catch {}
+    if (addDemoRecord) {
+      addDemoRecord(activeArchId, "Documents", newInvoiceDoc);
+    }
 
     setSavedSaleDoc(newInvoiceDoc);
   };

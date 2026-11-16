@@ -548,6 +548,61 @@ def create_module_record(
                     if stock_bucket in PRODUCT_BUCKETS:
                         _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
 
+    elif module_name == "MixedSales":
+        # Hybrid: deduct HybridItems stock for tracked physical items in line items or direct productId
+        line_items = raw_dump.get("items") if isinstance(raw_dump.get("items"), list) else []
+        if not line_items and (target_prod_id or target_prod_title) and delta_qty > 0:
+            line_items = [{"itemId": target_prod_id, "title": target_prod_title, "quantity": delta_qty}]
+        hyb_list = records_map.get("HybridItems", [])
+        if isinstance(hyb_list, list) and line_items:
+            hyb_changed = False
+            for li in line_items:
+                li_id = str(li.get("itemId") or li.get("productId") or li.get("id") or "").strip()
+                li_title = str(li.get("title") or li.get("name") or "").strip().lower()
+                li_qty = float(li.get("quantity") or 0)
+                if li_qty <= 0 or (not li_id and not li_title):
+                    continue
+                for idx, item in enumerate(hyb_list):
+                    if not item.get("trackStock"):
+                        continue
+                    h_id = str(item.get("id") or "").strip()
+                    h_title = str(item.get("title") or item.get("name") or "").strip().lower()
+                    if (li_id and h_id == li_id) or (not li_id and li_title and h_title == li_title):
+                        cur_s = float(item.get("currentStock") if item.get("currentStock") is not None else (item.get("quantity") or 0))
+                        new_s = max(0.0, cur_s - li_qty)
+                        new_s_val = int(new_s) if new_s.is_integer() else new_s
+                        hyb_list[idx] = {**item, "currentStock": new_s_val, "quantity": new_s_val, "updatedAt": now_iso}
+                        hyb_changed = True
+                        db.module_records.update_one(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "HybridItems", "id": h_id},
+                            {"$set": {**hyb_list[idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "HybridItems", "updated_at": now_iso}},
+                            upsert=True,
+                        )
+            if hyb_changed:
+                records_map["HybridItems"] = hyb_list
+
+    elif module_name == "FeedingLogs":
+        # Agriculture: deduct Feeds stock when FeedingLogs records feed consumption
+        feed_id = str(raw_dump.get("feedId") or "").strip()
+        feed_name = str(raw_dump.get("feedName") or raw_dump.get("title") or "").strip().lower()
+        used_kg = float(raw_dump.get("quantityUsed") or raw_dump.get("quantity") or 0)
+        feeds_list = records_map.get("Feeds", [])
+        if isinstance(feeds_list, list) and used_kg > 0 and (feed_id or feed_name):
+            for idx, fd in enumerate(feeds_list):
+                f_id = str(fd.get("id") or "").strip()
+                f_name = str(fd.get("name") or fd.get("feedName") or fd.get("title") or "").strip().lower()
+                if (feed_id and f_id == feed_id) or (not feed_id and feed_name and f_name == feed_name):
+                    cur_kg = float(fd.get("quantityKg") if fd.get("quantityKg") is not None else (fd.get("quantity") or 0))
+                    new_kg = max(0.0, cur_kg - used_kg)
+                    feeds_list[idx] = {**fd, "quantityKg": new_kg, "quantity": new_kg, "updatedAt": now_iso}
+                    records_map["Feeds"] = feeds_list
+                    db.module_records.update_one(
+                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Feeds", "id": f_id},
+                        {"$set": {**feeds_list[idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "Feeds", "updated_at": now_iso}},
+                        upsert=True,
+                    )
+                    break
+
     # Compute automatic workspace KPI updates and ledger transaction side-effects
     spendable = float(ws.get("spendableRWF", 0))
     monthly_rev = float(ws.get("monthlyRevenueRWF", 0))
@@ -967,6 +1022,88 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
                 else:
                     ws_updates["spendableRWF"] = float(ws.get("spendableRWF", 0)) + del_amt
                     ws_updates["todayCostsRWF"] = max(0.0, float(ws.get("todayCostsRWF", 0)) - del_amt)
+
+        elif module_name in ("MixedSales", "KitchenOrders", "GuestFolios", "Jobs", "ServiceJobs"):
+            # Hybrid MixedSales: restore HybridItems stock for tracked line items
+            if module_name == "MixedSales":
+                line_items = deleted_item.get("items") if isinstance(deleted_item.get("items"), list) else []
+                if not line_items and del_qty > 0 and (target_prod_id or target_prod_title):
+                    line_items = [{"itemId": target_prod_id, "title": target_prod_title, "quantity": del_qty}]
+                hyb_list = records_map.get("HybridItems", [])
+                if isinstance(hyb_list, list) and line_items:
+                    hyb_changed = False
+                    for li in line_items:
+                        li_id = str(li.get("itemId") or li.get("productId") or li.get("id") or "").strip()
+                        li_title = str(li.get("title") or li.get("name") or "").strip().lower()
+                        li_qty = float(li.get("quantity") or 0)
+                        if li_qty <= 0 or (not li_id and not li_title):
+                            continue
+                        for idx, item in enumerate(hyb_list):
+                            if not item.get("trackStock"):
+                                continue
+                            h_id = str(item.get("id") or "").strip()
+                            h_title = str(item.get("title") or item.get("name") or "").strip().lower()
+                            if (li_id and h_id == li_id) or (not li_id and li_title and h_title == li_title):
+                                cur_s = float(item.get("currentStock") if item.get("currentStock") is not None else (item.get("quantity") or 0))
+                                new_s = cur_s + li_qty
+                                new_s_val = int(new_s) if new_s.is_integer() else new_s
+                                hyb_list[idx] = {**item, "currentStock": new_s_val, "quantity": new_s_val, "updatedAt": now_iso}
+                                hyb_changed = True
+                                db.module_records.update_one(
+                                    {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "HybridItems", "id": h_id},
+                                    {"$set": {**hyb_list[idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "HybridItems", "updated_at": now_iso}},
+                                    upsert=True,
+                                )
+                    if hyb_changed:
+                        records_map["HybridItems"] = hyb_list
+                        ws_updates["records.HybridItems"] = hyb_list
+
+            # Reverse revenue/profit KPI metrics across Hybrid, Food & Hospitality, and Services
+            if del_amt > 0:
+                is_credit = any(k in del_status for k in ("credit", "unpaid", "pending", "owed"))
+                if is_credit:
+                    ws_updates["owedToMeRWF"] = max(0.0, float(ws.get("owedToMeRWF", 0)) - del_amt)
+                else:
+                    ws_updates["spendableRWF"] = max(0.0, float(ws.get("spendableRWF", 0)) - del_amt)
+                    ws_updates["todayMoneyInRWF"] = max(0.0, float(ws.get("todayMoneyInRWF", 0)) - del_amt)
+                ws_updates["monthlyRevenueRWF"] = max(0.0, float(ws.get("monthlyRevenueRWF", 0)) - del_amt)
+                profit_rev = float(deleted_item.get("profitRWF") or round(del_amt * 0.32))
+                ws_updates["netProfitRWF"] = float(ws.get("netProfitRWF", 0)) - profit_rev
+                ws_updates["todayProfitRWF"] = float(ws.get("todayProfitRWF", 0)) - profit_rev
+
+        elif module_name in ("Expenses", "Feeds", "FeedingLogs", "HealthRecords"):
+            # Agriculture FeedingLogs: restore Feeds stock
+            if module_name == "FeedingLogs":
+                feed_id = str(deleted_item.get("feedId") or "").strip()
+                feed_name = str(deleted_item.get("feedName") or deleted_item.get("title") or "").strip().lower()
+                used_kg = float(deleted_item.get("quantityUsed") or deleted_item.get("quantity") or 0)
+                feeds_list = records_map.get("Feeds", [])
+                if isinstance(feeds_list, list) and used_kg > 0 and (feed_id or feed_name):
+                    for idx, fd in enumerate(feeds_list):
+                        f_id = str(fd.get("id") or "").strip()
+                        f_name = str(fd.get("name") or fd.get("feedName") or fd.get("title") or "").strip().lower()
+                        if (feed_id and f_id == feed_id) or (not feed_id and feed_name and f_name == feed_name):
+                            cur_kg = float(fd.get("quantityKg") if fd.get("quantityKg") is not None else (fd.get("quantity") or 0))
+                            new_kg = cur_kg + used_kg
+                            feeds_list[idx] = {**fd, "quantityKg": new_kg, "quantity": new_kg, "updatedAt": now_iso}
+                            records_map["Feeds"] = feeds_list
+                            ws_updates["records.Feeds"] = feeds_list
+                            db.module_records.update_one(
+                                {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Feeds", "id": f_id},
+                                {"$set": {**feeds_list[idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "Feeds", "updated_at": now_iso}},
+                                upsert=True,
+                            )
+                            break
+
+            if del_amt > 0:
+                is_credit = any(k in del_status for k in ("credit", "unpaid", "owed"))
+                if is_credit:
+                    ws_updates["iOweSuppliersRWF"] = max(0.0, float(ws.get("iOweSuppliersRWF", 0)) - del_amt)
+                else:
+                    ws_updates["spendableRWF"] = float(ws.get("spendableRWF", 0)) + del_amt
+                    ws_updates["todayCostsRWF"] = max(0.0, float(ws.get("todayCostsRWF", 0)) - del_amt)
+                ws_updates["netProfitRWF"] = float(ws.get("netProfitRWF", 0)) + del_amt
+                ws_updates["todayProfitRWF"] = float(ws.get("todayProfitRWF", 0)) + del_amt
 
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},

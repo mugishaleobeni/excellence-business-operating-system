@@ -41,17 +41,22 @@ export default function DocumentsAndSharingPanel({
     setTimeout(() => setToastMessage(''), 4000)
   }
 
-  // Document Template State (persisted)
+  // Document Template State (persisted in MongoDB workspace.documentTemplate)
   const [template, setTemplate] = useState(() => {
-    try {
-      const saved = localStorage.getItem('exbos_document_template')
-      if (saved) return JSON.parse(saved)
-    } catch {}
+    if (workspace?.documentTemplate && typeof workspace.documentTemplate === 'object') {
+      return { ...DEFAULT_DOCUMENT_TEMPLATE, ...workspace.documentTemplate }
+    }
     return {
       ...DEFAULT_DOCUMENT_TEMPLATE,
       businessName: user?.businessName || workspace.name || 'ExBOS Business Enterprise'
     }
   })
+
+  useEffect(() => {
+    if (workspace?.documentTemplate && typeof workspace.documentTemplate === 'object') {
+      setTemplate((prev) => ({ ...prev, ...workspace.documentTemplate }))
+    }
+  }, [workspace?.documentTemplate])
 
   // Sent History & Documents Store (backed by workspace.records in MongoDB)
   const documents = Array.isArray(records['Documents']) ? records['Documents'] : []
@@ -59,9 +64,6 @@ export default function DocumentsAndSharingPanel({
 
   const setDocuments = (updater) => {
     const nextDocs = typeof updater === 'function' ? updater(documents) : updater
-    try {
-      localStorage.setItem('exbos_business_documents', JSON.stringify(nextDocs))
-    } catch {}
     if (updateDemoWorkspace) {
       updateDemoWorkspace(activeArchId, {
         records: {
@@ -74,9 +76,6 @@ export default function DocumentsAndSharingPanel({
 
   const setSentHistory = (updater) => {
     const nextHistory = typeof updater === 'function' ? updater(sentHistory) : updater
-    try {
-      localStorage.setItem('exbos_sent_history', JSON.stringify(nextHistory))
-    } catch {}
     if (updateDemoWorkspace) {
       updateDemoWorkspace(activeArchId, {
         records: {
@@ -179,17 +178,17 @@ export default function DocumentsAndSharingPanel({
 
   const handleSaveTemplate = (updatedTemplate) => {
     setTemplate(updatedTemplate)
-    try {
-      localStorage.setItem('exbos_document_template', JSON.stringify(updatedTemplate))
-    } catch {}
-    showToast('✓ Business document template updated successfully.')
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, { documentTemplate: updatedTemplate })
+    }
+    showToast('✓ Business document template saved to MongoDB.')
   }
 
   const handleResetTemplate = () => {
     setTemplate(DEFAULT_DOCUMENT_TEMPLATE)
-    try {
-      localStorage.removeItem('exbos_document_template')
-    } catch {}
+    if (updateDemoWorkspace) {
+      updateDemoWorkspace(activeArchId, { documentTemplate: DEFAULT_DOCUMENT_TEMPLATE })
+    }
     showToast('✓ Restored default professional template.')
   }
 

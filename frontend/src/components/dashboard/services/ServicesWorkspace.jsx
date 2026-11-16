@@ -14,6 +14,9 @@ export default function ServicesWorkspace({
   const {
     workspaces,
     updateWorkspace,
+    addDemoRecord,
+    updateDemoRecord,
+    deleteDemoRecord,
     addTransaction,
     addToast,
     serviceTrade = 'salon',
@@ -53,51 +56,33 @@ export default function ServicesWorkspace({
 
   // --- SERVICE ACTIONS ---
   const handleAddService = (newSrv) => {
-    const nextList = [newSrv, ...services]
-    updateWorkspace('services', {
-      records: { ...records, Services: nextList }
-    })
+    addDemoRecord('services', 'Services', newSrv)
     addToast({ title: 'Service Added', message: `Added "${newSrv.name}" to catalogue.`, type: 'success' })
   }
 
   const handleUpdateService = (id, updates) => {
-    const nextList = services.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    updateWorkspace('services', {
-      records: { ...records, Services: nextList }
-    })
+    updateDemoRecord('services', 'Services', id, updates)
     addToast({ title: 'Service Updated', message: `Updated service details.`, type: 'success' })
   }
 
   const handleDeleteService = (id) => {
-    const nextList = services.filter((s) => s.id !== id)
-    updateWorkspace('services', {
-      records: { ...records, Services: nextList }
-    })
+    deleteDemoRecord('services', 'Services', id)
     addToast({ title: 'Service Deleted', message: `Removed service from catalogue.`, type: 'info' })
   }
 
   // --- CONSUMABLES ACTIONS ---
   const handleAddConsumable = (newCon) => {
-    const nextList = [newCon, ...consumables]
-    updateWorkspace('services', {
-      records: { ...records, Consumables: nextList }
-    })
+    addDemoRecord('services', 'Consumables', newCon)
     addToast({ title: 'Supply Added', message: `Recorded ${newCon.name} in supplies stock.`, type: 'success' })
   }
 
   const handleUpdateConsumable = (id, updates) => {
-    const nextList = consumables.map((c) => (c.id === id ? { ...c, ...updates } : c))
-    updateWorkspace('services', {
-      records: { ...records, Consumables: nextList }
-    })
+    updateDemoRecord('services', 'Consumables', id, updates)
     addToast({ title: 'Supply Updated', message: `Updated supply stock levels.`, type: 'success' })
   }
 
   const handleDeleteConsumable = (id) => {
-    const nextList = consumables.filter((c) => c.id !== id)
-    updateWorkspace('services', {
-      records: { ...records, Consumables: nextList }
-    })
+    deleteDemoRecord('services', 'Consumables', id)
     addToast({ title: 'Supply Removed', message: `Removed supply item.`, type: 'info' })
   }
 
@@ -112,14 +97,12 @@ export default function ServicesWorkspace({
 
   // --- JOBS ACTIONS ---
   const handleAddJob = (newJob) => {
-    const nextList = [newJob, ...jobs]
-    updateWorkspace('services', {
-      records: { ...records, Jobs: nextList }
-    })
+    addDemoRecord('services', 'Jobs', newJob)
     const initialPaid = Number(newJob.depositPaidRWF || 0)
     if (initialPaid > 0 && addTransaction) {
       addTransaction({
         architectureId: 'services',
+        recordId: newJob.id,
         title: `Booking Deposit: ${newJob.serviceName || newJob.ticketNumber} (${newJob.customerName})`,
         type: 'in',
         category: 'Service Bookings',
@@ -132,15 +115,13 @@ export default function ServicesWorkspace({
 
   const handleUpdateJob = (id, updates) => {
     const prevJob = jobs.find((j) => j.id === id)
-    const nextList = jobs.map((j) => (j.id === id ? { ...j, ...updates } : j))
-    updateWorkspace('services', {
-      records: { ...records, Jobs: nextList }
-    })
+    updateDemoRecord('services', 'Jobs', id, updates)
     if (prevJob && updates.status === 'Completed' && prevJob.status !== 'Completed' && addTransaction) {
       const remainingPaid = Math.max(0, Number(updates.totalPriceRWF ?? prevJob.totalPriceRWF ?? 0) - Number(prevJob.depositPaidRWF || 0))
       if (remainingPaid > 0) {
         addTransaction({
           architectureId: 'services',
+          recordId: id,
           title: `Completed Service: ${prevJob.serviceName || prevJob.ticketNumber} (${prevJob.customerName})`,
           type: 'in',
           category: 'Completed Services',
@@ -153,54 +134,37 @@ export default function ServicesWorkspace({
   }
 
   const handleDeleteJob = (id) => {
-    const nextList = jobs.filter((j) => j.id !== id)
-    updateWorkspace('services', {
-      records: { ...records, Jobs: nextList }
-    })
+    deleteDemoRecord('services', 'Jobs', id)
     addToast({ title: 'Job Removed', message: `Deleted job card.`, type: 'info' })
   }
 
   // Deduct linked consumables on job completion
   const handleDeductConsumables = (itemsToDeduct = []) => {
-    let updatedConsumables = [...consumables]
     itemsToDeduct.forEach((item) => {
-      const idx = updatedConsumables.findIndex((c) => c.name === item.name)
-      if (idx !== -1) {
-        const current = Number(updatedConsumables[idx].currentStock) || 0
+      const match = consumables.find((c) => c.name === item.name)
+      if (match) {
+        const current = Number(match.currentStock) || 0
         const qtyUsed = Number(item.qty) || 1
-        updatedConsumables[idx] = {
-          ...updatedConsumables[idx],
+        updateDemoRecord('services', 'Consumables', match.id, {
           currentStock: Math.max(0, current - qtyUsed)
-        }
+        })
       }
-    })
-    updateWorkspace('services', {
-      records: { ...records, Consumables: updatedConsumables }
     })
   }
 
   // --- STAFF ACTIONS ---
   const handleAddStaff = (newMember) => {
-    const nextList = [...staff, newMember]
-    updateWorkspace('services', {
-      records: { ...records, Staff: nextList }
-    })
+    addDemoRecord('services', 'Staff', newMember)
     addToast({ title: 'Staff Member Added', message: `Added ${newMember.name} to roster.`, type: 'success' })
   }
 
   const handleUpdateStaff = (id, updates) => {
-    const nextList = staff.map((s) => (s.id === id ? { ...s, ...updates } : s))
-    updateWorkspace('services', {
-      records: { ...records, Staff: nextList }
-    })
+    updateDemoRecord('services', 'Staff', id, updates)
     addToast({ title: 'Staff Updated', message: `Updated staff profile.`, type: 'success' })
   }
 
   const handleDeleteStaff = (id) => {
-    const nextList = staff.filter((s) => s.id !== id)
-    updateWorkspace('services', {
-      records: { ...records, Staff: nextList }
-    })
+    deleteDemoRecord('services', 'Staff', id)
     addToast({ title: 'Staff Removed', message: `Removed staff member.`, type: 'info' })
   }
 
@@ -215,13 +179,11 @@ export default function ServicesWorkspace({
       paymentMethod: 'Cash / MoMo',
       paidTo: member.name
     }
-    const currentExpenses = Array.isArray(records['Expenses']) ? records['Expenses'] : []
-    updateWorkspace('services', {
-      records: { ...records, Expenses: [payoutExpense, ...currentExpenses] }
-    })
+    addDemoRecord('services', 'Expenses', payoutExpense)
     if (addTransaction && Number(amountRWF) > 0) {
       addTransaction({
         architectureId: 'services',
+        recordId: payoutExpense.id,
         title: payoutExpense.title,
         type: 'out',
         category: 'Salaries & Commissions',
