@@ -42,14 +42,14 @@ export function FeaturesPage() {
       <PublicNavbar />
       <main className="flex-1 pt-28 pb-16 px-4 sm:px-6 lg:px-10 max-w-7xl mx-auto w-full space-y-16">
         <div className="text-center max-w-3xl mx-auto space-y-4" data-aos="fade-up">
-          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#218DFF]/15 border border-[#218DFF]/35 text-[#1045CA] dark:text-[#9EDCFF] text-xs font-orbitron uppercase">
+          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#218DFF]/20 border border-[#9EDCFF]/40 text-[#9EDCFF] text-xs font-orbitron uppercase">
             ExBOS Platform Capabilities
           </span>
-          <h1 className="font-orbitron text-3xl sm:text-5xl font-black text-[#071544] dark:text-white">
+          <h1 className="font-orbitron text-3xl sm:text-5xl font-black text-white">
             Engineered to Answer Where Your Money Sits Right Now
           </h1>
-          <p className="text-base text-slate-600 dark:text-slate-300">
-            ExBOS combines cash &amp; MoMo separation, true profit calculation, customer debt tracking, and 6-month survival planning inside one <span className="font-pylarix font-bold">PYLARIX</span> Liquid Sapphire interface.
+          <p className="text-base text-white">
+            ExBOS combines cash &amp; MoMo separation, true profit calculation, customer debt tracking, and 6-month survival planning.
           </p>
         </div>
 
