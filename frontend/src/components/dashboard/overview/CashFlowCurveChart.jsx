@@ -103,8 +103,30 @@ export default function CashFlowCurveChart({
 
   // Data Mode: false = Live DB records (clean zero baseline if 0 transactions), true = Benchmark Forecast
   const [useBenchmarkForecast, setUseBenchmarkForecast] = useState(false)
-  const [activeCurveIndex, setActiveCurveIndex] = useState(5)
+  const [activeCurveIndex, setActiveCurveIndex] = useState(() => {
+    try {
+      const tf = localStorage.getItem('exbos_cash_curve_timeframe') || 'Months'
+      return tf === 'Days' ? 6 : tf === 'Weeks' ? 3 : 11
+    } catch {
+      return 11
+    }
+  })
   const svgRef = useRef(null)
+
+  // Live midnight rollover tracker so when Sunday turns into Monday, the axis automatically shifts
+  const [calendarTodayKey, setCalendarTodayKey] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date()
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      setCalendarTodayKey((prev) => (prev !== key ? key : prev))
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [])
 
   const archMeta = ARCH_METADATA[activeArchId] || ARCH_METADATA['buy-and-sell']
   const activeArchDatasets = FINANCIAL_DATASETS[activeArchId] || FINANCIAL_DATASETS['buy-and-sell']
@@ -119,7 +141,7 @@ export default function CashFlowCurveChart({
 
   const handleSelectTimeframe = (tf) => {
     setGraphTimeframe(tf)
-    setActiveCurveIndex(tf === 'Days' ? 6 : tf === 'Weeks' ? 3 : 5)
+    setActiveCurveIndex(tf === 'Days' ? 6 : tf === 'Weeks' ? 3 : 11)
     try {
       localStorage.setItem('exbos_cash_curve_timeframe', tf)
     } catch {}
@@ -134,14 +156,77 @@ export default function CashFlowCurveChart({
 
   const hasLiveTransactions = Array.isArray(archTransactions) && archTransactions.length > 0
 
-  // Computed Chart Series
+  // Computed Chart Series with Dynamic Rolling Calendar Buckets
   const computedChartData = useMemo(() => {
     const defaultData = activeArchDatasets[graphTimeframe] || activeArchDatasets.Months
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-    // If user has chosen to view Benchmark Forecast, or if no live transactions exist and user toggled forecast
+    const now = new Date()
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+
+    const toLocalDayDate = (raw) => {
+      if (!raw) return todayMidnight
+      const str = String(raw).trim()
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        const [y, m, d] = str.slice(0, 10).split('-').map(Number)
+        if (y && m && d) return new Date(y, m - 1, d)
+      }
+      const parsed = new Date(raw)
+      if (isNaN(parsed.getTime())) return todayMidnight
+      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+    }
+
+    const formatYMD = (dt) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+
+    // Build dynamic calendar slots so Days/Weeks/Months roll forward on the real calendar
+    let slots = []
+    if (graphTimeframe === 'Days') {
+      for (let i = 6; i >= 0; i--) {
+        const dt = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth(), todayMidnight.getDate() - i)
+        const dName = dayNames[dt.getDay()]
+        const mName = monthNames[dt.getMonth()]
+        const baseFallback = defaultData[6 - i] || defaultData[0] || {}
+        slots.push({
+          ...baseFallback,
+          dateKey: formatYMD(dt),
+          label: `${dName} ${dt.getDate()}`,
+          shortDay: dName,
+          fullDateLabel: `${dName}, ${mName} ${dt.getDate()}`
+        })
+      }
+    } else if (graphTimeframe === 'Weeks') {
+      for (let i = 3; i >= 0; i--) {
+        const endDt = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth(), todayMidnight.getDate() - i * 7)
+        const startDt = new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate() - 6)
+        const baseFallback = defaultData[3 - i] || defaultData[0] || {}
+        slots.push({
+          ...baseFallback,
+          weekOffset: i,
+          label: i === 0 ? 'This Wk' : `${monthNames[startDt.getMonth()]} ${startDt.getDate()}`,
+          fullDateLabel: `${monthNames[startDt.getMonth()]} ${startDt.getDate()} – ${monthNames[endDt.getMonth()]} ${endDt.getDate()}`
+        })
+      }
+    } else {
+      for (let i = 11; i >= 0; i--) {
+        const mDt = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth() - i, 1)
+        const monthKey = `${mDt.getFullYear()}-${String(mDt.getMonth() + 1).padStart(2, '0')}`
+        const mName = monthNames[mDt.getMonth()]
+        const baseFallback = defaultData[11 - i] || defaultData[0] || {}
+        slots.push({
+          ...baseFallback,
+          monthKey,
+          label: mName,
+          fullDateLabel: `${mName} ${mDt.getFullYear()}`
+        })
+      }
+    }
+
+    // If user has chosen to view Benchmark Forecast
     if (useBenchmarkForecast) {
       let runNet = 0
-      return defaultData.map((d) => {
+      return slots.map((d) => {
         const net = (d.income || 0) - (d.expense || 0)
         runNet += net
         return {
@@ -155,8 +240,7 @@ export default function CashFlowCurveChart({
 
     // Live Database Calculation:
     if (!hasLiveTransactions) {
-      // Clean zero baseline ready for live transactions
-      return defaultData.map((d) => ({
+      return slots.map((d) => ({
         ...d,
         income: 0,
         expense: 0,
@@ -167,31 +251,35 @@ export default function CashFlowCurveChart({
       }))
     }
 
-    // Group actual transactions into timeline buckets so real entries form genuine peaks (never a diagonal ramp)
-    const n = defaultData.length
+    // Group actual transactions into exact calendar buckets
+    const n = slots.length
     const inBuckets = new Array(n).fill(0)
     const outBuckets = new Array(n).fill(0)
-    const now = new Date()
 
     archTransactions.forEach((t) => {
       const amt = Number(t.amountRWF ?? t.amount ?? 0) || 0
       if (amt <= 0) return
-      const rawDate = t.date || t.timestamp || t.createdAt
-      const parsed = rawDate ? new Date(rawDate) : now
-      const validDate = isNaN(parsed.getTime()) ? now : parsed
-      const diffDays = Math.max(0, Math.floor((now.getTime() - validDate.getTime()) / (1000 * 60 * 60 * 24)))
+      const txDay = toLocalDayDate(t.date || t.timestamp || t.createdAt)
+      const diffCalendarDays = Math.round((todayMidnight.getTime() - txDay.getTime()) / (1000 * 60 * 60 * 24))
 
-      let bucketIdx = n - 1
+      let bucketIdx = -1
       if (graphTimeframe === 'Days') {
-        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, diffDays))
+        const txKey = formatYMD(txDay)
+        bucketIdx = slots.findIndex((s) => s.dateKey === txKey)
+        if (bucketIdx === -1 && diffCalendarDays >= 0 && diffCalendarDays < n) {
+          bucketIdx = n - 1 - diffCalendarDays
+        }
       } else if (graphTimeframe === 'Weeks') {
-        const diffWeeks = Math.floor(diffDays / 7)
-        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, diffWeeks))
+        if (diffCalendarDays >= 0 && diffCalendarDays < 28) {
+          const diffWeeks = Math.floor(diffCalendarDays / 7)
+          bucketIdx = n - 1 - Math.min(n - 1, diffWeeks)
+        }
       } else {
-        const monthDiff =
-          (now.getFullYear() - validDate.getFullYear()) * 12 + (now.getMonth() - validDate.getMonth())
-        bucketIdx = Math.max(0, n - 1 - Math.min(n - 1, Math.max(0, monthDiff)))
+        const txMonthKey = `${txDay.getFullYear()}-${String(txDay.getMonth() + 1).padStart(2, '0')}`
+        bucketIdx = slots.findIndex((s) => s.monthKey === txMonthKey)
       }
+
+      if (bucketIdx < 0 || bucketIdx >= n) return
 
       if (t.type === 'out' || t.type === 'OUTFLOW') {
         outBuckets[bucketIdx] += amt
@@ -201,7 +289,7 @@ export default function CashFlowCurveChart({
     })
 
     let runningNet = 0
-    return defaultData.map((d, idx) => {
+    return slots.map((d, idx) => {
       const inc = Math.round(inBuckets[idx])
       const exp = Math.round(outBuckets[idx])
       const net = inc - exp
@@ -224,7 +312,7 @@ export default function CashFlowCurveChart({
         change: changePct
       }
     })
-  }, [activeArchDatasets, graphTimeframe, archTransactions, hasLiveTransactions, useBenchmarkForecast])
+  }, [activeArchDatasets, graphTimeframe, archTransactions, hasLiveTransactions, useBenchmarkForecast, calendarTodayKey])
 
   const currentChartData = computedChartData
   const safeIndex = Math.min(activeCurveIndex, currentChartData.length - 1)

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { TrendingUp, ArrowUpRight, Package, ShoppingBag, Plus } from "lucide-react";
 import { formatRWF } from "../../../utils/currencyWords";
 
@@ -12,19 +12,51 @@ export default function SalesTrendsView({
 }) {
   const [graphTimeframe, setGraphTimeframe] = useState('Days')
   const [activeCurveIndex, setActiveCurveIndex] = useState(6)
+  const [calendarTodayKey, setCalendarTodayKey] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })
 
-  // Compute dynamic datasets for Days, Weeks, Months from actual recorded sales
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const d = new Date()
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      setCalendarTodayKey((prev) => (prev !== key ? key : prev))
+    }, 30000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Compute dynamic datasets for Days, Weeks, Months from actual recorded sales using exact calendar dates
   const chartDatasets = useMemo(() => {
     const salesRecords = records || []
     const now = new Date()
+    const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun (Today)']
-    const daysBuckets = dayLabels.map((lbl, idx) => {
-      const d = new Date(now)
-      d.setDate(now.getDate() - (6 - idx))
+    const toLocalDayDate = (raw) => {
+      if (!raw) return todayMidnight
+      const str = String(raw).trim()
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+        const [y, m, d] = str.slice(0, 10).split('-').map(Number)
+        if (y && m && d) return new Date(y, m - 1, d)
+      }
+      const parsed = new Date(raw)
+      if (isNaN(parsed.getTime())) return todayMidnight
+      return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate())
+    }
+
+    const formatYMD = (dt) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+
+    const daysBuckets = Array.from({ length: 7 }, (_, idx) => {
+      const offset = 6 - idx
+      const d = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth(), todayMidnight.getDate() - offset)
+      const dName = dayNames[d.getDay()]
       return {
-        label: lbl,
-        fullDate: d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }),
+        dateKey: formatYMD(d),
+        label: offset === 0 ? `${dName} (Today)` : `${dName} ${d.getDate()}`,
+        fullDate: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' }),
         sales: 0,
         profit: 0,
         units: 0,
@@ -33,18 +65,27 @@ export default function SalesTrendsView({
       }
     })
 
-    const weeksBuckets = [
-      { label: 'Week 1', fullDate: '3 Weeks Ago', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
-      { label: 'Week 2', fullDate: '2 Weeks Ago', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
-      { label: 'Week 3', fullDate: 'Last Week', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' },
-      { label: 'Current Week', fullDate: 'This Week', sales: 0, profit: 0, units: 0, orders: 0, change: '+0%' }
-    ]
-
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const monthsBuckets = Array.from({ length: 6 }, (_, idx) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (5 - idx), 1)
-      const mName = monthNames[d.getMonth()]
+    const weeksBuckets = Array.from({ length: 4 }, (_, idx) => {
+      const offset = 3 - idx
+      const endDt = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth(), todayMidnight.getDate() - offset * 7)
+      const startDt = new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate() - 6)
       return {
+        label: offset === 0 ? 'Current Week' : `${monthNames[startDt.getMonth()]} ${startDt.getDate()}`,
+        fullDate: `${monthNames[startDt.getMonth()]} ${startDt.getDate()} – ${monthNames[endDt.getMonth()]} ${endDt.getDate()}`,
+        sales: 0,
+        profit: 0,
+        units: 0,
+        orders: 0,
+        change: '+0%'
+      }
+    })
+
+    const monthsBuckets = Array.from({ length: 6 }, (_, idx) => {
+      const d = new Date(todayMidnight.getFullYear(), todayMidnight.getMonth() - (5 - idx), 1)
+      const mName = monthNames[d.getMonth()]
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      return {
+        monthKey,
         label: idx === 5 ? `${mName} (Current)` : mName,
         fullDate: `${mName} ${d.getFullYear()}`,
         sales: 0,
@@ -60,33 +101,41 @@ export default function SalesTrendsView({
       if (amt <= 0) return
       const prof = Number(r.profitRWF) || Math.round(amt * 0.35)
       const qty = Number(r.quantity) || 1
-      const rawDate = r.date || r.createdAt
-      const parsed = rawDate ? new Date(rawDate) : now
-      const validDate = isNaN(parsed.getTime()) ? now : parsed
-      const diffDays = Math.max(0, Math.floor((now.getTime() - validDate.getTime()) / (1000 * 60 * 60 * 24)))
+      const txDay = toLocalDayDate(r.date || r.createdAt)
+      const diffCalendarDays = Math.round((todayMidnight.getTime() - txDay.getTime()) / (1000 * 60 * 60 * 24))
 
-      const dayIdx = Math.max(0, 6 - Math.min(6, diffDays))
-      daysBuckets[dayIdx].sales += amt
-      daysBuckets[dayIdx].profit += prof
-      daysBuckets[dayIdx].units += qty
-      daysBuckets[dayIdx].orders += 1
+      const txKey = formatYMD(txDay)
+      let dayIdx = daysBuckets.findIndex((b) => b.dateKey === txKey)
+      if (dayIdx === -1 && diffCalendarDays >= 0 && diffCalendarDays < 7) {
+        dayIdx = 6 - diffCalendarDays
+      }
+      if (dayIdx >= 0 && dayIdx < 7) {
+        daysBuckets[dayIdx].sales += amt
+        daysBuckets[dayIdx].profit += prof
+        daysBuckets[dayIdx].units += qty
+        daysBuckets[dayIdx].orders += 1
+      }
 
-      const weekIdx = Math.max(0, 3 - Math.min(3, Math.floor(diffDays / 7)))
-      weeksBuckets[weekIdx].sales += amt
-      weeksBuckets[weekIdx].profit += prof
-      weeksBuckets[weekIdx].units += qty
-      weeksBuckets[weekIdx].orders += 1
+      if (diffCalendarDays >= 0 && diffCalendarDays < 28) {
+        const weekIdx = Math.max(0, 3 - Math.min(3, Math.floor(diffCalendarDays / 7)))
+        weeksBuckets[weekIdx].sales += amt
+        weeksBuckets[weekIdx].profit += prof
+        weeksBuckets[weekIdx].units += qty
+        weeksBuckets[weekIdx].orders += 1
+      }
 
-      const monthDiff = (now.getFullYear() - validDate.getFullYear()) * 12 + (now.getMonth() - validDate.getMonth())
-      const monthIdx = Math.max(0, 5 - Math.min(5, Math.max(0, monthDiff)))
-      monthsBuckets[monthIdx].sales += amt
-      monthsBuckets[monthIdx].profit += prof
-      monthsBuckets[monthIdx].units += qty
-      monthsBuckets[monthIdx].orders += 1
+      const txMonthKey = `${txDay.getFullYear()}-${String(txDay.getMonth() + 1).padStart(2, '0')}`
+      const monthIdx = monthsBuckets.findIndex((b) => b.monthKey === txMonthKey)
+      if (monthIdx >= 0 && monthIdx < 6) {
+        monthsBuckets[monthIdx].sales += amt
+        monthsBuckets[monthIdx].profit += prof
+        monthsBuckets[monthIdx].units += qty
+        monthsBuckets[monthIdx].orders += 1
+      }
     })
 
     return { Days: daysBuckets, Weeks: weeksBuckets, Months: monthsBuckets }
-  }, [records])
+  }, [records, calendarTodayKey])
 
   const currentData = chartDatasets[graphTimeframe] || chartDatasets.Days
   const safeIndex = Math.min(activeCurveIndex, currentData.length - 1)
