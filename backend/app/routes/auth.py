@@ -462,20 +462,15 @@ def login_user(validated_data: LoginSchema):
                 html_body=html_body,
                 text_body=text_body,
             )
-            if email_sent:
-                return success_response(
-                    data={
-                        "requiresTwoFactor": True,
-                        "email": email_lower,
-                        "emailSent": True,
-                        "expiresInMinutes": 15,
-                    },
-                    message=f"6-digit login verification code sent to {email_lower}.",
-                    status_code=200,
-                )
-            logger.info(
-                "Email delivery unavailable for 2FA login of %s; proceeding with password-verified login.",
-                email_lower,
+            return success_response(
+                data={
+                    "requiresTwoFactor": True,
+                    "email": email_lower,
+                    "emailSent": email_sent,
+                    "expiresInMinutes": 15,
+                },
+                message=f"6-digit login verification code sent to {email_lower}.",
+                status_code=200,
             )
         else:
             otp_doc = db.email_verifications.find_one(

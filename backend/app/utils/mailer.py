@@ -140,42 +140,37 @@ def _send_direct_smtp(
     raw_msg: str,
     has_attachment: bool = False,
 ) -> bool:
-    global _SMTP_BLOCKED_ON_HOST
-    if _SMTP_BLOCKED_ON_HOST is True:
+    if _is_render_cloud():
         return False
 
     context = ssl.create_default_context()
 
-    # 1. Try IPv4 SMTP_SSL on port 465 (fast 5s timeout so Gunicorn is never stalled)
+    # 1. Try IPv4 SMTP_SSL on port 465 (15s timeout for reliable SSL + Gmail auth)
     try:
-        with _IPv4SMTP_SSL("smtp.gmail.com", 465, timeout=5, context=context) as server:
+        with _IPv4SMTP_SSL("smtp.gmail.com", 465, timeout=15, context=context) as server:
             server.login(gmail_address, gmail_app_password)
             server.sendmail(gmail_address, [to_email], raw_msg)
-        _SMTP_BLOCKED_ON_HOST = False
         logger.info("Sent email '%s' to %s via Gmail SMTP:465 (attachment=%s).", subject, to_email, has_attachment)
         return True
-    except (socket.timeout, TimeoutError, OSError) as exc_465:
-        # 2. Quick fallback check on STARTTLS port 587 (4s timeout)
+    except Exception as exc_465:
+        # 2. Fallback check on STARTTLS port 587 (12s timeout)
         try:
-            with _IPv4SMTP("smtp.gmail.com", 587, timeout=4) as server:
+            with _IPv4SMTP("smtp.gmail.com", 587, timeout=12) as server:
                 server.ehlo()
                 server.starttls(context=context)
                 server.ehlo()
                 server.login(gmail_address, gmail_app_password)
                 server.sendmail(gmail_address, [to_email], raw_msg)
-            _SMTP_BLOCKED_ON_HOST = False
             logger.info("Sent email '%s' to %s via Gmail SMTP:587 (attachment=%s).", subject, to_email, has_attachment)
             return True
-        except Exception:
-            _SMTP_BLOCKED_ON_HOST = True
-            logger.info(
-                "Direct SMTP ports 465/587 are firewalled on this host (%s); switching to MongoDB Email Outbox Relay.",
+        except Exception as exc_587:
+            logger.warning(
+                "Direct SMTP 465/587 failed for %s (%s / %s); falling back to MongoDB Outbox Relay.",
+                to_email,
                 exc_465,
+                exc_587,
             )
             return False
-    except Exception as exc_other:
-        logger.warning("Gmail SMTP error for %s: %s", to_email, exc_other)
-        return False
 
 
 def _enqueue_and_wait_outbox(
@@ -189,7 +184,7 @@ def _enqueue_and_wait_outbox(
 ) -> bool:
     """
     Enqueue an email in MongoDB Atlas `email_outbox` for the SMTP-capable relay worker
-    and wait briefly (up to 3.2s) for confirmation.
+    and wait up to 6.0s for immediate delivery confirmation.
     """
     try:
         db = get_db()
@@ -204,13 +199,15 @@ def _enqueue_and_wait_outbox(
             "attachment_filename": attachment_filename or "",
             "attachment_mime": attachment_mime or "application/octet-stream",
             "status": "pending",
+            "attempts": 0,
             "created_at": now_iso,
+            "created_ts": time.time(),
         }
         ins = db.email_outbox.insert_one(doc)
         outbox_id = ins.inserted_id
 
-        # Poll briefly to see if the relay worker already delivered it
-        deadline = time.monotonic() + 3.2
+        # Poll for up to 6.0s to let the relay worker finish SMTP delivery
+        deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:
             time.sleep(0.35)
             updated = db.email_outbox.find_one({"_id": outbox_id}, {"status": 1})
@@ -220,11 +217,11 @@ def _enqueue_and_wait_outbox(
             if updated and updated.get("status") == "failed":
                 return False
 
-        # Check if an SMTP relay worker heartbeat is active (updated within last 90 seconds)
+        # Check if an SMTP relay worker heartbeat is active (updated within last 120 seconds)
         hb = db.platform_config.find_one({"key": "smtp_relay_heartbeat"})
         if hb and hb.get("updated_ts"):
             age = time.time() - float(hb.get("updated_ts") or 0)
-            if age < 90:
+            if age < 120:
                 logger.info("Queued email '%s' to %s for active MongoDB Email Relay (heartbeat %.1fs ago).", subject, to_email, age)
                 return True
     except Exception as exc:
@@ -257,7 +254,7 @@ def send_gmail_email(
         return False
 
     # 2. On Render Free Tier (where outbound TCP 25/465/587 is blocked), use MongoDB Outbox Relay immediately
-    if _is_render_cloud() or _SMTP_BLOCKED_ON_HOST is True:
+    if _is_render_cloud():
         return _enqueue_and_wait_outbox(
             to_email=to_email,
             subject=subject,
@@ -288,7 +285,7 @@ def send_gmail_email(
     ):
         return True
 
-    # 4. Fallback to MongoDB Outbox Relay if direct SMTP was blocked
+    # 4. Fallback to MongoDB Outbox Relay if direct SMTP encountered an error
     return _enqueue_and_wait_outbox(
         to_email=to_email,
         subject=subject,
@@ -320,15 +317,15 @@ def start_email_outbox_relay(app) -> None:
                 with app.app_context():
                     gmail_address = app.config.get("GMAIL_ADDRESS", "").strip()
                     gmail_app_password = app.config.get("GMAIL_APP_PASSWORD", "").strip()
-                    if not gmail_address or not gmail_app_password or _SMTP_BLOCKED_ON_HOST is True:
-                        time.sleep(10)
+                    if not gmail_address or not gmail_app_password:
+                        time.sleep(5)
                         continue
 
                     db = get_db()
                     now_ts = time.time()
                     now_iso = datetime.now(timezone.utc).isoformat()
 
-                    if now_ts - last_hb >= 15.0:
+                    if now_ts - last_hb >= 10.0:
                         db.platform_config.update_one(
                             {"key": "smtp_relay_heartbeat"},
                             {
@@ -341,15 +338,33 @@ def start_email_outbox_relay(app) -> None:
                             },
                             upsert=True,
                         )
+                        # Recover any job stuck in "processing" for > 45 seconds
+                        db.email_outbox.update_many(
+                            {
+                                "status": "processing",
+                                "$or": [
+                                    {"started_ts": {"$lt": now_ts - 45}},
+                                    {"started_ts": {"$exists": False}},
+                                ],
+                            },
+                            {"$set": {"status": "pending"}},
+                        )
                         last_hb = now_ts
 
                     job = db.email_outbox.find_one_and_update(
                         {"status": "pending"},
-                        {"$set": {"status": "processing", "started_at": now_iso}},
+                        {
+                            "$set": {
+                                "status": "processing",
+                                "started_at": now_iso,
+                                "started_ts": now_ts,
+                            },
+                            "$inc": {"attempts": 1},
+                        },
                         sort=[("created_at", 1)],
                     )
                     if not job:
-                        time.sleep(1.0)
+                        time.sleep(0.4)
                         continue
 
                     att_b64 = job.get("attachment_b64")
@@ -371,21 +386,24 @@ def start_email_outbox_relay(app) -> None:
                         raw_msg=raw_msg,
                         has_attachment=bool(att_bytes),
                     )
+                    attempts = int(job.get("attempts") or 0) + 1
+                    next_status = "sent" if ok else ("pending" if attempts < 3 else "failed")
                     db.email_outbox.update_one(
                         {"_id": job["_id"]},
                         {
                             "$set": {
-                                "status": "sent" if ok else "failed",
+                                "status": next_status,
                                 "completed_at": datetime.now(timezone.utc).isoformat(),
                             }
                         },
                     )
             except Exception as exc:
                 logger.debug("Email outbox relay loop error: %s", exc)
-                time.sleep(3.0)
+                time.sleep(2.0)
 
     t = threading.Thread(target=_worker, name="exbos-email-outbox-relay", daemon=True)
     t.start()
+
 
 
 
