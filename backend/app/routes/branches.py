@@ -9,10 +9,59 @@ from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db
 from app.utils.mailer import send_gmail_email
 from app.utils.responses import error_response, success_response
-from app.utils.security import hash_password
+from app.utils.security import hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 branches_bp = Blueprint("branches", __name__, url_prefix="/api/v1/branches")
+
+
+def _default_branch_permissions(is_main: bool = False) -> dict:
+    if is_main:
+        return {
+            "canDeleteRecords": True,
+            "canEditPrices": True,
+            "canViewProfitReports": True,
+            "canAddInventory": True,
+            "canRecordExpenses": True,
+            "maxExpenseLimitRWF": 0,
+        }
+    return {
+        "canDeleteRecords": False,
+        "canEditPrices": False,
+        "canViewProfitReports": False,
+        "canAddInventory": True,
+        "canRecordExpenses": True,
+        "maxExpenseLimitRWF": 0,
+    }
+
+
+def _normalize_branch_doc(b: dict) -> dict:
+    out = dict(b)
+    out.pop("_id", None)
+    pin_hash = out.pop("ownerSwitchPinHash", None)
+    is_main = bool(out.get("isMain") or out.get("id") == "main")
+    out["isMain"] = is_main
+    out["status"] = out.get("status") or "Active"
+    if "requirePinForMainSwitch" not in out:
+        out["requirePinForMainSwitch"] = True
+    out["hasOwnerPin"] = bool(pin_hash)
+    base_perms = _default_branch_permissions(is_main)
+    existing_perms = out.get("permissions") if isinstance(out.get("permissions"), dict) else {}
+    merged_perms = {**base_perms, **existing_perms}
+    if is_main:
+        merged_perms["canDeleteRecords"] = True
+        merged_perms["canEditPrices"] = True
+        merged_perms["canViewProfitReports"] = True
+    out["permissions"] = merged_perms
+    return out
+
+
+def _is_branch_manager(user_doc: dict | None) -> bool:
+    if not user_doc:
+        return False
+    role = str(user_doc.get("role") or "").strip().lower()
+    assigned = str(user_doc.get("assignedBranchId") or "").strip()
+    return role == "branch manager" or (bool(assigned) and assigned != "main")
 
 
 def _resolve_scope_and_user(db):
@@ -66,25 +115,35 @@ def _ensure_main_branch(db, scope_key: str, user_doc: dict | None):
             "location": loc,
             "architectureId": arch_id,
             "isMain": True,
+            "status": "Active",
+            "requirePinForMainSwitch": True,
+            "permissions": _default_branch_permissions(is_main=True),
             "createdAt": now_iso,
             "updatedAt": now_iso,
         }
         db.branches.insert_one(dict(main_doc))
-        return main_doc
-    return existing
+        return _normalize_branch_doc(main_doc)
+    return _normalize_branch_doc(existing)
 
 
 @branches_bp.route("", methods=["GET"])
 @branches_bp.route("/", methods=["GET"])
 def list_branches():
-    """Return all branches for the authenticated user's business (Main HQ + sub-branches)."""
+    """Return branches for the authenticated user. Branch Managers only see their assigned branch (Main HQ blocked)."""
     db = get_db()
     scope_key, user_doc = _resolve_scope_and_user(db)
     _ensure_main_branch(db, scope_key, user_doc)
 
-    items = list(db.branches.find({"scopeKey": scope_key}, {"_id": 0}).sort("createdAt", 1))
+    raw_items = list(db.branches.find({"scopeKey": scope_key}, {"_id": 0}).sort("createdAt", 1))
+    items = [_normalize_branch_doc(b) for b in raw_items]
     # Always keep Main HQ first
     items.sort(key=lambda b: (0 if b.get("isMain") or b.get("id") == "main" else 1, b.get("createdAt", "")))
+
+    if _is_branch_manager(user_doc):
+        assigned_id = str((user_doc or {}).get("assignedBranchId") or "").strip()
+        if assigned_id:
+            items = [b for b in items if b.get("id") == assigned_id]
+
     return success_response(
         data={"branches": items},
         extra={"branches": items},
@@ -95,9 +154,11 @@ def list_branches():
 @branches_bp.route("", methods=["POST"])
 @branches_bp.route("/", methods=["POST"])
 def create_branch():
-    """Create a new branch, defaulting to the user's active architecture."""
+    """Create a new branch with strict sub-branch isolation defaults."""
     db = get_db()
     scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response("Only the Business Owner at Main HQ can create new branches.", status_code=403)
     _ensure_main_branch(db, scope_key, user_doc)
 
     payload = request.get_json(silent=True) or {}
@@ -111,6 +172,10 @@ def create_branch():
     slug = "".join(ch if ch.isalnum() else "-" for ch in name.lower()).strip("-")[:20] or "branch"
     branch_id = f"br-{slug}-{int(time.time() * 1000) % 10000}"
 
+    default_perms = _default_branch_permissions(is_main=False)
+    incoming_perms = payload.get("permissions") if isinstance(payload.get("permissions"), dict) else {}
+    merged_perms = {**default_perms, **incoming_perms}
+
     branch_doc = {
         "id": branch_id,
         "scopeKey": scope_key,
@@ -118,23 +183,33 @@ def create_branch():
         "location": location,
         "architectureId": arch_id,
         "isMain": False,
+        "status": str(payload.get("status") or "Active"),
+        "requirePinForMainSwitch": bool(payload.get("requirePinForMainSwitch", True)),
+        "permissions": merged_perms,
         "createdAt": now_iso,
         "updatedAt": now_iso,
     }
+    owner_pin = str(payload.get("ownerPin") or "").strip()
+    if owner_pin:
+        branch_doc["ownerSwitchPinHash"] = hash_password(owner_pin)
+
     db.branches.insert_one(dict(branch_doc))
+    clean_branch = _normalize_branch_doc(branch_doc)
     return success_response(
-        data={"branch": branch_doc},
-        extra={"branch": branch_doc},
-        message=f"Branch '{name}' created.",
+        data={"branch": clean_branch},
+        extra={"branch": clean_branch},
+        message=f"Branch '{name}' created with isolated access controls.",
         status_code=201,
     )
 
 
 @branches_bp.route("/<branch_id>", methods=["PATCH"])
 def update_branch(branch_id: str):
-    """Edit an existing branch's name, location, or architecture."""
+    """Edit an existing branch's name, location, status, Main HQ lock, or permissions."""
     db = get_db()
     scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response("Only the Business Owner can modify branch settings or permissions.", status_code=403)
     _ensure_main_branch(db, scope_key, user_doc)
 
     existing = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
@@ -154,13 +229,40 @@ def update_branch(branch_id: str):
         arch_id = str(payload.get("architectureId") or "").strip()
         if arch_id:
             updates["architectureId"] = arch_id
+    if "status" in payload and branch_id != "main":
+        st = str(payload.get("status") or "Active").strip()
+        if st in ("Active", "Frozen"):
+            updates["status"] = st
+    if "requirePinForMainSwitch" in payload:
+        updates["requirePinForMainSwitch"] = bool(payload.get("requirePinForMainSwitch"))
+    if "ownerPin" in payload:
+        raw_pin = str(payload.get("ownerPin") or "").strip()
+        if raw_pin:
+            updates["ownerSwitchPinHash"] = hash_password(raw_pin)
+    if "permissions" in payload and isinstance(payload.get("permissions"), dict):
+        is_main = bool(existing.get("isMain") or branch_id == "main")
+        cur_perms = {**_default_branch_permissions(is_main), **(existing.get("permissions") or {})}
+        for k in ("canDeleteRecords", "canEditPrices", "canViewProfitReports", "canAddInventory", "canRecordExpenses"):
+            if k in payload["permissions"]:
+                cur_perms[k] = bool(payload["permissions"][k])
+        if "maxExpenseLimitRWF" in payload["permissions"]:
+            try:
+                cur_perms["maxExpenseLimitRWF"] = max(0.0, float(payload["permissions"]["maxExpenseLimitRWF"] or 0))
+            except Exception:
+                pass
+        if is_main:
+            cur_perms["canDeleteRecords"] = True
+            cur_perms["canEditPrices"] = True
+            cur_perms["canViewProfitReports"] = True
+        updates["permissions"] = cur_perms
 
     db.branches.update_one({"scopeKey": scope_key, "id": branch_id}, {"$set": updates})
     updated = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    clean_updated = _normalize_branch_doc(updated)
     return success_response(
-        data={"branch": updated},
-        extra={"branch": updated},
-        message="Branch updated.",
+        data={"branch": clean_updated},
+        extra={"branch": clean_updated},
+        message="Branch settings & permissions updated.",
     )
 
 
@@ -172,6 +274,8 @@ def assign_branch_manager(branch_id: str):
     """
     db = get_db()
     scope_key, owner_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(owner_doc):
+        return error_response("Only the Business Owner can assign branch managers.", status_code=403)
     _ensure_main_branch(db, scope_key, owner_doc)
 
     branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
@@ -281,7 +385,7 @@ def assign_branch_manager(branch_id: str):
             logger.debug("Optional WhatsApp invite skipped: %s", exc)
 
     result_payload = {
-        "branch": updated_branch,
+        "branch": _normalize_branch_doc(updated_branch) if updated_branch else None,
         "manager": manager_meta,
         "loginLink": login_link,
         "emailSent": email_sent,
@@ -295,11 +399,223 @@ def assign_branch_manager(branch_id: str):
     )
 
 
+@branches_bp.route("/verify-owner-switch", methods=["POST"])
+def verify_owner_switch():
+    """
+    Verify Business Owner password or Owner Branch PIN before unlocking a switch
+    from a sub-branch into Main HQ (or unlocking restricted HQ settings).
+    Branch Manager accounts are strictly blocked from Main HQ.
+    """
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response(
+            "Access Denied: Sub-branch managers cannot enter Main HQ.",
+            status_code=403,
+        )
+
+    payload = request.get_json(silent=True) or {}
+    secret = str(payload.get("secret") or payload.get("password") or payload.get("pin") or "").strip()
+    from_branch_id = str(payload.get("fromBranchId") or "").strip()
+    if not secret:
+        return error_response("Please enter the Business Owner password or security PIN.", status_code=400)
+
+    owner_user = db.users.find_one({"email": scope_key}) or user_doc or {}
+    owner_pw_hash = owner_user.get("password_hash") or ""
+
+    verified = False
+    if owner_pw_hash and verify_password(secret, owner_pw_hash):
+        verified = True
+
+    if not verified and from_branch_id:
+        b_doc = db.branches.find_one({"scopeKey": scope_key, "id": from_branch_id})
+        if b_doc and b_doc.get("ownerSwitchPinHash"):
+            if verify_password(secret, b_doc["ownerSwitchPinHash"]):
+                verified = True
+
+    if not verified:
+        main_doc = db.branches.find_one({"scopeKey": scope_key, "id": "main"})
+        if main_doc and main_doc.get("ownerSwitchPinHash"):
+            if verify_password(secret, main_doc["ownerSwitchPinHash"]):
+                verified = True
+
+    if not verified:
+        return error_response(
+            "Invalid Owner password or security PIN. Main HQ remains locked.",
+            status_code=401,
+        )
+
+    return success_response(
+        data={"verified": True, "scopeKey": scope_key},
+        extra={"verified": True},
+        message="Owner identity verified. Main HQ unlocked.",
+    )
+
+
+@branches_bp.route("/<branch_id>/transfer-stock", methods=["POST"])
+def transfer_branch_stock(branch_id: str):
+    """
+    Transfer stock quantity of a product from Main HQ ('main') to a sub-branch atomically.
+    Only the Business Owner can initiate inter-branch stock transfers.
+    """
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response("Only the Business Owner at Main HQ can transfer stock between branches.", status_code=403)
+    if branch_id == "main":
+        return error_response("Select a destination sub-branch to receive stock from Main HQ.", status_code=400)
+
+    target_branch = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    if not target_branch:
+        return error_response("Destination branch not found.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    product_id = str(payload.get("productId") or "").strip()
+    arch_id = str(payload.get("architectureId") or target_branch.get("architectureId") or "buy-and-sell").strip()
+    try:
+        qty = float(payload.get("quantity") or 0)
+    except Exception:
+        qty = 0.0
+
+    if not product_id or qty <= 0:
+        return error_response("Valid product and positive transfer quantity are required.", status_code=400)
+
+    ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id})
+    if not ws:
+        return error_response("Workspace inventory not found.", status_code=404)
+
+    records = ws.get("records") or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+    today_str = now_iso[:10]
+
+    # Locate source product in Main HQ across Products and Inventory buckets
+    source_prod = None
+    source_bucket = None
+    for b_name in ("Products", "Inventory"):
+        arr = records.get(b_name)
+        if not isinstance(arr, list):
+            continue
+        for item in arr:
+            if (item.get("id") == product_id) and (item.get("branchId") or "main") == "main":
+                source_prod = item
+                source_bucket = b_name
+                break
+        if source_prod:
+            break
+
+    if not source_prod:
+        return error_response("Source product not found in Main HQ inventory.", status_code=404)
+
+    avail_qty = float(source_prod.get("quantity") if source_prod.get("quantity") is not None else (source_prod.get("stock") or 0))
+    if qty > avail_qty:
+        return error_response(
+            f"Insufficient Main HQ stock for '{source_prod.get('title') or source_prod.get('name')}'. Available: {avail_qty:g}.",
+            status_code=400,
+        )
+
+    new_hq_qty = max(0.0, avail_qty - qty)
+    prod_title = (source_prod.get("title") or source_prod.get("name") or "Product").strip()
+
+    # Deduct from matching Main HQ items in Products & Inventory
+    for b_name in ("Products", "Inventory"):
+        arr = records.get(b_name)
+        if not isinstance(arr, list):
+            continue
+        for item in arr:
+            item_title = (item.get("title") or item.get("name") or "").strip().lower()
+            if (item.get("branchId") or "main") == "main" and (
+                item.get("id") == product_id or (prod_title and item_title == prod_title.lower())
+            ):
+                item["quantity"] = new_hq_qty
+                item["stock"] = new_hq_qty
+                u_cost = float(item.get("unitCostRWF") or item.get("buyingPriceRWF") or item.get("costPrice") or 0)
+                if u_cost > 0:
+                    item["amountRWF"] = round(new_hq_qty * u_cost)
+                item["status"] = "Out of Stock" if new_hq_qty <= 0 else ("Low Stock" if new_hq_qty <= 5 else "In Stock")
+                item["updatedAt"] = now_iso
+
+    # Add or increment in destination branch across Products & Inventory
+    target_bucket = source_bucket or "Products"
+    dest_arr = list(records.get(target_bucket) or [])
+    dest_match = None
+    for item in dest_arr:
+        item_title = (item.get("title") or item.get("name") or "").strip().lower()
+        if item.get("branchId") == branch_id and item_title == prod_title.lower():
+            dest_match = item
+            break
+
+    unit_cost = float(source_prod.get("unitCostRWF") or source_prod.get("buyingPriceRWF") or source_prod.get("costPrice") or 0)
+    sell_price = float(source_prod.get("sellingPriceRWF") or source_prod.get("unitPriceRWF") or source_prod.get("price") or 0)
+
+    if dest_match:
+        prev_dest_qty = float(dest_match.get("quantity") if dest_match.get("quantity") is not None else (dest_match.get("stock") or 0))
+        next_dest_qty = prev_dest_qty + qty
+        dest_match["quantity"] = next_dest_qty
+        dest_match["stock"] = next_dest_qty
+        if unit_cost > 0:
+            dest_match["amountRWF"] = round(next_dest_qty * unit_cost)
+        dest_match["status"] = "Low Stock" if next_dest_qty <= 5 else "In Stock"
+        dest_match["updatedAt"] = now_iso
+    else:
+        cloned = {
+            **source_prod,
+            "id": f"PROD-{int(time.time() * 1000)}-{branch_id[-4:]}",
+            "branchId": branch_id,
+            "quantity": qty,
+            "stock": qty,
+            "unitCostRWF": unit_cost,
+            "sellingPriceRWF": sell_price,
+            "amountRWF": round(qty * (unit_cost or sell_price)),
+            "status": "Low Stock" if qty <= 5 else "In Stock",
+            "transferredFrom": "Main HQ",
+            "date": today_str,
+            "createdAt": now_iso,
+            "updatedAt": now_iso,
+        }
+        dest_arr.insert(0, cloned)
+    records[target_bucket] = dest_arr
+
+    # Mirror into Inventory bucket if source was Products so both views stay in sync
+    if target_bucket == "Products":
+        inv_arr = list(records.get("Inventory") or [])
+        inv_match = next(
+            (x for x in inv_arr if x.get("branchId") == branch_id and (x.get("title") or x.get("name") or "").strip().lower() == prod_title.lower()),
+            None,
+        )
+        if inv_match:
+            next_q = float(inv_match.get("quantity") or inv_match.get("stock") or 0) + qty
+            inv_match["quantity"] = next_q
+            inv_match["stock"] = next_q
+            inv_match["status"] = "Low Stock" if next_q <= 5 else "In Stock"
+        else:
+            inv_arr.insert(0, {**dest_arr[0], "id": f"INV-{int(time.time() * 1000)}-{branch_id[-4:]}"})
+        records["Inventory"] = inv_arr
+
+    db.workspaces.update_one(
+        {"scopeKey": scope_key, "architectureId": arch_id},
+        {"$set": {"records": records, "updated_at": now_iso}},
+    )
+
+    clean_ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0})
+    return success_response(
+        data={
+            "workspace": clean_ws,
+            "transferredQuantity": qty,
+            "productTitle": prod_title,
+            "targetBranchId": branch_id,
+            "targetBranchName": target_branch.get("name"),
+        },
+        message=f"Transferred {qty:g} units of '{prod_title}' from Main HQ to {target_branch.get('name')}.",
+    )
+
+
 @branches_bp.route("/<branch_id>", methods=["DELETE"])
 def delete_branch(branch_id: str):
     """Delete a sub-branch (Main HQ branch is protected)."""
     db = get_db()
-    scope_key, _ = _resolve_scope_and_user(db)
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response("Only the Business Owner can delete branches.", status_code=403)
     if branch_id == "main":
         return error_response("The Main HQ branch cannot be deleted.", status_code=400)
 

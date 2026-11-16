@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   PanelLeftOpen,
   X,
@@ -6,7 +6,8 @@ import {
   Sun,
   Moon,
   LogOut,
-  GitBranch
+  GitBranch,
+  Lock
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
 
@@ -36,7 +37,29 @@ export default function ContextualSidebar({
   toggleTheme,
   onLogout
 }) {
-  const { branches = [], activeBranchId = 'main', switchBranch } = useExbos()
+  const {
+    user,
+    branches = [],
+    activeBranchId = 'main',
+    activeBranch,
+    isBranchManager,
+    pendingBranchSwitchId,
+    cancelPendingBranchSwitch,
+    confirmOwnerBranchSwitch,
+    switchBranch
+  } = useExbos()
+
+  const [ownerSecret, setOwnerSecret] = useState('')
+  const [verifyingSwitch, setVerifyingSwitch] = useState(false)
+  const [switchError, setSwitchError] = useState('')
+
+  const visibleBranches = useMemo(() => {
+    if (isBranchManager) {
+      const targetId = user?.assignedBranchId || activeBranchId
+      return branches.filter((b) => b.id === targetId && !b.isMain && b.id !== 'main')
+    }
+    return branches
+  }, [branches, isBranchManager, user?.assignedBranchId, activeBranchId])
   const allModules = useMemo(() => {
     const combined = [...(mainModules || []), ...(pinnedModules || [])]
     if (combined.length > 0) return combined
@@ -222,21 +245,28 @@ export default function ContextualSidebar({
                 <div className="flex items-center justify-between">
                   <span className="text-[9px] font-orbitron uppercase tracking-wider text-[#9EDCFF]/75 flex items-center gap-1">
                     <GitBranch className="w-3 h-3 text-[#218DFF]" />
-                    <span>Branch</span>
+                    <span>{isBranchManager ? 'Assigned Branch' : 'Branch'}</span>
                   </span>
                   <span className="text-[9px] font-mono text-slate-300">
-                    {Math.max(1, branches.length)}
+                    {isBranchManager ? 'Locked' : Math.max(1, visibleBranches.length)}
                   </span>
                 </div>
-                {branches.length > 0 ? (
+                {visibleBranches.length > 0 ? (
                   <div className="space-y-1 max-h-28 overflow-y-auto pr-0.5">
-                    {branches.map((b) => {
+                    {visibleBranches.map((b) => {
                       const isSel = b.id === activeBranchId
+                      const isMainLocked = Boolean(
+                        b.isMain && activeBranchId !== 'main' && activeBranch?.requirePinForMainSwitch !== false
+                      )
                       return (
                         <button
                           key={b.id}
                           type="button"
-                          onClick={() => switchBranch && switchBranch(b.id)}
+                          onClick={() => {
+                            setSwitchError('')
+                            setOwnerSecret('')
+                            switchBranch && switchBranch(b.id)
+                          }}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-semibold flex items-center justify-between gap-1.5 cursor-pointer transition-all ${
                             isSel
                               ? 'bg-[#218DFF]/25 border border-[#9EDCFF]/50 text-white'
@@ -244,18 +274,32 @@ export default function ContextualSidebar({
                           }`}
                         >
                           <span className="truncate">{b.name}</span>
-                          {b.isMain && (
-                            <span className="text-[8px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 shrink-0">
-                              HQ
-                            </span>
-                          )}
+                          <span className="flex items-center gap-1 shrink-0">
+                            {b.status === 'Frozen' && (
+                              <span className="text-[8px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                                Frozen
+                              </span>
+                            )}
+                            {isBranchManager && (
+                              <span className="text-[8px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-[#218DFF]/20 text-[#9EDCFF] flex items-center gap-0.5">
+                                <Lock className="w-2.5 h-2.5" />
+                                <span>Branch</span>
+                              </span>
+                            )}
+                            {b.isMain && (
+                              <span className="text-[8px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 flex items-center gap-0.5 shrink-0">
+                                {isMainLocked && <Lock className="w-2.5 h-2.5" />}
+                                <span>HQ</span>
+                              </span>
+                            )}
+                          </span>
                         </button>
                       )
                     })}
                   </div>
                 ) : (
                   <div className="text-[11px] font-semibold text-white truncate">
-                    {activeBusinessName} (Main HQ)
+                    {activeBranch?.name || `${activeBusinessName} (Main HQ)`}
                   </div>
                 )}
               </div>
@@ -412,6 +456,101 @@ export default function ContextualSidebar({
           </div>
         )}
       </aside>
+
+      {/* Main HQ Owner Security Gate Modal when switching from a sub-branch into Main HQ */}
+      {pendingBranchSwitchId && (
+        <div className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[#218DFF]/50 bg-[#051238] p-6 shadow-2xl space-y-4 text-white">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-[#218DFF]/20 border border-[#9EDCFF]/40 flex items-center justify-center text-[#9EDCFF]">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-orbitron text-sm sm:text-base font-bold text-white">
+                    Main HQ Security Lock
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    Sub-branches cannot directly enter Main HQ without Business Owner authorization.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSwitchError('')
+                  setOwnerSecret('')
+                  cancelPendingBranchSwitch && cancelPendingBranchSwitch()
+                }}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                setSwitchError('')
+                setVerifyingSwitch(true)
+                try {
+                  const res = await confirmOwnerBranchSwitch(ownerSecret)
+                  if (!res?.ok) {
+                    setSwitchError(res?.error || 'Invalid Owner password or security PIN.')
+                  } else {
+                    setOwnerSecret('')
+                  }
+                } finally {
+                  setVerifyingSwitch(false)
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                  Enter Owner Password or Branch Security PIN *
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={ownerSecret}
+                  onChange={(e) => setOwnerSecret(e.target.value)}
+                  placeholder="Owner password or 4-digit PIN"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/10 border border-[#218DFF]/50 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#9EDCFF]"
+                />
+              </div>
+
+              {switchError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/20 border border-rose-500/40 text-xs text-rose-200 font-semibold">
+                  {switchError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSwitchError('')
+                    setOwnerSecret('')
+                    cancelPendingBranchSwitch && cancelPendingBranchSwitch()
+                  }}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-200 cursor-pointer"
+                >
+                  Stay in {activeBranch?.name || 'Sub-Branch'}
+                </button>
+                <button
+                  type="submit"
+                  disabled={verifyingSwitch || !ownerSecret.trim()}
+                  className="btn-sapphire-clean px-4 py-2 text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  {verifyingSwitch ? 'Verifying...' : 'Unlock Main HQ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   )
 }

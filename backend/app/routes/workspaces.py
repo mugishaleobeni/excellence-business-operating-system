@@ -27,6 +27,33 @@ workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/api/v1/workspaces
 from app.utils.scope import resolve_scope_key as _resolve_scope_key
 
 
+def _resolve_actor_and_branch(db, scope_key: str, requested_branch_id: str | None = None):
+    """
+    Resolve the authenticated user document (Owner vs Branch Manager) and the effective
+    branch document + permissions for the requested branch.
+    """
+    actor_doc = None
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        if isinstance(ident, str) and ident.strip():
+            actor_doc = db.users.find_one({"email": ident.strip().lower()}, {"_id": 0})
+    except Exception:
+        pass
+
+    is_manager = False
+    assigned_branch = ""
+    if actor_doc:
+        role_str = str(actor_doc.get("role") or "").strip().lower()
+        assigned_branch = str(actor_doc.get("assignedBranchId") or "").strip()
+        if role_str == "branch manager" or (assigned_branch and assigned_branch != "main"):
+            is_manager = True
+
+    effective_branch_id = assigned_branch if is_manager and assigned_branch else (requested_branch_id or "main")
+    branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": effective_branch_id}, {"_id": 0})
+    return actor_doc, is_manager, effective_branch_id, branch_doc
+
+
 def _extract_record_title(raw_dump: dict, module_name: str) -> str:
     for key in (
         "title",
@@ -366,6 +393,33 @@ def create_module_record(
 
     ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     raw_dump = validated_data.model_dump(exclude_none=True)
+
+    req_branch_id = str(raw_dump.get("branchId") or "main").strip()
+    _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, req_branch_id)
+    if is_manager and req_branch_id != effective_branch_id:
+        raw_dump["branchId"] = effective_branch_id
+    else:
+        raw_dump["branchId"] = effective_branch_id
+
+    if branch_doc and effective_branch_id != "main":
+        if str(branch_doc.get("status") or "Active") == "Frozen":
+            return error_response(
+                f"Branch '{branch_doc.get('name', effective_branch_id)}' is currently Frozen (Read-Only) by Main HQ.",
+                status_code=403,
+            )
+        b_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
+        if module_name == "Expenses":
+            if b_perms.get("canRecordExpenses") is False:
+                return error_response(
+                    "Recording expenses is disabled for this branch by Main HQ.",
+                    status_code=403,
+                )
+            max_exp = float(b_perms.get("maxExpenseLimitRWF") or 0)
+            if max_exp > 0 and _extract_record_amount(raw_dump) > max_exp:
+                return error_response(
+                    f"Expense exceeds this branch's maximum limit ({max_exp:,.0f} RWF) set by Main HQ.",
+                    status_code=403,
+                )
 
     rec_id = str(raw_dump.get("id") or f"REC-{now_ms}")
     title = _extract_record_title(raw_dump, module_name)
@@ -731,6 +785,27 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         (item for item in bucket_list if str(item.get("id")) == str(record_id)),
         None,
     )
+    if isinstance(deleted_item, dict):
+        item_branch_id = str(deleted_item.get("branchId") or "main").strip()
+        _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, item_branch_id)
+        if is_manager and item_branch_id != effective_branch_id:
+            return error_response(
+                "Access Denied: You cannot delete records belonging to Main HQ or another branch.",
+                status_code=403,
+            )
+        if branch_doc and item_branch_id != "main":
+            if str(branch_doc.get("status") or "Active") == "Frozen":
+                return error_response(
+                    f"Branch '{branch_doc.get('name', item_branch_id)}' is Frozen (Read-Only) by Main HQ.",
+                    status_code=403,
+                )
+            b_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
+            if b_perms.get("canDeleteRecords", False) is False:
+                return error_response(
+                    "Record deletion is disabled for this branch by Main HQ.",
+                    status_code=403,
+                )
+
     new_list = [item for item in bucket_list if str(item.get("id")) != str(record_id)]
     records_map[module_name] = new_list
 

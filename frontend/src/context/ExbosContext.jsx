@@ -309,22 +309,155 @@ export function ExbosProvider({ children }) {
     }).catch(() => {})
   }, [user?.email, user?.assignedBranchId])
 
+  const isBranchManager = useMemo(() => {
+    const roleStr = String(user?.role || '').trim().toLowerCase()
+    const assigned = String(user?.assignedBranchId || '').trim()
+    return roleStr === 'branch manager' || (Boolean(assigned) && assigned !== 'main')
+  }, [user?.role, user?.assignedBranchId])
+
   const activeBranch = useMemo(() => {
     return (
       branches.find((b) => b.id === activeBranchId) || {
         id: 'main',
         name: user?.businessName ? `${user.businessName} (Main HQ)` : 'Main HQ',
         architectureId: user?.architectureId || 'buy-and-sell',
-        isMain: true
+        isMain: true,
+        status: 'Active',
+        requirePinForMainSwitch: true,
+        permissions: {
+          canDeleteRecords: true,
+          canEditPrices: true,
+          canViewProfitReports: true,
+          canAddInventory: true,
+          canRecordExpenses: true,
+          maxExpenseLimitRWF: 0
+        }
       }
     )
   }, [branches, activeBranchId, user])
 
-  const switchBranch = (branchId) => {
-    setActiveBranchId(branchId || 'main')
+  const activeBranchPermissions = useMemo(() => {
+    const isMain = Boolean(activeBranch?.isMain || activeBranch?.id === 'main')
+    const defaults = isMain
+      ? {
+          canDeleteRecords: true,
+          canEditPrices: true,
+          canViewProfitReports: true,
+          canAddInventory: true,
+          canRecordExpenses: true,
+          maxExpenseLimitRWF: 0
+        }
+      : {
+          canDeleteRecords: false,
+          canEditPrices: false,
+          canViewProfitReports: false,
+          canAddInventory: true,
+          canRecordExpenses: true,
+          maxExpenseLimitRWF: 0
+        }
+    return {
+      ...defaults,
+      ...(activeBranch?.permissions || {})
+    }
+  }, [activeBranch])
+
+  const [pendingBranchSwitchId, setPendingBranchSwitchId] = useState(null)
+
+  const cancelPendingBranchSwitch = () => {
+    setPendingBranchSwitchId(null)
   }
 
-  const createBranch = async ({ name, location, architectureId }) => {
+  const switchBranch = (branchId, options = {}) => {
+    const targetId = branchId || 'main'
+    if (targetId === activeBranchId) return true
+
+    // 1. Sub-branch managers can never switch into Main HQ or another branch
+    if (isBranchManager && user?.assignedBranchId && targetId !== user.assignedBranchId) {
+      addToast({
+        type: 'error',
+        title: 'Main HQ Access Restricted',
+        message: 'Your account is locked to your assigned branch. Switching to Main HQ is not permitted.'
+      })
+      return false
+    }
+
+    // 2. When operating inside a sub-branch, switching back to Main HQ requires Owner Password / PIN
+    if (
+      !options?.verified &&
+      activeBranchId !== 'main' &&
+      targetId === 'main' &&
+      activeBranch?.requirePinForMainSwitch !== false
+    ) {
+      setPendingBranchSwitchId('main')
+      return false
+    }
+
+    setPendingBranchSwitchId(null)
+    setActiveBranchId(targetId)
+    return true
+  }
+
+  const confirmOwnerBranchSwitch = async (secret) => {
+    const trimmed = String(secret || '').trim()
+    if (!trimmed) {
+      return { ok: false, error: 'Please enter the Owner password or security PIN.' }
+    }
+    try {
+      const res = await exbosApi.verifyOwnerBranchSwitch({
+        secret: trimmed,
+        fromBranchId: activeBranchId
+      })
+      if (res?.ok && (res?.data?.data?.verified || res?.data?.verified)) {
+        const targetId = pendingBranchSwitchId || 'main'
+        setPendingBranchSwitchId(null)
+        setActiveBranchId(targetId)
+        addToast({
+          type: 'success',
+          title: 'Main HQ Unlocked',
+          message: 'Owner identity verified. Switched to Main HQ.'
+        })
+        return { ok: true }
+      }
+      return {
+        ok: false,
+        error: res?.error || res?.data?.error || 'Invalid Owner password or security PIN.'
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        error: err?.message || 'Could not verify Owner credentials.'
+      }
+    }
+  }
+
+  const transferBranchStock = async (branchId, payload) => {
+    if (!branchId || branchId === 'main') {
+      return { ok: false, error: 'Select a sub-branch to receive stock from Main HQ.' }
+    }
+    try {
+      const res = await exbosApi.transferBranchStock(branchId, payload)
+      const data = res?.data?.data || res?.data
+      if (res?.ok && data) {
+        const archId = payload?.architectureId || user?.architectureId || 'buy-and-sell'
+        if (data.workspace && data.workspace.records) {
+          setWorkspaces((prev) => ({
+            ...prev,
+            [archId]: {
+              ...(prev[archId] || {}),
+              ...data.workspace,
+              records: data.workspace.records
+            }
+          }))
+        }
+        return { ok: true, ...data, message: res?.data?.message || 'Stock transferred.' }
+      }
+      return { ok: false, error: res?.error || res?.data?.error || 'Stock transfer failed.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Stock transfer failed.' }
+    }
+  }
+
+  const createBranch = async ({ name, location, architectureId, permissions, requirePinForMainSwitch, ownerPin }) => {
     const trimmed = String(name || '').trim()
     if (!trimmed) return { ok: false, error: 'Branch name is required.' }
     const targetArch = architectureId || user?.architectureId || 'buy-and-sell'
@@ -332,7 +465,10 @@ export function ExbosProvider({ children }) {
       const res = await exbosApi.createBranch({
         name: trimmed,
         location: location || user?.location || 'Rwanda',
-        architectureId: targetArch
+        architectureId: targetArch,
+        permissions,
+        requirePinForMainSwitch: requirePinForMainSwitch ?? true,
+        ownerPin
       })
       const created = res?.data?.data?.branch || res?.data?.branch || res?.branch
       if (res?.ok && created) {
@@ -356,6 +492,17 @@ export function ExbosProvider({ children }) {
       location: location || 'Rwanda',
       architectureId: targetArch,
       isMain: false,
+      status: 'Active',
+      requirePinForMainSwitch: true,
+      permissions: {
+        canDeleteRecords: false,
+        canEditPrices: false,
+        canViewProfitReports: false,
+        canAddInventory: true,
+        canRecordExpenses: true,
+        maxExpenseLimitRWF: 0,
+        ...(permissions || {})
+      },
       createdAt: new Date().toISOString()
     }
     setBranches((prev) => [...prev, localBranch])
@@ -1050,6 +1197,34 @@ export function ExbosProvider({ children }) {
   }
 
   const addRecord = (archId, moduleName, newItem) => {
+    if (activeBranchId !== 'main' && activeBranch?.status === 'Frozen') {
+      addToast({
+        type: 'error',
+        title: 'Branch Frozen (Read-Only)',
+        message: `${activeBranch?.name || 'This branch'} is currently frozen by Main HQ. New entries are paused.`
+      })
+      return null
+    }
+    if (activeBranchId !== 'main' && moduleName === 'Expenses') {
+      if (activeBranchPermissions?.canRecordExpenses === false) {
+        addToast({
+          type: 'error',
+          title: 'Expense Recording Restricted',
+          message: 'Main HQ has disabled expense recording for this branch.'
+        })
+        return null
+      }
+      const maxExp = Number(activeBranchPermissions?.maxExpenseLimitRWF) || 0
+      const itemAmt = Number(newItem?.amountRWF ?? newItem?.totalAmountRWF ?? 0)
+      if (maxExp > 0 && itemAmt > maxExp) {
+        addToast({
+          type: 'error',
+          title: 'Expense Exceeds Branch Limit',
+          message: `This expense (${itemAmt.toLocaleString()} RWF) exceeds the branch limit of ${maxExp.toLocaleString()} RWF set by Main HQ.`
+        })
+        return null
+      }
+    }
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
     const recordId =
@@ -1237,6 +1412,22 @@ export function ExbosProvider({ children }) {
   }
 
   const deleteRecord = (archId, moduleName, recordId) => {
+    if (activeBranchId !== 'main' && activeBranch?.status === 'Frozen') {
+      addToast({
+        type: 'error',
+        title: 'Branch Frozen (Read-Only)',
+        message: `${activeBranch?.name || 'This branch'} is currently frozen by Main HQ. Deletions are blocked.`
+      })
+      return
+    }
+    if (activeBranchId !== 'main' && activeBranchPermissions?.canDeleteRecords === false) {
+      addToast({
+        type: 'error',
+        title: 'Deletion Restricted by Main HQ',
+        message: 'Record deletion is disabled for this branch. Only the Business Owner at Main HQ can authorize deletions.'
+      })
+      return
+    }
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
     const recIdStr = String(recordId)
@@ -1999,6 +2190,12 @@ export function ExbosProvider({ children }) {
         branches,
         activeBranchId,
         activeBranch,
+        isBranchManager,
+        activeBranchPermissions,
+        pendingBranchSwitchId,
+        cancelPendingBranchSwitch,
+        confirmOwnerBranchSwitch,
+        transferBranchStock,
         switchBranch,
         createBranch,
         updateBranch,

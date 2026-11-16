@@ -198,6 +198,13 @@ export const exbosApi = {
     apiRequest(withScope(`/branches/${branchId}`), { method: 'DELETE' }),
   assignBranchManager: (branchId, payload = {}) =>
     apiRequest(withScope(`/branches/${branchId}/assign-manager`), { method: 'POST', body: payload }),
+  verifyOwnerBranchSwitch: (payload = {}) =>
+    apiRequest(withScope('/branches/verify-owner-switch'), { method: 'POST', body: payload }),
+  transferBranchStock: (branchId, payload = {}) =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/transfer-stock`), {
+      method: 'POST',
+      body: payload
+    }),
   getBranchAnalytics: (archId) =>
     apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`))
 }

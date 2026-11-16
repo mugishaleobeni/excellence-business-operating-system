@@ -1,14 +1,33 @@
-import React, { useState } from 'react'
-import { GitBranch, Plus, Trash2, ArrowUpRight, MapPin, Pencil, UserPlus, Copy, Check, X, KeyRound } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import {
+  GitBranch,
+  Plus,
+  Trash2,
+  ArrowUpRight,
+  MapPin,
+  Pencil,
+  UserPlus,
+  Copy,
+  Check,
+  X,
+  KeyRound,
+  Lock,
+  Shield,
+  Package
+} from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
 
 export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', currentArch = {} }) {
   const {
     branches = [],
     activeBranchId = 'main',
+    activeBranch,
+    isBranchManager,
+    allWorkspaces = {},
     createBranch,
     updateBranch,
     assignBranchManager,
+    transferBranchStock,
     deleteBranch,
     switchBranch,
     addToast
@@ -33,6 +52,130 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   const [assigning, setAssigning] = useState(false)
   const [generatedLink, setGeneratedLink] = useState('')
   const [copiedLink, setCopiedLink] = useState(false)
+
+  // Branch Security & Permissions state
+  const [securityBranch, setSecurityBranch] = useState(null)
+  const [secStatus, setSecStatus] = useState('Active')
+  const [secRequirePin, setSecRequirePin] = useState(true)
+  const [secOwnerPin, setSecOwnerPin] = useState('')
+  const [secPerms, setSecPerms] = useState({
+    canDeleteRecords: false,
+    canEditPrices: false,
+    canViewProfitReports: false,
+    canRecordExpenses: true,
+    maxExpenseLimitRWF: 0
+  })
+  const [savingSecurity, setSavingSecurity] = useState(false)
+
+  // Inter-Branch Stock Transfer state (Main HQ -> Sub-Branch)
+  const [transferBranch, setTransferBranch] = useState(null)
+  const [transferProductId, setTransferProductId] = useState('')
+  const [transferQty, setTransferQty] = useState('1')
+  const [transferring, setTransferring] = useState(false)
+
+  const mainHqProducts = useMemo(() => {
+    const ws = allWorkspaces?.[activeArchId] || {}
+    const prods = Array.isArray(ws.records?.Products) ? ws.records.Products : []
+    const inv = Array.isArray(ws.records?.Inventory) ? ws.records.Inventory : []
+    const combined = [...prods, ...inv]
+    const seen = new Set()
+    const out = []
+    combined.forEach((p) => {
+      if ((p.branchId || 'main') !== 'main') return
+      const key = p.id || (p.title || p.name || '').toLowerCase()
+      if (!key || seen.has(key)) return
+      seen.add(key)
+      const q = Number(p.quantity ?? p.stock ?? p.currentStock ?? 0)
+      if (q > 0) out.push(p)
+    })
+    return out
+  }, [allWorkspaces, activeArchId])
+
+  const openSecurityPanel = (b) => {
+    setSecurityBranch(b)
+    setSecStatus(b.status || 'Active')
+    setSecRequirePin(b.requirePinForMainSwitch !== false)
+    setSecOwnerPin('')
+    setSecPerms({
+      canDeleteRecords: Boolean(b.permissions?.canDeleteRecords),
+      canEditPrices: Boolean(b.permissions?.canEditPrices),
+      canViewProfitReports: Boolean(b.permissions?.canViewProfitReports),
+      canRecordExpenses: b.permissions?.canRecordExpenses !== false,
+      maxExpenseLimitRWF: Number(b.permissions?.maxExpenseLimitRWF || 0)
+    })
+  }
+
+  const handleSaveSecurity = async (e) => {
+    e.preventDefault()
+    if (!securityBranch) return
+    setSavingSecurity(true)
+    try {
+      const payload = {
+        status: secStatus,
+        requirePinForMainSwitch: secRequirePin,
+        permissions: secPerms
+      }
+      if (secOwnerPin.trim()) {
+        payload.ownerPin = secOwnerPin.trim()
+      }
+      const res = await updateBranch(securityBranch.id, payload)
+      if (res?.ok) {
+        setSecurityBranch(null)
+        addToast &&
+          addToast({
+            type: 'success',
+            title: 'Branch Security Updated',
+            message: `Permissions & Main HQ lock updated for "${securityBranch.name}".`
+          })
+      } else {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Update Failed',
+            message: res?.error || 'Could not update branch security settings.'
+          })
+      }
+    } finally {
+      setSavingSecurity(false)
+    }
+  }
+
+  const openTransferPanel = (b) => {
+    setTransferBranch(b)
+    setTransferProductId(mainHqProducts[0]?.id || '')
+    setTransferQty('1')
+  }
+
+  const handleTransferStock = async (e) => {
+    e.preventDefault()
+    if (!transferBranch || !transferProductId) return
+    setTransferring(true)
+    try {
+      const res = await transferBranchStock(transferBranch.id, {
+        productId: transferProductId,
+        quantity: Number(transferQty) || 1,
+        architectureId: activeArchId
+      })
+      if (res?.ok) {
+        setTransferBranch(null)
+        addToast &&
+          addToast({
+            type: 'success',
+            title: 'Stock Transferred from Main HQ',
+            message: res.message || `Stock transferred to ${transferBranch.name}.`
+          })
+      } else {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Stock Transfer Failed',
+            message: res?.error || 'Could not transfer stock.'
+          })
+      }
+    } finally {
+      setTransferring(false)
+    }
+  }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -170,6 +313,31 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  if (isBranchManager) {
+    return (
+      <div className="rounded-2xl border border-[#218DFF]/30 bg-[#051238]/90 p-6 sm:p-7 space-y-4 shadow-xl">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF]">
+              <Lock className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-orbitron text-sm sm:text-base font-bold text-white">
+                Assigned Branch Security Profile — {activeBranch?.name || 'Sub-Branch'}
+              </h3>
+              <p className="text-xs text-slate-300">
+                Your session is locked to this branch. Main HQ access and branch management are restricted to the Business Owner.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300">
+            {activeBranch?.status || 'Active'}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-2xl border border-[#218DFF]/30 bg-[#051238]/90 p-6 sm:p-7 space-y-5 shadow-xl">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
@@ -179,10 +347,10 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
           </div>
           <div>
             <h3 className="font-orbitron text-sm sm:text-base font-bold text-white">
-              Branches &amp; Multi-Location Control
+              Branches, Security &amp; Multi-Location Control
             </h3>
             <p className="text-xs text-slate-300">
-              Create branches (defaulting to <strong>{currentArch.name || activeArchId}</strong>). New branches appear automatically in your sidebar navigation.
+              Create isolated branches (defaulting to <strong>{currentArch.name || activeArchId}</strong>), lock Main HQ access, configure permissions, and transfer stock from HQ.
             </p>
           </div>
         </div>
@@ -281,11 +449,27 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               ) : (
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <strong className="text-sm font-bold text-white truncate">{b.name}</strong>
                       {b.isMain && (
                         <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                           Main HQ
+                        </span>
+                      )}
+                      {b.status === 'Frozen' && (
+                        <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                          Frozen
+                        </span>
+                      )}
+                      {!b.isMain && b.requirePinForMainSwitch !== false && (
+                        <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-[#218DFF]/20 text-[#9EDCFF] border border-[#218DFF]/30 flex items-center gap-0.5">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>HQ Locked</span>
+                        </span>
+                      )}
+                      {!b.isMain && b.permissions?.canDeleteRecords === false && (
+                        <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-400/30">
+                          No Delete
                         </span>
                       )}
                     </div>
@@ -310,9 +494,32 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                           : 'bg-white/10 hover:bg-white/20 text-[#9EDCFF]'
                       }`}
                     >
+                      {b.isMain && activeBranchId !== 'main' && activeBranch?.requirePinForMainSwitch !== false && (
+                        <Lock className="w-3 h-3" />
+                      )}
                       <span>{isCurrent ? 'Active' : 'Switch'}</span>
                       {!isCurrent && <ArrowUpRight className="w-3.5 h-3.5" />}
                     </button>
+                    {!b.isMain && (
+                      <button
+                        type="button"
+                        onClick={() => openSecurityPanel(b)}
+                        title="Branch Security, HQ Lock & Permissions"
+                        className="p-1.5 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 text-[#9EDCFF] cursor-pointer"
+                      >
+                        <Shield className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {!b.isMain && (
+                      <button
+                        type="button"
+                        onClick={() => openTransferPanel(b)}
+                        title="Transfer Stock from Main HQ to this Branch"
+                        className="p-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/35 text-indigo-300 cursor-pointer"
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => openAssignManager(b)}
@@ -346,6 +553,205 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
           )
         })}
       </div>
+
+      {/* Branch Security, Main HQ Lock & Permissions Panel */}
+      {securityBranch && (
+        <div className="rounded-2xl border border-[#218DFF]/40 bg-[#040D29]/95 p-5 space-y-4">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-[#9EDCFF]" />
+              <h4 className="font-orbitron text-xs sm:text-sm font-bold text-white">
+                Branch Security &amp; Permissions — {securityBranch.name}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSecurityBranch(null)}
+              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <form onSubmit={handleSaveSecurity} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Branch Operational Status
+                </label>
+                <select
+                  value={secStatus}
+                  onChange={(e) => setSecStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#071644] border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-[#218DFF]"
+                >
+                  <option value="Active">Active (Normal Operations)</option>
+                  <option value="Frozen">Frozen (Read-Only Audit Mode)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Optional Owner Security PIN (4–8 digits)
+                </label>
+                <input
+                  type="password"
+                  value={secOwnerPin}
+                  onChange={(e) => setSecOwnerPin(e.target.value)}
+                  placeholder={securityBranch.hasOwnerPin ? '•••• (Leave blank to keep)' : 'Set PIN or use Owner Password'}
+                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#218DFF]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Max Single Expense Limit (RWF, 0 = No Cap)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={secPerms.maxExpenseLimitRWF}
+                  onChange={(e) =>
+                    setSecPerms((p) => ({ ...p, maxExpenseLimitRWF: Math.max(0, Number(e.target.value) || 0) }))
+                  }
+                  className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white focus:outline-none focus:border-[#218DFF]"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secRequirePin}
+                  onChange={(e) => setSecRequirePin(e.target.checked)}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Block Direct Entry to Main HQ</strong> (Require Owner Password / PIN to switch to HQ)
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canDeleteRecords}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canDeleteRecords: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Record Deletions</strong> (Sales, Purchases &amp; Inventory items)
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canEditPrices}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canEditPrices: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Selling Price Edits</strong> in this branch
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canRecordExpenses}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canRecordExpenses: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Recording Branch Expenses</strong>
+                </span>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSecurityBranch(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingSecurity}
+                className="btn-sapphire-clean px-4 py-2 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {savingSecurity ? 'Saving Policy...' : 'Save Security & Permissions'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Inter-Branch Stock Transfer Panel (Main HQ -> Sub-Branch) */}
+      {transferBranch && (
+        <div className="rounded-2xl border border-indigo-400/40 bg-[#040D29]/95 p-5 space-y-4">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Package className="w-4 h-4 text-indigo-300" />
+              <h4 className="font-orbitron text-xs sm:text-sm font-bold text-white">
+                Transfer Stock from Main HQ → {transferBranch.name}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setTransferBranch(null)}
+              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {mainHqProducts.length === 0 ? (
+            <p className="text-xs text-slate-300">
+              No in-stock products found in Main HQ inventory. Add stock in Main HQ first to transfer units to {transferBranch.name}.
+            </p>
+          ) : (
+            <form onSubmit={handleTransferStock} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Main HQ Product *
+                </label>
+                <select
+                  required
+                  value={transferProductId}
+                  onChange={(e) => setTransferProductId(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#071644] border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-400"
+                >
+                  {mainHqProducts.map((p) => {
+                    const q = Number(p.quantity ?? p.stock ?? p.currentStock ?? 0)
+                    return (
+                      <option key={p.id} value={p.id}>
+                        {p.title || p.name} (HQ Stock: {q})
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Quantity to Transfer *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  value={transferQty}
+                  onChange={(e) => setTransferQty(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-400"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={transferring || !transferProductId}
+                className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+              >
+                {transferring ? 'Transferring...' : 'Transfer Stock to Branch'}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
       {/* Assign Branch Manager Panel */}
       {managerBranch && (
