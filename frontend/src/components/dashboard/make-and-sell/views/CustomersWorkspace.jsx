@@ -84,7 +84,7 @@ export default function CustomersWorkspace({
   // Save Customer
   const handleSaveCustomer = () => {
     if (!custName.trim()) {
-      alert('Please enter a customer name.')
+      addToast?.({ type: 'warning', title: 'Missing Customer Name', message: 'Please enter a customer name.' })
       return
     }
 

@@ -20,11 +20,14 @@ export const DEFAULT_DOCUMENT_TEMPLATE = {
 }
 
 /**
- * Generate a unique tokenized secure view link
+ * Generate a live public view link pointing to this ExBOS origin (/d/:docId)
  */
 export function generateSecureLink(docId) {
-  const token = Math.random().toString(36).substring(2, 10)
-  return `https://exbos.rw/d/sec-${(docId || 'DOC').toLowerCase()}-${token}`
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://exbos.pages.dev'
+  return `${origin}/d/${encodeURIComponent(docId || 'DOC')}`
 }
 
 /**

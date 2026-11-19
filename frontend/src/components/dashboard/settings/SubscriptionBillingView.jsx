@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   CreditCard,
   CheckCircle2,
@@ -8,13 +8,21 @@ import {
   Phone,
   ArrowRight
 } from 'lucide-react'
+import { useExbos } from '../../../context/ExbosContext'
 
 export default function SubscriptionBillingView({
   user = {},
   currentArch = {},
   addToast
 }) {
-  const [currentPlan, setCurrentPlan] = useState('Silver')
+  const { updateUserProfile } = useExbos()
+  const resolvedPlan = user?.plan || user?.planTier || 'Free'
+  const [currentPlan, setCurrentPlan] = useState(resolvedPlan)
+  const [savingPlanId, setSavingPlanId] = useState('')
+
+  useEffect(() => {
+    if (resolvedPlan) setCurrentPlan(resolvedPlan)
+  }, [resolvedPlan])
 
   const plans = [
     {
@@ -23,7 +31,7 @@ export default function SubscriptionBillingView({
       priceRWF: '0',
       period: 'Forever',
       description: 'Single branch core ledgers for small trade owners.',
-      features: ['1 Branch Location', 'Unlimited Offline Storage', 'Basic Receipts', 'Standard Reports'],
+      features: ['1 Branch Location', 'Unlimited Cloud Storage', 'Basic Receipts', 'Standard Reports'],
       badge: 'Starter'
     },
     {
@@ -42,7 +50,7 @@ export default function SubscriptionBillingView({
       period: '/ month',
       description: 'Full multi-branch control and advanced inventory costing.',
       features: ['Up to 5 Branches', 'Unlimited Staff Permissions', 'True Landed Cost Engine', 'Live Stock Tracking', 'Priority Support'],
-      badge: 'Active Plan'
+      badge: 'Recommended'
     },
     {
       id: 'Gold',
@@ -55,14 +63,33 @@ export default function SubscriptionBillingView({
     }
   ]
 
-  const handleSelectPlan = (planId) => {
+  const handleSelectPlan = async (planId) => {
+    if (savingPlanId) return
+    setSavingPlanId(planId)
+    const prevPlan = currentPlan
     setCurrentPlan(planId)
-    if (addToast) {
-      addToast({
-        type: 'success',
-        title: 'Plan Updated',
-        message: `Subscription successfully switched to ${planId}.`
-      })
+    try {
+      if (updateUserProfile) {
+        await updateUserProfile({ plan: planId, planTier: planId })
+      }
+      if (addToast) {
+        addToast({
+          type: 'success',
+          title: 'Plan Saved to Account',
+          message: `Your ExBOS subscription is now set to ${planId} and persisted to your profile.`
+        })
+      }
+    } catch (err) {
+      setCurrentPlan(prevPlan)
+      if (addToast) {
+        addToast({
+          type: 'error',
+          title: 'Could Not Update Plan',
+          message: err?.message || 'Please check your connection and try again.'
+        })
+      }
+    } finally {
+      setSavingPlanId('')
     }
   }
 
@@ -171,12 +198,12 @@ export default function SubscriptionBillingView({
               <div className="pt-5 mt-4 border-t border-white/10">
                 <button
                   type="button"
-                  disabled={isCurrent}
+                  disabled={isCurrent || Boolean(savingPlanId)}
                   onClick={() => handleSelectPlan(p.id)}
                   className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
                     isCurrent
                       ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-default'
-                      : 'btn-sapphire-clean cursor-pointer'
+                      : 'btn-sapphire-clean cursor-pointer disabled:opacity-60'
                   }`}
                 >
                   {isCurrent ? (
@@ -184,6 +211,8 @@ export default function SubscriptionBillingView({
                       <ShieldCheck className="w-4 h-4" />
                       <span>Current Plan</span>
                     </>
+                  ) : savingPlanId === p.id ? (
+                    <span>Saving...</span>
                   ) : (
                     <>
                       <span>Select {p.name}</span>

@@ -158,7 +158,7 @@ export default function PurchasesWorkspace({
   // Submit Purchase (Increases Raw Materials stock & updates Amounts Owed)
   const handleSavePurchase = (keepOpen = false) => {
     if (!selectedMaterial) {
-      alert('Please select a raw material.')
+      addToast?.({ type: 'warning', title: 'No Material Selected', message: 'Please select a raw material before saving.' })
       return
     }
 

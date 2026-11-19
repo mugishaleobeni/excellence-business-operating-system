@@ -305,7 +305,7 @@ export default function StockWorkspace({
   const handleAddCategory = () => {
     const trimmed = newCategoryName.trim()
     if (!trimmed) {
-      alert('Please enter a category name.')
+      addToast?.({ type: 'warning', title: 'Missing Category Name', message: 'Please enter a category name.' })
       return
     }
 
@@ -441,7 +441,7 @@ export default function StockWorkspace({
   // Save Finished Product
   const handleSaveProduct = (keepOpen = false) => {
     if (!prodName.trim()) {
-      alert('Please enter a product name.')
+      addToast?.({ type: 'warning', title: 'Missing Product Name', message: 'Please enter a product name.' })
       return
     }
 
@@ -485,7 +485,7 @@ export default function StockWorkspace({
   // Save Raw Material
   const handleSaveMaterial = (keepOpen = false) => {
     if (!matName.trim()) {
-      alert('Please enter a material name.')
+      addToast?.({ type: 'warning', title: 'Missing Material Name', message: 'Please enter a raw material name.' })
       return
     }
 

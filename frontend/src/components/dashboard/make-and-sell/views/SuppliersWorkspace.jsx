@@ -82,7 +82,7 @@ export default function SuppliersWorkspace({
   // Save Supplier
   const handleSaveSupplier = () => {
     if (!supName.trim()) {
-      alert('Please enter a supplier name.')
+      addToast?.({ type: 'warning', title: 'Missing Supplier Name', message: 'Please enter a supplier name.' })
       return
     }
 

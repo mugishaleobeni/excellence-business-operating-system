@@ -137,7 +137,7 @@ export const KINYARWANDA_DICT = {
     'Teganya mbere kandi usobanukirwe amafaranga uzakenera mu gihe kizaza.',
   'customer management': "Imicungire y'Abakiriya",
   'keep customer information and transaction histories organized.':
-    "Bika amakuru y'abakiriya n'amateka y'ibikorwa ku murongo.",
+    "Bika amakuru y'abakiriya n'ibikorwa ku murongo.",
   'six business architectures · one intelligent platform':
     "Imiterere 6 y'Ubucuruzi · Sisitemu Imwe y'Ubwenge",
   'six business architectures · one platform':
@@ -150,7 +150,7 @@ export const KINYARWANDA_DICT = {
     "Hitamo ubwoko bw'ubucuruzi muri 6 buri hasi urebe imikorere yabwo, ibice by'imbonerahamwe, n'uko ExBOS ikemura ibibazo byabwo.",
   'architecture': 'Imiterere',
   'dedicated seo guide': 'Inyoborabikorwa',
-  'you make it. we help you manage it.': 'Urabikora. Tugufasha Kubiyobora.',
+  'you make it. we help you manage it.': 'urabikora. Tugufasha Kubiyobora.',
   'from raw materials to finished products, exbos helps manufacturers manage production, calculate costs, track inventory, and monitor sales.':
     'Kuva ku bikoresho fatizo kugeza ku bicuruzwa byuzuye, ExBOS ifasha abakora ibintu gucunga umusaruro, kubara ibiguzi, gukurikirana ububiko, no kugenzura icuruzwa.',
   'highlighted capabilities': "Ubushobozi bw'Ibanze",
@@ -159,7 +159,7 @@ export const KINYARWANDA_DICT = {
   'profitability': 'Inyungu',
   'ideal for:': 'Bikwiriye:',
   'see how it works': 'Reba Uko Bikora',
-  'get started with': 'Tangira na',
+  'get started with': 'Tangira ',
   "— don't just run your business. understand it.": '— Ntukayobore ubucuruzi gusa. Busobanukirwe.',
   'livestock & animal farming': "Ubworozi n'Ubuhinzi",
   'hybrid business': 'Ubucuruzi Buvanze',
@@ -200,13 +200,13 @@ export const KINYARWANDA_DICT = {
   // Public SEO Pages (Features, Pricing, About, Resources)
   'exbos platform capabilities': "Ubushobozi bwa Sisitemu ya ExBOS",
   'engineered to answer where your money sits right now':
-    'Yubakiwe Kukwereka Aho Amafaranga Yaweaherereye Ako Kanya',
+    'Yubakiwe Kukwereka Aho Amafaranga Yawe aherereye Ako Kanya',
   'exbos combines cash & momo separation, true profit calculation, customer debt tracking, and 6-month survival planning.':
-    "ExBOS ihuza gutandukanya amafaranga yo mu ntoki na MoMo, kubara inyungu nyayo, gukurikirana imyenda y'abakiriya, no guteganya ingengo y'imari y'amezi 6.",
+    "ExBOS ihuza amafaranga yo mu ntoki na MoMo, kubara inyungu nyayo, gukurikirana imyenda y'abakiriya, no guteganya ingengo y'imari y'amezi 6.",
   'where is my money? (8-bucket view)': 'Amafaranga Yanjye Ari He? (Ububiko 8)',
   'see cash in hand, mobile money (momo), bank, stock & materials, owed to me, what i owe, active project cash gaps, and personal withdrawals on one screen.':
-    'Reba amafaranga mu ntoki, Mobile Money (MoMo), Banki, agaciro k\'ububiko, imyenda bakubereyemo, imyenda ufitiye abandi, n\'ayasohotse ku giti cyawe kuri paji imwe.',
-  'true landed cost & real profit': 'Ikiguzi Nyacyo cy\'Ibicuruzwa n\'Inyungu Nyayo',
+    'Reba amafaranga ufite mu ntoki, Mobile Money (MoMo), Banki, agaciro k\'ububiko, imyenda bakubereyemo, imyenda ufitiye abandi, n\'ayasohotse ku giti cyawe kuri paji imwe.',
+  'true landed cost & real profit': 'Ikiguzi Nyacyo cy\'Ibicuruzwa n\'Inyungu Nyayo ',
   'never confuse daily sales with profit. automatically include transport, moto, loading, recipes, and monthly fixed overhead.':
     'Ntukitiranye amafaranga yinjiye n\'inyungu. Shyiramo ubwikorezi, moto, kupakurura, ibikoresho fatizo, n\'ibiguzi bihoraho bya buri kwezi.',
   '6-month business survival engine': 'Ingengo y\'Imari yo Kubaho mu Mezi 6',
@@ -222,7 +222,7 @@ export const KINYARWANDA_DICT = {
   'controlled financial corrections preserve original creation date, source (dashboard or whatsapp), creator, and editor audit trail.':
     'Guhindura inyandiko z\'imari bibika itariki y\'umwimerere, aho byaturutse (Dashboard cyangwa WhatsApp), uwabyanditse, n\'uwabikosoye.',
   'live dashboard →': 'Injira mu Mbonerahamwe →',
-  'problem solved by exbos:': 'Ikibazo Gikemurwa na ExBOS:',
+  'problem solved by exbos:': 'Ibibazo Gikemurwa na ExBOS:',
 
   // Auth Pages (Login & Register & 2FA)
   'welcome back': 'Murakaza Neza',
@@ -246,8 +246,8 @@ export const KINYARWANDA_DICT = {
 
   // 6 Business Architectures
   'business architecture': "Imiterere y'Ubucuruzi",
-  'buy & sell': 'Kugura no Kugurisha',
-  'make & sell': 'Gukora no Kugurisha',
+  'buy & sell': 'Kugura uka Kugurisha',
+  'make & sell': 'Gukora uka Kugurisha',
   'service-based business': 'Ubucuruzi bwa Serivisi',
   'agriculture & livestock': "Ubuhinzi n'Ubworozi",
   'food & hospitality': "Ibiribwa n'Amacumbi",

@@ -755,3 +755,275 @@ def delete_account():
     resp.delete_cookie("session")
     return resp, code
 
+
+def _resolve_team_actor(db):
+    """Resolve authenticated user and their tenant ownerScopeKey."""
+    email = _safe_jwt_email()
+    if not email:
+        q = (request.args.get("scopeKey") or "").strip().lower()
+        if q and "@" in q:
+            email = q
+    if not email:
+        return None, None
+    actor = db.users.find_one({"email": email})
+    if not actor:
+        return None, None
+    owner_scope = (actor.get("ownerScopeKey") or actor.get("email") or "").strip().lower()
+    return actor, owner_scope
+
+
+def _default_permissions_for_role(role: str) -> dict:
+    r = (role or "Staff").strip().lower()
+    if "owner" in r or "admin" in r:
+        return {
+            "canRecordSales": True,
+            "canManageStock": True,
+            "canViewProfits": True,
+            "canApproveExpenses": True,
+            "canDeleteRecords": True,
+            "canManageTeam": True,
+        }
+    if "manager" in r:
+        return {
+            "canRecordSales": True,
+            "canManageStock": True,
+            "canViewProfits": True,
+            "canApproveExpenses": True,
+            "canDeleteRecords": False,
+            "canManageTeam": False,
+        }
+    if "accountant" in r:
+        return {
+            "canRecordSales": False,
+            "canManageStock": False,
+            "canViewProfits": True,
+            "canApproveExpenses": True,
+            "canDeleteRecords": False,
+            "canManageTeam": False,
+        }
+    # Cashier / Sales Staff / Default
+    return {
+        "canRecordSales": True,
+        "canManageStock": False,
+        "canViewProfits": False,
+        "canApproveExpenses": False,
+        "canDeleteRecords": False,
+        "canManageTeam": False,
+    }
+
+
+@auth_bp.route("/team", methods=["GET"])
+def list_team_members():
+    """List the business owner and all team members linked to this tenant."""
+    db = get_db()
+    actor, owner_scope = _resolve_team_actor(db)
+    if not actor or not owner_scope:
+        return error_response("Authentication required to view team members.", status_code=401)
+
+    docs = list(
+        db.users.find(
+            {"$or": [{"email": owner_scope}, {"ownerScopeKey": owner_scope}]}
+        ).sort("created_at", 1)
+    )
+
+    members = []
+    for doc in docs:
+        is_owner = (doc.get("email") or "").strip().lower() == owner_scope and not doc.get("ownerScopeKey")
+        members.append(
+            {
+                "id": str(doc.get("_id")),
+                "fullName": doc.get("fullName") or doc.get("businessName") or doc.get("email"),
+                "email": doc.get("email"),
+                "role": "Owner" if is_owner else (doc.get("role") or "Staff"),
+                "isOwner": is_owner,
+                "assignedBranchId": doc.get("assignedBranchId") or "",
+                "permissions": doc.get("permissions") or _default_permissions_for_role(
+                    "Owner" if is_owner else doc.get("role", "Staff")
+                ),
+                "status": "Active",
+                "createdAt": doc.get("created_at"),
+            }
+        )
+
+    return success_response(data={"members": members, "ownerScopeKey": owner_scope})
+
+
+@auth_bp.route("/team/invite", methods=["POST"])
+def invite_team_member():
+    """
+    Create or update a real team member login in MongoDB db.users and email them
+    a direct login link. Only the Business Owner can invite or modify staff accounts.
+    """
+    import secrets
+    import string
+
+    db = get_db()
+    actor, owner_scope = _resolve_team_actor(db)
+    if not actor or not owner_scope:
+        return error_response("Authentication required.", status_code=401)
+
+    is_owner = (actor.get("email") or "").strip().lower() == owner_scope and not actor.get("ownerScopeKey")
+    if not is_owner:
+        return error_response("Only the Business Owner can invite or manage team members.", status_code=403)
+
+    payload = request.get_json(silent=True) or {}
+    member_email = (payload.get("email") or "").strip().lower()
+    full_name = (payload.get("fullName") or payload.get("name") or "").strip()
+    role = (payload.get("role") or "Cashier").strip()
+    raw_password = (payload.get("password") or "").strip()
+    assigned_branch_id = (payload.get("assignedBranchId") or "").strip()
+    custom_permissions = payload.get("permissions")
+    app_origin = (payload.get("appOrigin") or "https://exbos.pages.dev").strip().rstrip("/")
+
+    if not member_email or "@" not in member_email:
+        return error_response("A valid staff email address is required.", status_code=400)
+    if member_email == owner_scope:
+        return error_response("You cannot invite your own owner email as a staff member.", status_code=400)
+    if not full_name:
+        full_name = member_email.split("@")[0].replace(".", " ").title()
+
+    existing = db.users.find_one({"email": member_email})
+    if existing and (existing.get("ownerScopeKey") or "").strip().lower() != owner_scope:
+        if not existing.get("ownerScopeKey"):
+            return error_response(
+                "This email is already registered as an independent ExBOS business owner.",
+                status_code=409,
+            )
+        return error_response(
+            "This email already belongs to another ExBOS organization.",
+            status_code=409,
+        )
+
+    generated_password = False
+    if not raw_password and not existing:
+        alphabet = string.ascii_letters + string.digits
+        raw_password = "".join(secrets.choice(alphabet) for _ in range(10))
+        generated_password = True
+    elif raw_password and len(raw_password) < 6:
+        return error_response("Staff password must be at least 6 characters.", status_code=400)
+
+    permissions = (
+        custom_permissions
+        if isinstance(custom_permissions, dict)
+        else _default_permissions_for_role(role)
+    )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    business_name = actor.get("businessName") or "ExBOS Business"
+
+    user_fields = {
+        "email": member_email,
+        "fullName": full_name,
+        "businessName": business_name,
+        "ownerScopeKey": owner_scope,
+        "role": role,
+        "assignedBranchId": assigned_branch_id or None,
+        "permissions": permissions,
+        "architectureId": actor.get("architectureId") or "buy-and-sell",
+        "currency": actor.get("currency") or "RWF",
+        "plan": actor.get("plan") or actor.get("planTier") or "Free",
+        "planTier": actor.get("planTier") or actor.get("plan") or "Free",
+        "emailVerified": True,
+        "updated_at": now_iso,
+    }
+    if raw_password:
+        user_fields["password_hash"] = hash_password(raw_password)
+
+    if existing:
+        db.users.update_one({"email": member_email}, {"$set": user_fields})
+    else:
+        user_fields["created_at"] = now_iso
+        db.users.insert_one(user_fields)
+
+    login_link = f"{app_origin}/login?email={member_email}"
+    email_sent = False
+    try:
+        pwd_note = (
+            f"<p style='margin:10px 0;color:#e2e8f0;'><strong>Temporary Password:</strong> <code style='background:#071544;padding:3px 8px;border-radius:6px;color:#9EDCFF;'>{raw_password}</code></p>"
+            if raw_password
+            else "<p style='margin:10px 0;color:#cbd5e1;'>Use your existing ExBOS password to sign in.</p>"
+        )
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <body style="background:#03091F;color:#ffffff;font-family:sans-serif;padding:24px;">
+            <div style="max-width:560px;margin:0 auto;background:#0A2786;border:1px solid #218DFF;border-radius:16px;padding:26px;">
+                <div style="font-size:11px;font-weight:800;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;">
+                    EXCELLENCE BOS · TEAM INVITATION
+                </div>
+                <h2 style="color:#ffffff;margin-top:10px;">You've been invited to {business_name}</h2>
+                <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">
+                    Hello <strong>{full_name}</strong>,<br/>
+                    <strong>{actor.get('fullName') or owner_scope}</strong> has added you to the <strong>{business_name}</strong> workspace on ExBOS as <strong>{role}</strong>.
+                </p>
+                <div style="background:rgba(7,21,68,0.85);border:1px solid rgba(158,220,255,0.28);border-radius:12px;padding:14px;margin:16px 0;font-size:13px;">
+                    <div><strong style="color:#9EDCFF;">Login Email:</strong> {member_email}</div>
+                    <div><strong style="color:#9EDCFF;">Assigned Role:</strong> {role}</div>
+                    {pwd_note}
+                </div>
+                <div style="text-align:center;margin-top:22px;">
+                    <a href="{login_link}" style="display:inline-block;padding:12px 24px;background:#218DFF;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;">
+                        Sign In to ExBOS &rarr;
+                    </a>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        email_sent = send_gmail_email(
+            to_email=member_email,
+            subject=f"You're invited to {business_name} on ExBOS ({role})",
+            html_body=html_body,
+            text_body=f"Hello {full_name}, you have been added to {business_name} on ExBOS as {role}. Sign in at: {login_link}",
+        )
+    except Exception as exc:
+        logger.warning("Failed to send team invite email to %s: %s", member_email, exc)
+
+    member_doc = db.users.find_one({"email": member_email})
+    member_payload = {
+        "id": str(member_doc.get("_id")) if member_doc else member_email,
+        "fullName": full_name,
+        "email": member_email,
+        "role": role,
+        "isOwner": False,
+        "assignedBranchId": assigned_branch_id or "",
+        "permissions": permissions,
+        "status": "Active",
+        "createdAt": member_doc.get("created_at") if member_doc else now_iso,
+    }
+    return success_response(
+        data={
+            "member": member_payload,
+            "loginLink": login_link,
+            "emailSent": bool(email_sent),
+            "generatedPassword": raw_password if generated_password else None,
+        },
+        message=f"Team account for {full_name} ({role}) is active."
+        + (" Invitation email sent." if email_sent else " Share the login link directly."),
+        status_code=201 if not existing else 200,
+    )
+
+
+@auth_bp.route("/team/<path:member_email>", methods=["DELETE"])
+def remove_team_member(member_email: str):
+    """Revoke and delete a team member account belonging to this tenant (owner-only)."""
+    db = get_db()
+    actor, owner_scope = _resolve_team_actor(db)
+    if not actor or not owner_scope:
+        return error_response("Authentication required.", status_code=401)
+
+    is_owner = (actor.get("email") or "").strip().lower() == owner_scope and not actor.get("ownerScopeKey")
+    if not is_owner:
+        return error_response("Only the Business Owner can remove team members.", status_code=403)
+
+    target_email = (member_email or "").strip().lower()
+    if not target_email or target_email == owner_scope:
+        return error_response("Cannot remove the Business Owner account here.", status_code=400)
+
+    res = db.users.delete_one({"email": target_email, "ownerScopeKey": owner_scope})
+    if res.deleted_count == 0:
+        return error_response("Team member not found in your organization.", status_code=404)
+
+    return success_response(message=f"Access revoked for {target_email}.")
+
+

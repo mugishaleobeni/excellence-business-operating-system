@@ -141,7 +141,7 @@ export default function ProductionWorkspace({
   // --- Start a Batch ---
   const handleStartBatch = () => {
     if (hasShortages) {
-      alert('Cannot start batch: some raw materials are missing or short in stock.')
+      addToast?.({ type: 'warning', title: 'Material Shortage', message: 'Cannot start batch: some raw materials are missing or short in stock.' })
       return
     }
 
@@ -321,7 +321,7 @@ export default function ProductionWorkspace({
   // --- Save New Recipe ---
   const handleSaveRecipe = () => {
     if (!recipeName.trim()) {
-      alert('Please enter a recipe name.')
+      addToast?.({ type: 'warning', title: 'Missing Recipe Name', message: 'Please enter a recipe name.' })
       return
     }
 

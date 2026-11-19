@@ -83,13 +83,17 @@ def get_storage_snapshot():
         businesses.append(clean_biz)
 
     # 4. Load active user snapshot and platform configurations
+    # Tenant-scoped configs (saved_analyses, integrations, export_history) are isolated per scope_key
+    # so one business's Gmail/Drive/Export history never leaks to another business.
     active_user = _get_config_val(db, "active_user_snapshot", None)
     pricing_plans = _get_config_val(db, "pricing_plans", DEFAULT_PRICING_PLANS)
     platinum_program = _get_config_val(db, "platinum_program", DEFAULT_PLATINUM_PROGRAM)
     super_admin_broadcast = _get_config_val(db, "super_admin_broadcast", None)
-    saved_analyses = _get_config_val(db, "saved_analyses", [])
-    integrations = _get_config_val(db, "integrations", DEFAULT_INTEGRATIONS)
-    export_history = _get_config_val(db, "export_history", [])
+
+    scoped_suffix = f":{scope_key}" if scope_key and scope_key != "default" else ""
+    saved_analyses = _get_config_val(db, f"saved_analyses{scoped_suffix}", [])
+    integrations = _get_config_val(db, f"integrations{scoped_suffix}", DEFAULT_INTEGRATIONS)
+    export_history = _get_config_val(db, f"export_history{scoped_suffix}", [])
 
     snapshot = {
         "workspaces": workspaces_map,
@@ -224,12 +228,13 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
         _set_config_val(
             db, "super_admin_broadcast", validated_data.superAdminBroadcast, now_iso
         )
+    scoped_suffix = f":{scope_key}" if scope_key and scope_key != "default" else ""
     if validated_data.savedAnalyses is not None:
-        _set_config_val(db, "saved_analyses", validated_data.savedAnalyses, now_iso)
+        _set_config_val(db, f"saved_analyses{scoped_suffix}", validated_data.savedAnalyses, now_iso)
     if validated_data.integrations is not None:
-        _set_config_val(db, "integrations", validated_data.integrations, now_iso)
+        _set_config_val(db, f"integrations{scoped_suffix}", validated_data.integrations, now_iso)
     if validated_data.exportHistory is not None:
-        _set_config_val(db, "export_history", validated_data.exportHistory, now_iso)
+        _set_config_val(db, f"export_history{scoped_suffix}", validated_data.exportHistory, now_iso)
 
     return jsonify({"success": True, "timestamp": now_ms}), 200
 

@@ -164,20 +164,46 @@ export const exbosApi = {
     apiRequest(withScope(`/transactions/${txId}`), { method: 'DELETE' }),
   saveAnalysis: (payload) =>
     apiRequest('/tools/analyses', { method: 'POST', body: payload }),
-  getIntegrationsStatus: () => apiRequest('/integrations/status'),
+  getIntegrationsStatus: () => apiRequest(withScope('/integrations/status')),
   testGmailConnection: (payload) =>
-    apiRequest('/integrations/gmail/test', { method: 'POST', body: payload }),
+    apiRequest(withScope('/integrations/gmail/test'), { method: 'POST', body: payload }),
   sendReportEmail: (payload) =>
-    apiRequest('/integrations/gmail/send-report', { method: 'POST', body: payload }),
-  getGoogleDriveAuthUrl: () => apiRequest('/integrations/google-drive/auth-url'),
-  exchangeGoogleDriveCode: (payload) =>
-    apiRequest('/integrations/google-drive/oauth-callback', { method: 'POST', body: payload }),
+    apiRequest(withScope('/integrations/gmail/send-report'), { method: 'POST', body: payload }),
+  getGoogleDriveAuthUrl: (redirectUri = '') => {
+    const uri =
+      redirectUri ||
+      (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '')
+    const qs = uri ? `?redirectUri=${encodeURIComponent(uri)}` : ''
+    return apiRequest(withScope(`/integrations/google-drive/auth-url${qs}`))
+  },
+  exchangeGoogleDriveCode: (payload) => {
+    const uri =
+      payload?.redirectUri ||
+      (typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : '')
+    return apiRequest(withScope('/integrations/google-drive/oauth-callback'), {
+      method: 'POST',
+      body: { ...payload, redirectUri: uri }
+    })
+  },
   exportReportToGoogleDrive: (payload) =>
-    apiRequest('/integrations/google-drive/export-report', { method: 'POST', body: payload }),
+    apiRequest(withScope('/integrations/google-drive/export-report'), { method: 'POST', body: payload }),
   disconnectGoogleDrive: () =>
-    apiRequest('/integrations/google-drive/disconnect', { method: 'POST' }),
+    apiRequest(withScope('/integrations/google-drive/disconnect'), { method: 'POST' }),
   disconnectGmail: () =>
-    apiRequest('/integrations/gmail/disconnect', { method: 'POST' }),
+    apiRequest(withScope('/integrations/gmail/disconnect'), { method: 'POST' }),
+  getTeamMembers: () => apiRequest(withScope('/auth/team')),
+  inviteTeamMember: (payload = {}) =>
+    apiRequest(withScope('/auth/team/invite'), {
+      method: 'POST',
+      body: {
+        ...payload,
+        appOrigin: typeof window !== 'undefined' ? window.location.origin : 'https://exbos.pages.dev'
+      }
+    }),
+  removeTeamMember: (email) =>
+    apiRequest(withScope(`/auth/team/${encodeURIComponent(email)}`), { method: 'DELETE' }),
+  getPublicDocument: (docId) =>
+    apiRequest(`/workspaces/public-document/${encodeURIComponent(docId)}`),
   whatsappStatus: () => apiRequest(withScope('/whatsapp/status')),
   whatsappConnect: (payload = {}) =>
     apiRequest(withScope('/whatsapp/connect'), { method: 'POST', body: payload }),

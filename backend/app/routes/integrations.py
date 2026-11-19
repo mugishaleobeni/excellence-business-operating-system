@@ -52,12 +52,12 @@ def _resolve_user_email(req_data: dict | None = None) -> tuple[str, str]:
         if raw_q and "@" in raw_q:
             email = raw_q.strip().lower()
 
-    # 4. Lookup in DB
+    # 4. Lookup in DB — if an explicit email/scopeKey was provided, NEVER fall back to another user
     if email:
         user_doc = db.users.find_one({"email": email})
         if user_doc:
             name = user_doc.get("businessName") or user_doc.get("fullName") or name
-            return email, name
+        return email, name
 
     # 5. Fallback to latest registered user in MongoDB
     latest_user = db.users.find_one({}, sort=[("created_at", -1)])
@@ -69,21 +69,85 @@ def _resolve_user_email(req_data: dict | None = None) -> tuple[str, str]:
     return email or "mugishaleobeni0@gmail.com", name
 
 
+def _scoped_config_key(base_key: str, scope_key: str) -> str:
+    clean_scope = (scope_key or "").strip().lower()
+    if clean_scope and clean_scope != "default":
+        return f"{base_key}:{clean_scope}"
+    return base_key
+
+
+def _get_scoped_integrations(db, scope_key: str) -> dict:
+    key = _scoped_config_key("integrations", scope_key)
+    cfg = db.platform_config.find_one({"key": key})
+    return cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+
+
+def _save_scoped_integrations(db, scope_key: str, integrations: dict, now_iso: str) -> None:
+    key = _scoped_config_key("integrations", scope_key)
+    db.platform_config.update_one(
+        {"key": key},
+        {"$set": {"key": key, "scopeKey": scope_key, "value": integrations, "updated_at": now_iso}},
+        upsert=True,
+    )
+
+
+def _resolve_google_redirect_uri(req_data: dict | None = None) -> str:
+    """
+    Resolve Google OAuth redirect URI dynamically from request (query/body)
+    so both production (https://exbos.pages.dev) and local dev (http://localhost:5173)
+    work seamlessly, while restricting to trusted ExBOS origins.
+    """
+    from flask import current_app
+    from urllib.parse import urlparse
+
+    fallback = (current_app.config.get("GOOGLE_REDIRECT_URI") or "https://exbos.pages.dev/dashboard").strip()
+    candidate = ""
+    if req_data and isinstance(req_data, dict):
+        candidate = (req_data.get("redirectUri") or "").strip()
+    if not candidate:
+        candidate = (request.args.get("redirectUri") or "").strip()
+
+    if not candidate:
+        return fallback
+
+    try:
+        parsed = urlparse(candidate)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return fallback
+        host = (parsed.hostname or "").lower()
+        allowed_hosts = {"localhost", "127.0.0.1", "exbos.pages.dev", "exbos.rw", "www.exbos.rw"}
+        cors_origins = current_app.config.get("CORS_ORIGINS") or []
+        if isinstance(cors_origins, str):
+            cors_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+        for origin in cors_origins:
+            try:
+                oh = (urlparse(origin).hostname or "").lower()
+                if oh:
+                    allowed_hosts.add(oh)
+            except Exception:
+                pass
+        if host in allowed_hosts or host.endswith(".exbos.pages.dev"):
+            return candidate
+    except Exception:
+        pass
+    return fallback
+
+
 def _append_export_history(db, scope_key: str, entry: dict):
-    """Persist an export record in MongoDB platform_config / export_history."""
+    """Persist an export record in MongoDB platform_config / export_history scoped per tenant."""
     now_iso = datetime.now(timezone.utc).isoformat()
     entry["id"] = int(datetime.now(timezone.utc).timestamp() * 1000)
     entry["timestamp"] = datetime.now(timezone.utc).strftime("%b %d, %H:%M UTC")
 
-    # Update platform_config export_history
-    doc = db.platform_config.find_one({"key": "export_history"})
+    key = _scoped_config_key("export_history", scope_key)
+    doc = db.platform_config.find_one({"key": key})
     hist = doc.get("value", []) if doc and isinstance(doc.get("value"), list) else []
     hist.insert(0, entry)
     # keep last 50 entries
     hist = hist[:50]
     db.platform_config.update_one(
-        {"key": "export_history"},
-        {"$set": {"key": "export_history", "value": hist, "scopeKey": scope_key, "updated_at": now_iso}},
+        {"key": key},
+        {"$set": {"key": key, "value": hist, "scopeKey": scope_key, "updated_at": now_iso}},
         upsert=True
     )
 
@@ -193,9 +257,8 @@ def get_integrations_status():
     db = get_db()
     user_email, business_name = _resolve_user_email()
 
-    # Load integrations from platform_config
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    # Load tenant-scoped integrations from platform_config
+    integrations = _get_scoped_integrations(db, user_email)
 
     gmail_info = integrations.get("gmail", {
         "id": "gmail",
@@ -297,9 +360,8 @@ def test_gmail_connection():
             status_code=502
         )
 
-    # Update MongoDB platform_config integrations
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    # Update tenant-scoped MongoDB platform_config integrations
+    integrations = _get_scoped_integrations(db, user_email)
     gmail_meta = integrations.get("gmail", {})
     gmail_meta["connected"] = True
     gmail_meta["email"] = target_email
@@ -307,14 +369,10 @@ def test_gmail_connection():
     gmail_meta["sentCount"] = int(gmail_meta.get("sentCount", 0)) + 1
     integrations["gmail"] = gmail_meta
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     # Record in export history
-    _append_export_history(db, target_email, {
+    _append_export_history(db, user_email, {
         "report": "Gmail Live Verification Handshake",
         "destination": f"Gmail ({target_email})",
         "status": "Delivered / Verified"
@@ -415,9 +473,8 @@ def send_report_via_gmail():
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Update MongoDB platform_config integrations
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    # Update tenant-scoped MongoDB platform_config integrations
+    integrations = _get_scoped_integrations(db, user_email)
     gmail_meta = integrations.get("gmail", {})
     gmail_meta["connected"] = True
     gmail_meta["email"] = recipient
@@ -425,14 +482,10 @@ def send_report_via_gmail():
     gmail_meta["sentCount"] = int(gmail_meta.get("sentCount", 0)) + 1
     integrations["gmail"] = gmail_meta
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     # Record in export history
-    _append_export_history(db, recipient, {
+    _append_export_history(db, user_email, {
         "report": f"{report_title} ({report_format})",
         "destination": f"Gmail ({recipient})",
         "status": "Sent / Delivered"
@@ -457,7 +510,7 @@ def get_google_drive_auth_url():
     import urllib.parse
 
     client_id = current_app.config.get("GOOGLE_CLIENT_ID", "").strip()
-    redirect_uri = current_app.config.get("GOOGLE_REDIRECT_URI", "").strip()
+    redirect_uri = _resolve_google_redirect_uri()
 
     if not client_id:
         return error_response(
@@ -502,7 +555,7 @@ def handle_google_drive_oauth_callback():
 
     client_id = current_app.config.get("GOOGLE_CLIENT_ID", "").strip()
     client_secret = current_app.config.get("GOOGLE_CLIENT_SECRET", "").strip()
-    redirect_uri = current_app.config.get("GOOGLE_REDIRECT_URI", "").strip()
+    redirect_uri = _resolve_google_redirect_uri(payload)
 
     # 1. Exchange code with Google OAuth endpoint
     try:
@@ -564,9 +617,8 @@ def handle_google_drive_oauth_callback():
         upsert=True,
     )
 
-    # 4. Update integrations in platform_config
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    # 4. Update tenant-scoped integrations in platform_config
+    integrations = _get_scoped_integrations(db, user_email)
     drive_meta = integrations.get("googleDrive", {})
     drive_meta["connected"] = True
     drive_meta["account"] = verified_email
@@ -574,14 +626,10 @@ def handle_google_drive_oauth_callback():
     drive_meta["lastSyncAt"] = now_iso
     integrations["googleDrive"] = drive_meta
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True,
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     # 5. Append to export history
-    _append_export_history(db, verified_email, {
+    _append_export_history(db, user_email, {
         "report": "Google Drive Vault Authorized via Google Cloud OAuth",
         "destination": f"Google Drive ({verified_email})",
         "status": "OAuth Active"
@@ -610,8 +658,7 @@ def connect_google_drive():
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    integrations = _get_scoped_integrations(db, user_email)
 
     drive_meta = integrations.get("googleDrive", {})
     drive_meta["connected"] = True
@@ -620,14 +667,10 @@ def connect_google_drive():
     drive_meta["lastSyncAt"] = now_iso
     integrations["googleDrive"] = drive_meta
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     # Add export history note
-    _append_export_history(db, account_email, {
+    _append_export_history(db, user_email, {
         "report": f"Google Drive Vault Connected: {folder_name}",
         "destination": f"Google Drive ({folder_name})",
         "status": "Vault Active"
@@ -664,15 +707,14 @@ def export_report_to_google_drive():
     drive_link = f"https://drive.google.com/drive/u/0/search?q={encoded_search}"
 
     # Record in export history in MongoDB
-    _append_export_history(db, account_email, {
+    _append_export_history(db, user_email, {
         "report": f"{report_title} ({report_format})",
         "destination": f"Google Drive ({folder_name})",
         "status": "Synchronized to Drive Vault"
     })
 
-    # Update Google Drive lastSyncAt in MongoDB
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    # Update Google Drive lastSyncAt in MongoDB (tenant-scoped)
+    integrations = _get_scoped_integrations(db, user_email)
     drive_meta = integrations.get("googleDrive", {})
     drive_meta["connected"] = True
     drive_meta["account"] = account_email
@@ -680,11 +722,7 @@ def export_report_to_google_drive():
     drive_meta["lastSyncAt"] = now_iso
     integrations["googleDrive"] = drive_meta
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     # Deliver a backup synchronization notification to user's real email
     try:
@@ -741,19 +779,16 @@ def export_report_to_google_drive():
 def disconnect_google_drive():
     """Revoke Google Drive vault connection in MongoDB."""
     db = get_db()
+    payload = request.get_json(silent=True) or {}
+    user_email, _ = _resolve_user_email(payload)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    integrations = _get_scoped_integrations(db, user_email)
     if "googleDrive" in integrations:
         integrations["googleDrive"]["connected"] = False
         integrations["googleDrive"]["lastSyncAt"] = now_iso
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     return success_response(message="Google Drive vault access disconnected.")
 
@@ -762,18 +797,15 @@ def disconnect_google_drive():
 def disconnect_gmail():
     """Disconnect Gmail integration in MongoDB."""
     db = get_db()
+    payload = request.get_json(silent=True) or {}
+    user_email, _ = _resolve_user_email(payload)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    cfg = db.platform_config.find_one({"key": "integrations"})
-    integrations = cfg.get("value", {}) if cfg and isinstance(cfg.get("value"), dict) else {}
+    integrations = _get_scoped_integrations(db, user_email)
     if "gmail" in integrations:
         integrations["gmail"]["connected"] = False
 
-    db.platform_config.update_one(
-        {"key": "integrations"},
-        {"$set": {"key": "integrations", "value": integrations, "updated_at": now_iso}},
-        upsert=True
-    )
+    _save_scoped_integrations(db, user_email, integrations, now_iso)
 
     return success_response(message="Gmail integration disconnected.")
 

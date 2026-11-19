@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, lazy } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from '../../utils/currencyWords'
@@ -73,11 +73,11 @@ import GenericRecordModal from "./modals/GenericRecordModal"
 import CategoryModal from "./modals/CategoryModal"
 import PayPurchaseModal from "./modals/PayPurchaseModal"
 import ModuleKpiCards, { ModuleKpiCards as NamedModuleKpiCards } from "./cards/ModuleKpiCards"
-import MakeSellWorkspace from "./make-and-sell/MakeSellWorkspace"
-import ServicesWorkspace from "./services/ServicesWorkspace"
-import AgricultureWorkspace from "./agriculture/AgricultureWorkspace"
-import FoodHospitalityWorkspace from "./food-hospitality/FoodHospitalityWorkspace"
-import HybridWorkspace from "./hybrid/HybridWorkspace"
+const MakeSellWorkspace = lazy(() => import("./make-and-sell/MakeSellWorkspace"))
+const ServicesWorkspace = lazy(() => import("./services/ServicesWorkspace"))
+const AgricultureWorkspace = lazy(() => import("./agriculture/AgricultureWorkspace"))
+const FoodHospitalityWorkspace = lazy(() => import("./food-hospitality/FoodHospitalityWorkspace"))
+const HybridWorkspace = lazy(() => import("./hybrid/HybridWorkspace"))
 import AlertsAndDeadStockView from "./views/AlertsAndDeadStockView"
 import TeamPermissionsView from "./settings/TeamPermissionsView"
 import SubscriptionBillingView from "./settings/SubscriptionBillingView"

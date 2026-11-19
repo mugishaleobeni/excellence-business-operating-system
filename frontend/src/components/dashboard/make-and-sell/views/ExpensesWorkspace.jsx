@@ -124,7 +124,7 @@ export default function ExpensesWorkspace({
   const handleSaveExpense = (keepOpen = false) => {
     const amt = Number(expAmount) || 0
     if (amt <= 0) {
-      alert('Please enter an expense amount.')
+      addToast?.({ type: 'warning', title: 'Missing Amount', message: 'Please enter an expense amount greater than 0.' })
       return
     }
 

@@ -139,7 +139,7 @@ export default function DocumentsAndSharingPanel({
       status: 'Opened Externally',
       date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
       timestamp: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      link: `https://exbos.rw/d/sec-${invoiceId.toLowerCase()}`
+      link: `${typeof window !== 'undefined' && window.location?.origin ? window.location.origin : 'https://exbos.pages.dev'}/d/${encodeURIComponent(invoiceId)}`
     }
     if (updateDemoWorkspace) {
       updateDemoWorkspace(activeArchId, {

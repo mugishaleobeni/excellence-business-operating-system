@@ -164,7 +164,7 @@ export default function SalesWorkspace({
   // Submit Sale (FEFO Lot Deduction & Balance Tracking)
   const handleSaveSale = (keepOpen = false) => {
     if (!selectedProduct) {
-      alert('Please select a finished product.')
+      addToast?.({ type: 'warning', title: 'No Product Selected', message: 'Please select a finished product before recording a sale.' })
       return
     }
 

@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Sliders, Plus } from 'lucide-react'
+import React, { useState, useMemo } from 'react'
+import { Sliders, Plus, Rocket, Package, ShoppingBag, Users, X, ArrowRight } from 'lucide-react'
 import { DASHBOARD_QUICK_ACTIONS } from '../data/dashboardConstants'
 import IndustryStatusBanner from './IndustryStatusBanner'
 import OverviewMetricsGrid from './OverviewMetricsGrid'
@@ -39,7 +39,26 @@ export default function OverviewDashboardView({
 }) {
   const [addCardModalOpen, setAddCardModalOpen] = useState(false)
   const [workflowModalOpen, setWorkflowModalOpen] = useState(false)
-  const { activeBranch } = useExbos()
+  const [quickStartDismissed, setQuickStartDismissed] = useState(false)
+  const { activeBranch, demoWorkspaces } = useExbos()
+
+  const showQuickStart = useMemo(() => {
+    if (quickStartDismissed) return false
+    const ws = demoWorkspaces?.[activeArchId] || {}
+    const recs = ws.records || {}
+    const hasSales =
+      (Array.isArray(recs.Sales) && recs.Sales.length > 0) ||
+      (Array.isArray(archTransactions) && archTransactions.length > 0) ||
+      Number(ws.todaySalesRWF || 0) > 0
+    const hasCatalog =
+      (Array.isArray(recs.Products) && recs.Products.length > 0) ||
+      (Array.isArray(recs.FinishedGoods) && recs.FinishedGoods.length > 0) ||
+      (Array.isArray(recs.MenuItems) && recs.MenuItems.length > 0) ||
+      (Array.isArray(recs.Services) && recs.Services.length > 0) ||
+      (Array.isArray(recs.Crops) && recs.Crops.length > 0) ||
+      (Array.isArray(recs.Livestock) && recs.Livestock.length > 0)
+    return !hasSales && !hasCatalog
+  }, [quickStartDismissed, demoWorkspaces, activeArchId, archTransactions])
 
   const quickActions =
     DASHBOARD_QUICK_ACTIONS[activeArchId] ||
@@ -114,6 +133,94 @@ export default function OverviewDashboardView({
           ))}
         </div>
       </div>
+
+      {/* First-Time 3-Step Quick Start Card (only shown when workspace has 0 sales & 0 products/services) */}
+      {showQuickStart && (
+        <div className="exbos-glass-card p-5 rounded-2xl border border-[#218DFF]/40 bg-gradient-to-r from-[#0A2786]/70 via-[#071544]/80 to-[#0A2786]/50 relative">
+          <button
+            type="button"
+            onClick={() => setQuickStartDismissed(true)}
+            className="absolute top-3.5 right-3.5 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition cursor-pointer"
+            title="Dismiss Quick Start"
+          >
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2 text-xs font-orbitron font-bold uppercase tracking-wider text-[#9EDCFF] mb-1">
+            <Rocket className="w-4 h-4 text-[#218DFF]" />
+            <span>Quick Start · Launch Your Workspace in 3 Steps</span>
+          </div>
+          <p className="text-xs text-slate-300 mb-4 pr-8">
+            Your workspace starts clean at 0 RWF. Complete these three steps to see live profit, stock, and cash-flow analytics.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const target = quickActions[1] || quickActions[0]
+                if (navigateToModulePage && target) {
+                  navigateToModulePage(target.module, target.page, { action: 'create' })
+                } else {
+                  handleModuleClick('Inventory')
+                }
+              }}
+              className="text-left p-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#218DFF]/50 transition group cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#9EDCFF]">
+                  <Package className="w-3.5 h-3.5" /> Step 1
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition" />
+              </div>
+              <div className="text-xs font-bold text-white">Add Your First Product / Item</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Set cost, selling price, and opening stock.</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const target = quickActions[0]
+                if (navigateToModulePage && target) {
+                  navigateToModulePage(target.module, target.page, { action: 'create' })
+                } else {
+                  handleModuleClick('Sales')
+                }
+              }}
+              className="text-left p-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#218DFF]/50 transition group cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-300">
+                  <ShoppingBag className="w-3.5 h-3.5" /> Step 2
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition" />
+              </div>
+              <div className="text-xs font-bold text-white">Record Your First Sale</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Stock deducts and cash-flow updates live.</div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (navigateToModulePage) {
+                  navigateToModulePage('Settings', 'Team & Permissions')
+                } else {
+                  handleModuleClick('Settings')
+                  setActivePage('Team & Permissions')
+                }
+              }}
+              className="text-left p-3.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#218DFF]/50 transition group cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-300">
+                  <Users className="w-3.5 h-3.5" /> Step 3
+                </span>
+                <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition" />
+              </div>
+              <div className="text-xs font-bold text-white">Invite Staff or Connect WhatsApp</div>
+              <div className="text-[11px] text-slate-400 mt-0.5">Give cashiers &amp; managers their own logins.</div>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Agriculture & Livestock Real-Time Status Bar */}
       <IndustryStatusBanner

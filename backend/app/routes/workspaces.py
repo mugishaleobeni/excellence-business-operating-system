@@ -1194,3 +1194,69 @@ def get_qrcode_image():
         )
 
 
+@workspaces_bp.route("/public-document/<path:doc_id>", methods=["GET"])
+def get_public_document(doc_id: str):
+    """
+    Public, read-only lookup for shared invoices, receipts, quotations, and purchase orders.
+    Powers /d/<doc_id> links sent to customers via WhatsApp or Email.
+    Never exposes private business credentials or internal ledgers.
+    """
+    db = get_db()
+    clean_id = (doc_id or "").strip()
+    if not clean_id:
+        return error_response("Document ID is required.", status_code=400)
+
+    found_doc = None
+    found_scope = ""
+
+    # 1. Fast lookup in db.module_records (bucket: Documents)
+    rec = db.module_records.find_one({"bucket": "Documents", "id": clean_id})
+    if rec:
+        found_scope = str(rec.get("scopeKey") or "").strip().lower()
+        found_doc = serialize_doc(rec)
+        found_doc.pop("_id", None)
+        found_doc.pop("scopeKey", None)
+
+    # 2. Fallback: scan db.workspaces records.Documents
+    if not found_doc:
+        ws_doc = db.workspaces.find_one({"records.Documents.id": clean_id})
+        if ws_doc:
+            found_scope = str(ws_doc.get("scopeKey") or "").strip().lower()
+            docs_list = (ws_doc.get("records") or {}).get("Documents") or []
+            for item in docs_list:
+                if str(item.get("id") or "").strip() == clean_id:
+                    found_doc = dict(item)
+                    break
+
+    if not found_doc:
+        return error_response("Document not found or link has expired.", status_code=404)
+
+    # Attach non-sensitive business branding from the owner's profile
+    business_info = {
+        "businessName": "ExBOS Verified Business",
+        "phone": "",
+        "address": "Kigali, Rwanda",
+        "email": "",
+        "currency": "RWF",
+    }
+    if found_scope:
+        owner = db.users.find_one({"email": found_scope})
+        if owner:
+            business_info = {
+                "businessName": owner.get("businessName") or owner.get("fullName") or business_info["businessName"],
+                "phone": owner.get("phone") or "",
+                "address": owner.get("address") or owner.get("location") or "Kigali, Rwanda",
+                "email": owner.get("email") or "",
+                "currency": owner.get("currency") or "RWF",
+            }
+
+    return success_response(
+        data={
+            "document": found_doc,
+            "business": business_info,
+        },
+        message="Public document loaded.",
+    )
+
+
+
