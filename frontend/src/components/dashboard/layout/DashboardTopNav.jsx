@@ -15,7 +15,8 @@ import {
   FileText,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
 import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
@@ -474,6 +475,22 @@ export default function DashboardTopNav({
               </div>
             )}
           </div>
+
+          {/* Super Admin Console Switcher (Visible ONLY to verified Super Admins) */}
+          {(user?.isSuperAdmin ||
+            String(user?.email || '').trim().toLowerCase() === 'mugishaleobeni0@gmail.com') && (
+            <button
+              type="button"
+              onClick={() => navigate('/super-admin')}
+              title="Open Platform Super Administrator Console"
+              className="w-7 h-7 sm:w-auto p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 active:scale-[0.98] text-amber-200 border border-amber-400/40 cursor-pointer flex items-center justify-center gap-1.5 transition-all shadow-sm"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+              <span className="hidden sm:inline text-xs font-bold">
+                Super Admin
+              </span>
+            </button>
+          )}
 
           {/* Compact Sign Out Button (Icon-only on mobile, full on desktop) */}
           <button

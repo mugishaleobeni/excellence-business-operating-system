@@ -285,10 +285,18 @@ export default function SuperAdminPage() {
         {/* Top Super Admin Header */}
         <div className="rounded-3xl p-6 sm:p-8 bg-gradient-to-r from-[#071544] via-[#0A2786] to-[#1045CA] text-white border border-[#9EDCFF]/45 shadow-sapphire-glow flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
-            <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/15 border border-[#9EDCFF]/40 text-xs font-orbitron text-[#9EDCFF]">
-              <ShieldCheck className="w-4 h-4 text-[#9EDCFF]" />
-              <span>SUPER ADMINISTRATOR · {currentUser?.email}</span>
-            </span>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/15 border border-[#9EDCFF]/40 text-xs font-orbitron text-[#9EDCFF]">
+                <ShieldCheck className="w-4 h-4 text-[#9EDCFF]" />
+                <span>SUPER ADMINISTRATOR · {currentUser?.email}</span>
+              </span>
+              <Link
+                to="/dashboard"
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-500/25 hover:bg-emerald-500/35 border border-emerald-300/50 text-xs font-bold text-emerald-100 no-underline transition"
+              >
+                <span>Manage My Business &rarr;</span>
+              </Link>
+            </div>
             <h1 className="font-orbitron text-2xl sm:text-3xl font-extrabold">
               Users, Access Control, Subscriptions &amp; Audit Console
             </h1>
