@@ -42,9 +42,26 @@ def _safe_jwt_email() -> str | None:
         return None
 
 
+def _is_super_admin_user(user_doc: dict | None) -> bool:
+    if not user_doc:
+        return False
+    if bool(user_doc.get("isSuperAdmin")):
+        return True
+    email = (user_doc.get("email") or "").strip().lower()
+    if not email:
+        return False
+    from flask import current_app
+    configured = current_app.config.get("SUPER_ADMIN_EMAILS") or ["mugishaleobeni0@gmail.com"]
+    return email in {str(e).strip().lower() for e in configured}
+
+
 def _strip_sensitive_user_fields(user_doc: dict) -> dict:
     clean = serialize_doc(user_doc)
     clean.pop("password_hash", None)
+    clean["isSuperAdmin"] = _is_super_admin_user(user_doc)
+    clean["accountStatus"] = clean.get("accountStatus") or "Active"
+    clean["billingType"] = clean.get("billingType") or "Free"
+    clean["subscriptionExpiry"] = clean.get("subscriptionExpiry") or ""
     return clean
 
 
@@ -424,6 +441,14 @@ def login_user(validated_data: LoginSchema):
             status_code=401,
         )
 
+    # Enforce Super Admin account suspension (defaults to Active for existing accounts)
+    if (user_doc.get("accountStatus") or "Active").strip().lower() == "suspended":
+        reason = user_doc.get("suspensionReason") or "Your account has been suspended by the platform administrator."
+        return error_response(
+            error=f"Account suspended: {reason}",
+            status_code=403,
+        )
+
     # 2-Step Email Verification on Login (when enabled in user settings)
     if bool(user_doc.get("twoFactorEnabled")):
         otp_code = (validated_data.otpCode or "").strip()
@@ -563,6 +588,9 @@ def get_current_user():
     if identity:
         user_doc = db.users.find_one({"email": identity})
         if user_doc:
+            if (user_doc.get("accountStatus") or "Active").strip().lower() == "suspended":
+                reason = user_doc.get("suspensionReason") or "Account suspended by platform administrator."
+                return error_response(error=f"Account suspended: {reason}", status_code=403)
             return success_response(data={"user": _strip_sensitive_user_fields(user_doc)})
 
     return success_response(data={"user": None})

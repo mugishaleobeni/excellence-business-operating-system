@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
-from flask import Blueprint, request
-from flask_jwt_extended import jwt_required
+from functools import wraps
+import logging
+from flask import Blueprint, current_app, g, request
+from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.schemas.admin_schemas import (
     BroadcastSchema,
@@ -9,19 +11,488 @@ from app.schemas.admin_schemas import (
     SubscriptionUpdateSchema,
 )
 from app.seed_defaults import (
-    DEFAULT_BUSINESSES,
+    ARCHITECTURE_IDS,
     DEFAULT_PLATINUM_PROGRAM,
     DEFAULT_PRICING_PLANS,
 )
+from app.utils.mailer import send_gmail_email
 from app.utils.responses import error_response, success_response, validate_json
+
+logger = logging.getLogger("app.super_admin")
 
 super_admin_bp = Blueprint(
     "super_admin", __name__, url_prefix="/api/v1/super-admin"
 )
 
 
+def _is_super_admin_doc(user_doc: dict | None, email: str = "") -> bool:
+    clean_email = (email or (user_doc or {}).get("email") or "").strip().lower()
+    if user_doc and bool(user_doc.get("isSuperAdmin")):
+        return True
+    configured = current_app.config.get("SUPER_ADMIN_EMAILS") or [
+        "mugishaleobeni0@gmail.com"
+    ]
+    return clean_email in {str(e).strip().lower() for e in configured}
+
+
+def require_super_admin(fn):
+    """
+    Strictly verifies that the caller holds a valid JWT for an active Super Admin account
+    (either user.isSuperAdmin == True in db.users or email in SUPER_ADMIN_EMAILS).
+    """
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            verify_jwt_in_request()
+            identity = get_jwt_identity()
+        except Exception:
+            return error_response(
+                "Super Administrator authentication required.", status_code=401
+            )
+
+        email = str(identity or "").strip().lower()
+        if not email:
+            return error_response(
+                "Super Administrator authentication required.", status_code=401
+            )
+
+        db = get_db()
+        actor = db.users.find_one({"email": email})
+        if actor and (actor.get("accountStatus") or "Active").strip().lower() == "suspended":
+            return error_response("Account is suspended.", status_code=403)
+
+        if not _is_super_admin_doc(actor, email):
+            return error_response(
+                "Forbidden: Platform Super Administrator privileges required.",
+                status_code=403,
+            )
+
+        g.super_admin_email = email
+        g.super_admin_user = actor
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
+def _record_audit_log(
+    db,
+    actor_email: str,
+    target_email: str,
+    action: str,
+    details: dict,
+    reason: str = "",
+) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    entry = {
+        "id": f"AUD-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
+        "actorEmail": actor_email,
+        "targetEmail": target_email,
+        "action": action,
+        "details": details or {},
+        "reason": reason or "",
+        "createdAt": now_iso,
+    }
+    db.super_admin_audit_logs.insert_one(dict(entry))
+    return entry
+
+
+def _resolve_plan_price_rwf(db, plan_name: str) -> float:
+    doc = db.platform_config.find_one({"key": "pricing_plans"})
+    plans = (
+        doc.get("value", [])
+        if doc and isinstance(doc.get("value"), list)
+        else DEFAULT_PRICING_PLANS
+    )
+    target = (plan_name or "Free").strip().lower()
+    for p in plans:
+        tier = str(p.get("tier") or p.get("name") or "").strip().lower()
+        if tier == target or target in tier:
+            return float(p.get("priceRWF") or p.get("monthlyPriceRWF") or 0)
+    fallback = {"free": 0.0, "bronze": 10000.0, "silver": 20000.0, "gold": 35000.0}
+    return fallback.get(target, 0.0)
+
+
+@super_admin_bp.route("/users", methods=["GET"])
+@require_super_admin
+def list_platform_users():
+    """
+    List all real registered users from db.users with live platform KPIs,
+    branch counts, staff counts, and MRR separation (Paid vs Complimentary).
+    """
+    db = get_db()
+    search = (request.args.get("search") or "").strip().lower()
+    plan_filter = (request.args.get("plan") or "").strip().lower()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    role_filter = (request.args.get("role") or "").strip().lower()
+
+    all_users = list(db.users.find({}).sort("created_at", -1))
+
+    # Pre-count branches and staff per owner scope for fast enrichment
+    staff_counts: dict[str, int] = {}
+    for u in all_users:
+        owner_key = (u.get("ownerScopeKey") or "").strip().lower()
+        if owner_key:
+            staff_counts[owner_key] = staff_counts.get(owner_key, 0) + 1
+
+    branch_counts: dict[str, int] = {}
+    try:
+        for b in db.branches.find({}, {"scopeKey": 1}):
+            sk = (b.get("scopeKey") or "").strip().lower()
+            if sk:
+                branch_counts[sk] = branch_counts.get(sk, 0) + 1
+    except Exception:
+        pass
+
+    enriched = []
+    total_businesses = 0
+    active_users = 0
+    suspended_users = 0
+    paid_count = 0
+    complimentary_count = 0
+    paid_mrr_rwf = 0.0
+
+    for u in all_users:
+        email = (u.get("email") or "").strip().lower()
+        is_staff = bool(u.get("ownerScopeKey"))
+        is_super = _is_super_admin_doc(u, email)
+        acct_status = u.get("accountStatus") or "Active"
+        plan = u.get("plan") or u.get("planTier") or "Free"
+        billing_type = u.get("billingType") or (
+            "Free" if str(plan).lower() == "free" else "Paid"
+        )
+        monthly_spend = float(u.get("monthlySpendRWF") or 0)
+        if not is_staff:
+            total_businesses += 1
+            if str(billing_type).lower() == "paid" and acct_status == "Active":
+                paid_count += 1
+                paid_mrr_rwf += monthly_spend
+            elif "complimentary" in str(billing_type).lower():
+                complimentary_count += 1
+
+        if acct_status.lower() == "suspended":
+            suspended_users += 1
+        else:
+            active_users += 1
+
+        row = {
+            "id": str(u.get("_id")),
+            "email": email,
+            "fullName": u.get("fullName") or u.get("name") or email,
+            "businessName": u.get("businessName") or "ExBOS Workspace",
+            "phone": u.get("phone") or "",
+            "architectureId": u.get("architectureId") or "buy-and-sell",
+            "role": "Super Admin"
+            if is_super
+            else (u.get("role") or ("Staff" if is_staff else "Owner")),
+            "isOwner": not is_staff,
+            "ownerScopeKey": u.get("ownerScopeKey") or "",
+            "isSuperAdmin": is_super,
+            "accountStatus": acct_status,
+            "suspensionReason": u.get("suspensionReason") or "",
+            "emailVerified": bool(u.get("emailVerified", True)),
+            "plan": plan,
+            "billingType": billing_type,
+            "subscriptionStatus": u.get("subscriptionStatus") or "Active",
+            "subscriptionExpiry": u.get("subscriptionExpiry") or "",
+            "monthlySpendRWF": monthly_spend,
+            "auditNote": u.get("auditNote") or "",
+            "staffCount": 0 if is_staff else staff_counts.get(email, 0),
+            "branchCount": 0 if is_staff else max(1, branch_counts.get(email, 1)),
+            "lastLoginAt": u.get("lastLoginAt") or "",
+            "createdAt": u.get("created_at") or "",
+        }
+
+        if search:
+            hay = f"{row['email']} {row['fullName']} {row['businessName']} {row['phone']} {row['architectureId']}".lower()
+            if search not in hay:
+                continue
+        if plan_filter and plan_filter != "all" and row["plan"].lower() != plan_filter:
+            continue
+        if (
+            status_filter
+            and status_filter != "all"
+            and row["accountStatus"].lower() != status_filter
+        ):
+            continue
+        if role_filter and role_filter != "all":
+            if role_filter == "owner" and not row["isOwner"]:
+                continue
+            if role_filter == "staff" and row["isOwner"]:
+                continue
+            if role_filter == "superadmin" and not row["isSuperAdmin"]:
+                continue
+
+        enriched.append(row)
+
+    return success_response(
+        data=enriched,
+        extra={
+            "meta": {
+                "totalUsers": len(all_users),
+                "totalBusinesses": total_businesses,
+                "activeUsers": active_users,
+                "suspendedUsers": suspended_users,
+                "paidCount": paid_count,
+                "complimentaryCount": complimentary_count,
+                "paidMrrRWF": paid_mrr_rwf,
+            }
+        },
+    )
+
+
+@super_admin_bp.route("/users/<path:target_email>/access", methods=["PATCH"])
+@require_super_admin
+def update_user_access(target_email: str):
+    """
+    Manage real user access: suspend/reactivate account, grant/revoke Super Admin,
+    manually verify email, or correct business architecture.
+    """
+    db = get_db()
+    email = (target_email or "").strip().lower()
+    actor_email = g.super_admin_email
+    payload = request.get_json(silent=True) or {}
+
+    user_doc = db.users.find_one({"email": email})
+    if not user_doc:
+        return error_response(f"User '{email}' not found.", status_code=404)
+
+    updates: dict = {}
+    actions: list[str] = []
+    reason = str(payload.get("reason") or payload.get("suspensionReason") or "").strip()
+
+    if "accountStatus" in payload and payload["accountStatus"] in ("Active", "Suspended"):
+        next_status = payload["accountStatus"]
+        if next_status == "Suspended" and email == actor_email:
+            return error_response(
+                "You cannot suspend your own Super Admin account.", status_code=400
+            )
+        updates["accountStatus"] = next_status
+        updates["suspensionReason"] = reason if next_status == "Suspended" else ""
+        actions.append(f"Account -> {next_status}")
+
+    if "isSuperAdmin" in payload:
+        next_super = bool(payload["isSuperAdmin"])
+        if not next_super and email == actor_email:
+            return error_response(
+                "You cannot revoke your own Super Admin privileges.", status_code=400
+            )
+        updates["isSuperAdmin"] = next_super
+        actions.append("Granted Super Admin" if next_super else "Revoked Super Admin")
+
+    if "emailVerified" in payload:
+        updates["emailVerified"] = bool(payload["emailVerified"])
+        actions.append(
+            "Email Verified" if updates["emailVerified"] else "Email Unverified"
+        )
+
+    if "architectureId" in payload and payload["architectureId"] in ARCHITECTURE_IDS:
+        updates["architectureId"] = payload["architectureId"]
+        actions.append(f"Architecture -> {payload['architectureId']}")
+
+    if not updates:
+        return error_response("No valid access fields supplied.", status_code=400)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    updates["updated_at"] = now_iso
+    if reason:
+        updates["auditNote"] = f"[Super Admin · {now_iso[:10]}] {reason}"
+
+    db.users.update_one({"_id": user_doc["_id"]}, {"$set": updates})
+
+    _record_audit_log(
+        db=db,
+        actor_email=actor_email,
+        target_email=email,
+        action=", ".join(actions),
+        details=updates,
+        reason=reason,
+    )
+
+    updated_doc = db.users.find_one({"_id": user_doc["_id"]})
+    clean = serialize_doc(updated_doc)
+    clean.pop("password_hash", None)
+    clean["isSuperAdmin"] = _is_super_admin_doc(updated_doc, email)
+    return success_response(
+        data=clean,
+        message=f"Updated access for {email}: {', '.join(actions)}.",
+    )
+
+
+@super_admin_bp.route("/users/<path:target_email>/subscription", methods=["PATCH"])
+@require_super_admin
+def update_user_subscription(target_email: str):
+    """
+    Assign or grant a subscription plan (Free, Bronze, Silver, Gold) and billing type
+    (Paid vs Complimentary vs Trial) to a real user/business.
+    - Strictly enforces monthlySpendRWF = 0 for Complimentary/Free grants so Paid MRR is never inflated.
+    - Syncs db.users (owner + linked staff) AND db.businesses.
+    - Records an immutable entry in db.super_admin_audit_logs.
+    """
+    db = get_db()
+    email = (target_email or "").strip().lower()
+    actor_email = g.super_admin_email
+    payload = request.get_json(silent=True) or {}
+
+    user_doc = db.users.find_one({"email": email})
+    if not user_doc:
+        return error_response(f"User '{email}' not found.", status_code=404)
+
+    plan = str(payload.get("plan") or user_doc.get("plan") or "Free").strip()
+    billing_type = str(
+        payload.get("billingType") or user_doc.get("billingType") or "Free"
+    ).strip()
+    expiry_date = str(
+        payload.get("subscriptionExpiry")
+        or payload.get("expiryDate")
+        or user_doc.get("subscriptionExpiry")
+        or ""
+    ).strip()
+    reason = str(payload.get("reason") or payload.get("auditReason") or "").strip()
+    sub_status = str(
+        payload.get("subscriptionStatus")
+        or (
+            "Trial"
+            if "trial" in billing_type.lower()
+            else ("Active")
+        )
+    ).strip()
+    notify_user = bool(payload.get("notifyUser", False))
+
+    if not reason:
+        return error_response(
+            "A mandatory audit reason is required when modifying subscriptions.",
+            status_code=400,
+        )
+
+    # Section 8.2: Strictly separate Paid MRR from Complimentary/Free grants
+    is_comp_or_free = (
+        "complimentary" in billing_type.lower()
+        or billing_type.lower() == "free"
+        or plan.lower() == "free"
+    )
+    if is_comp_or_free:
+        monthly_spend = 0.0
+    else:
+        raw_spend = payload.get("monthlySpendRWF")
+        monthly_spend = (
+            float(raw_spend)
+            if raw_spend is not None and raw_spend != ""
+            else _resolve_plan_price_rwf(db, plan)
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    audit_note = f"[Super Admin · {now_iso[:10]} · {actor_email}] {reason}"
+
+    user_updates = {
+        "plan": plan,
+        "planTier": plan,
+        "billingType": billing_type,
+        "subscriptionStatus": sub_status,
+        "subscriptionExpiry": expiry_date,
+        "monthlySpendRWF": monthly_spend,
+        "auditNote": audit_note,
+        "updated_at": now_iso,
+    }
+    db.users.update_one({"_id": user_doc["_id"]}, {"$set": user_updates})
+
+    # Propagate plan tier to all staff accounts belonging to this business owner
+    if not user_doc.get("ownerScopeKey"):
+        db.users.update_many(
+            {"ownerScopeKey": email},
+            {
+                "$set": {
+                    "plan": plan,
+                    "planTier": plan,
+                    "billingType": billing_type,
+                    "subscriptionExpiry": expiry_date,
+                    "updated_at": now_iso,
+                }
+            },
+        )
+
+    # Sync matching db.businesses record (create if missing)
+    biz_updates = {
+        "name": user_doc.get("businessName") or user_doc.get("fullName") or email,
+        "owner": user_doc.get("fullName") or email,
+        "email": email,
+        "architectureId": user_doc.get("architectureId") or "buy-and-sell",
+        "plan": plan,
+        "billingType": billing_type,
+        "status": sub_status,
+        "mrrRWF": monthly_spend,
+        "monthlySpendRWF": monthly_spend,
+        "expiryDate": expiry_date,
+        "auditNote": audit_note,
+        "updated_at": now_iso,
+    }
+    existing_biz = db.businesses.find_one({"email": email})
+    if existing_biz:
+        db.businesses.update_one({"_id": existing_biz["_id"]}, {"$set": biz_updates})
+    else:
+        biz_updates["id"] = f"BIZ-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+        biz_updates["created_at"] = now_iso
+        db.businesses.insert_one(biz_updates)
+
+    _record_audit_log(
+        db=db,
+        actor_email=actor_email,
+        target_email=email,
+        action=f"Subscription -> {plan} ({billing_type})",
+        details={
+            "plan": plan,
+            "billingType": billing_type,
+            "monthlySpendRWF": monthly_spend,
+            "subscriptionExpiry": expiry_date,
+            "subscriptionStatus": sub_status,
+        },
+        reason=reason,
+    )
+
+    if notify_user:
+        try:
+            biz_name = user_doc.get("businessName") or "your ExBOS workspace"
+            send_gmail_email(
+                to_email=email,
+                subject=f"[ExBOS] Subscription Updated: {plan} ({billing_type})",
+                html_body=(
+                    f"<div style='font-family:sans-serif;background:#03091F;color:#fff;padding:24px;border-radius:12px;'>"
+                    f"<h2 style='color:#9EDCFF;'>ExBOS Subscription Update</h2>"
+                    f"<p>Hello <strong>{user_doc.get('fullName') or email}</strong>,</p>"
+                    f"<p>Your subscription for <strong>{biz_name}</strong> has been updated to "
+                    f"<strong>{plan}</strong> ({billing_type}).</p>"
+                    f"<p><strong>Expiry:</strong> {expiry_date or 'No fixed expiry'}<br/>"
+                    f"<strong>Note:</strong> {reason}</p>"
+                    f"</div>"
+                ),
+                text_body=f"Your ExBOS subscription for {biz_name} is now {plan} ({billing_type}). Expiry: {expiry_date or 'N/A'}. Reason: {reason}",
+            )
+        except Exception as exc:
+            logger.warning("Could not email subscription update to %s: %s", email, exc)
+
+    return success_response(
+        data={**user_updates, "email": email},
+        message=f"Subscription for '{email}' updated to {plan} ({billing_type}).",
+    )
+
+
+@super_admin_bp.route("/audit-logs", methods=["GET"])
+@require_super_admin
+def list_audit_logs():
+    """Return the latest 100 immutable Super Admin audit trail entries."""
+    db = get_db()
+    limit = min(200, max(1, int(request.args.get("limit", 100))))
+    cursor = db.super_admin_audit_logs.find({}).sort("createdAt", -1).limit(limit)
+    logs = []
+    for doc in cursor:
+        clean = serialize_doc(doc)
+        clean.pop("_id", None)
+        logs.append(clean)
+    return success_response(data=logs)
+
+
 @super_admin_bp.route("/businesses", methods=["GET"])
-@jwt_required(optional=True)
+@require_super_admin
 def list_businesses():
     """
     List all tenant businesses with Section 8.2 MRR separation metadata
@@ -48,12 +519,14 @@ def list_businesses():
         businesses.append(clean)
 
     paid_mrr_rwf = sum(
-        float(b.get("mrrRWF", 0))
+        float(b.get("mrrRWF", b.get("monthlySpendRWF", 0)))
         for b in businesses
         if b.get("billingType") == "Paid" and b.get("status") == "Active"
     )
     complimentary_count = sum(
-        1 for b in businesses if b.get("billingType") == "Complimentary"
+        1
+        for b in businesses
+        if "complimentary" in str(b.get("billingType") or "").lower()
     )
     paid_count = sum(1 for b in businesses if b.get("billingType") == "Paid")
 
@@ -73,15 +546,14 @@ def list_businesses():
 @super_admin_bp.route(
     "/businesses/<string:biz_id>/subscription", methods=["PATCH"]
 )
-@jwt_required(optional=True)
+@require_super_admin
 @validate_json(SubscriptionUpdateSchema)
 def update_business_subscription(
     biz_id: str, validated_data: SubscriptionUpdateSchema
 ):
     """
-    Update a tenant's subscription plan, status, or billingType (Paid vs Complimentary).
-    Per Section 8.2, Complimentary accounts always enforce mrrRWF = 0 so platform revenue
-    metrics are never artificially inflated.
+    Backward-compatible endpoint: update a tenant business's subscription and sync
+    matching db.users record while enforcing Section 8.2 MRR separation.
     """
     db = get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -95,13 +567,39 @@ def update_business_subscription(
     updates = validated_data.model_dump(exclude_none=True)
     billing_type = updates.get("billingType", biz_doc.get("billingType", "Paid"))
 
-    if billing_type == "Complimentary":
+    if "complimentary" in str(billing_type).lower():
         updates["mrrRWF"] = 0
+        updates["monthlySpendRWF"] = 0
         updates["grantedAt"] = now_iso
 
     updates["updated_at"] = now_iso
     db.businesses.update_one({"_id": biz_doc["_id"]}, {"$set": updates})
     biz_doc.update(updates)
+
+    # Also sync matching user account if email exists
+    biz_email = (biz_doc.get("email") or "").strip().lower()
+    if biz_email:
+        db.users.update_one(
+            {"email": biz_email},
+            {
+                "$set": {
+                    "plan": biz_doc.get("plan", "Free"),
+                    "planTier": biz_doc.get("plan", "Free"),
+                    "billingType": billing_type,
+                    "monthlySpendRWF": float(biz_doc.get("mrrRWF") or 0),
+                    "updated_at": now_iso,
+                }
+            },
+        )
+
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email=biz_email or biz_id,
+        action=f"Business Subscription -> {biz_doc.get('plan')} ({billing_type})",
+        details=updates,
+        reason=updates.get("complimentaryReason") or "Updated via Super Admin",
+    )
 
     clean_biz = serialize_doc(biz_doc)
     clean_biz.pop("_id", None)
@@ -113,7 +611,7 @@ def update_business_subscription(
 
 @super_admin_bp.route("/pricing-plans", methods=["GET"])
 def get_pricing_plans():
-    """Return all platform subscription pricing plans."""
+    """Publicly readable: return all platform subscription pricing plans."""
     db = get_db()
     doc = db.platform_config.find_one({"key": "pricing_plans"})
     plans = (
@@ -125,7 +623,7 @@ def get_pricing_plans():
 
 
 @super_admin_bp.route("/pricing-plans/<string:plan_id>", methods=["PUT"])
-@jwt_required(optional=True)
+@require_super_admin
 @validate_json(PricingPlanUpdateSchema)
 def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
     """Update a platform pricing tier by ID."""
@@ -157,6 +655,14 @@ def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
         {"$set": {"key": "pricing_plans", "value": plans, "updated_at": now_iso}},
         upsert=True,
     )
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email=f"plan:{plan_id}",
+        action="Updated Pricing Plan",
+        details=patch_fields,
+        reason="Pricing tier updated",
+    )
     return success_response(
         data=updated_plan,
         message=f"Pricing plan '{plan_id}' updated.",
@@ -165,7 +671,7 @@ def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
 
 @super_admin_bp.route("/platinum-program", methods=["GET"])
 def get_platinum_program():
-    """Return the Platinum Partner Program configuration."""
+    """Publicly readable: return the Platinum Partner Program configuration."""
     db = get_db()
     doc = db.platform_config.find_one({"key": "platinum_program"})
     program = (
@@ -177,7 +683,7 @@ def get_platinum_program():
 
 
 @super_admin_bp.route("/platinum-program", methods=["PUT"])
-@jwt_required(optional=True)
+@require_super_admin
 @validate_json(PlatinumProgramSchema)
 def update_platinum_program(validated_data: PlatinumProgramSchema):
     """Update the Platinum Partner Program configuration."""
@@ -199,6 +705,14 @@ def update_platinum_program(validated_data: PlatinumProgramSchema):
         {"$set": {"key": "platinum_program", "value": updated, "updated_at": now_iso}},
         upsert=True,
     )
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email="platinum_program",
+        action="Updated Platinum Program",
+        details=patch_fields,
+        reason="Platinum referral rules updated",
+    )
     return success_response(
         data=updated,
         message="Platinum Partner Program updated.",
@@ -207,7 +721,7 @@ def update_platinum_program(validated_data: PlatinumProgramSchema):
 
 @super_admin_bp.route("/broadcast", methods=["GET"])
 def get_broadcast():
-    """Return the active Super Admin global broadcast banner."""
+    """Publicly readable: return the active Super Admin global broadcast banner."""
     db = get_db()
     doc = db.platform_config.find_one({"key": "super_admin_broadcast"})
     broadcast = serialize_doc(doc["value"]) if doc else None
@@ -215,7 +729,7 @@ def get_broadcast():
 
 
 @super_admin_bp.route("/broadcast", methods=["POST"])
-@jwt_required(optional=True)
+@require_super_admin
 @validate_json(BroadcastSchema)
 def publish_broadcast(validated_data: BroadcastSchema):
     """Publish or clear a global/architecture-specific Super Admin broadcast."""
@@ -234,12 +748,22 @@ def publish_broadcast(validated_data: BroadcastSchema):
             },
             upsert=True,
         )
+        _record_audit_log(
+            db=db,
+            actor_email=g.super_admin_email,
+            target_email="all_users",
+            action="Cleared Global Broadcast",
+            details={"active": False},
+            reason="Broadcast cleared",
+        )
         return success_response(data=None, message="Global broadcast cleared.")
 
     payload = {
         **validated_data.model_dump(),
         "id": f"BC-{int(datetime.now(timezone.utc).timestamp() * 1000)}",
         "sentAt": now_iso,
+        "createdAt": now_iso[:16].replace("T", " "),
+        "author": g.super_admin_email,
     }
     db.platform_config.update_one(
         {"key": "super_admin_broadcast"},
@@ -252,9 +776,16 @@ def publish_broadcast(validated_data: BroadcastSchema):
         },
         upsert=True,
     )
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email="all_users",
+        action="Published Global Broadcast",
+        details={"title": payload.get("title")},
+        reason=payload.get("title") or "Global announcement",
+    )
     return success_response(
         data=payload,
         message="Global broadcast published.",
         status_code=201,
     )
-

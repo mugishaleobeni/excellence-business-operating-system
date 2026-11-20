@@ -47,6 +47,25 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function SuperAdminRoute({ children }) {
+  const { user } = useExbos()
+  const location = useLocation()
+  const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+
+  if (!user || !token || !isTokenValid(token)) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  const isSuper =
+    Boolean(user.isSuperAdmin) ||
+    String(user.email || '').trim().toLowerCase() === 'mugishaleobeni0@gmail.com'
+  if (!isSuper) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return children
+}
+
 export default function App() {
   const [loading, setLoading] = useState(true)
 
@@ -88,9 +107,9 @@ export default function App() {
             <Route
               path="/super-admin"
               element={
-                <ProtectedRoute>
+                <SuperAdminRoute>
                   <SuperAdminPage />
-                </ProtectedRoute>
+                </SuperAdminRoute>
               }
             />
 

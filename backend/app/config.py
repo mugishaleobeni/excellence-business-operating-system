@@ -54,6 +54,12 @@ class BaseConfig:
     WHATSAPP_OFFICIAL_NUMBER: str = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
     META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")
 
+    SUPER_ADMIN_EMAILS: list[str] = [
+        e.strip().lower()
+        for e in os.getenv("SUPER_ADMIN_EMAILS", "mugishaleobeni0@gmail.com").split(",")
+        if e.strip()
+    ]
+
     CORS_ORIGINS: list[str] = [
         origin.strip()
         for origin in os.getenv(

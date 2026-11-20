@@ -232,7 +232,43 @@ export const exbosApi = {
       body: payload
     }),
   getBranchAnalytics: (archId) =>
-    apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`))
+    apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`)),
+  superAdminGetUsers: (params = {}) => {
+    const qs = new URLSearchParams()
+    if (params.search) qs.set('search', params.search)
+    if (params.plan && params.plan !== 'all') qs.set('plan', params.plan)
+    if (params.status && params.status !== 'all') qs.set('status', params.status)
+    if (params.role && params.role !== 'all') qs.set('role', params.role)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return apiRequest(`/super-admin/users${suffix}`)
+  },
+  superAdminUpdateUserAccess: (email, payload = {}) =>
+    apiRequest(`/super-admin/users/${encodeURIComponent(email)}/access`, {
+      method: 'PATCH',
+      body: payload
+    }),
+  superAdminUpdateUserSubscription: (email, payload = {}) =>
+    apiRequest(`/super-admin/users/${encodeURIComponent(email)}/subscription`, {
+      method: 'PATCH',
+      body: payload
+    }),
+  superAdminGetAuditLogs: (limit = 100) =>
+    apiRequest(`/super-admin/audit-logs?limit=${limit}`),
+  superAdminUpdatePricingPlan: (planId, payload = {}) =>
+    apiRequest(`/super-admin/pricing-plans/${encodeURIComponent(planId)}`, {
+      method: 'PUT',
+      body: payload
+    }),
+  superAdminUpdatePlatinumProgram: (payload = {}) =>
+    apiRequest('/super-admin/platinum-program', {
+      method: 'PUT',
+      body: payload
+    }),
+  superAdminPublishBroadcast: (payload = {}) =>
+    apiRequest('/super-admin/broadcast', {
+      method: 'POST',
+      body: payload
+    })
 }
 
 export const apiClient = exbosApi
