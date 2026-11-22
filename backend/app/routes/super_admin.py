@@ -113,6 +113,182 @@ def _resolve_plan_price_rwf(db, plan_name: str) -> float:
     return fallback.get(target, 0.0)
 
 
+@super_admin_bp.route("/analytics", methods=["GET"])
+@require_super_admin
+def get_platform_analytics():
+    """
+    Executive Super Admin analytics: Top Working Users/Businesses leaderboard
+    ranked by real MongoDB activity (records, transactions, branches, staff, volume),
+    architecture distribution, subscription plan mix, and recent signups.
+    """
+    db = get_db()
+    all_users = list(db.users.find({}).sort("created_at", -1))
+
+    # Aggregate real record counts per scopeKey from db.module_records & db.workspaces
+    record_counts: dict[str, int] = {}
+    revenue_totals: dict[str, float] = {}
+    try:
+        for ws in db.workspaces.find(
+            {},
+            {
+                "scopeKey": 1,
+                "records": 1,
+                "monthlyRevenueRWF": 1,
+                "spendableRWF": 1,
+            },
+        ):
+            sk = (ws.get("scopeKey") or "").strip().lower()
+            if not sk:
+                continue
+            recs = ws.get("records") or {}
+            cnt = sum(len(v) for v in recs.values() if isinstance(v, list))
+            record_counts[sk] = record_counts.get(sk, 0) + cnt
+            rev = float(ws.get("monthlyRevenueRWF") or 0) + max(0.0, float(ws.get("spendableRWF") or 0))
+            revenue_totals[sk] = max(revenue_totals.get(sk, 0.0), rev)
+    except Exception:
+        pass
+
+    tx_counts: dict[str, int] = {}
+    try:
+        for tx in db.transactions.find({}, {"scopeKey": 1, "amountRWF": 1, "type": 1}):
+            sk = (tx.get("scopeKey") or "").strip().lower()
+            if not sk:
+                continue
+            tx_counts[sk] = tx_counts.get(sk, 0) + 1
+            if str(tx.get("type") or "").lower() in ("in", "inflow"):
+                revenue_totals[sk] = revenue_totals.get(sk, 0.0) + float(tx.get("amountRWF") or 0)
+    except Exception:
+        pass
+
+    branch_counts: dict[str, int] = {}
+    try:
+        for b in db.branches.find({}, {"scopeKey": 1}):
+            sk = (b.get("scopeKey") or "").strip().lower()
+            if sk:
+                branch_counts[sk] = branch_counts.get(sk, 0) + 1
+    except Exception:
+        pass
+
+    staff_counts: dict[str, int] = {}
+    for u in all_users:
+        ok = (u.get("ownerScopeKey") or "").strip().lower()
+        if ok:
+            staff_counts[ok] = staff_counts.get(ok, 0) + 1
+
+    arch_breakdown: dict[str, int] = {a: 0 for a in ARCHITECTURE_IDS}
+    plan_breakdown: dict[str, int] = {"Free": 0, "Bronze": 0, "Silver": 0, "Gold": 0}
+    leaderboard = []
+    recent_signups = []
+    total_businesses = 0
+    active_users = 0
+    suspended_users = 0
+    paid_mrr_rwf = 0.0
+    complimentary_count = 0
+    active_last_7d = 0
+    now_ts = datetime.now(timezone.utc).timestamp()
+
+    for u in all_users:
+        email = (u.get("email") or "").strip().lower()
+        is_staff = bool(u.get("ownerScopeKey"))
+        acct_status = u.get("accountStatus") or "Active"
+        if acct_status.lower() == "suspended":
+            suspended_users += 1
+        else:
+            active_users += 1
+
+        last_login = u.get("lastLoginAt") or ""
+        if last_login:
+            try:
+                dt = datetime.fromisoformat(str(last_login).replace("Z", "+00:00"))
+                if (now_ts - dt.timestamp()) <= 7 * 86400:
+                    active_last_7d += 1
+            except Exception:
+                pass
+
+        if len(recent_signups) < 6:
+            recent_signups.append(
+                {
+                    "email": email,
+                    "fullName": u.get("fullName") or u.get("name") or email,
+                    "businessName": u.get("businessName") or "ExBOS Workspace",
+                    "architectureId": u.get("architectureId") or "buy-and-sell",
+                    "plan": u.get("plan") or u.get("planTier") or "Free",
+                    "createdAt": u.get("created_at") or "",
+                    "isOwner": not is_staff,
+                }
+            )
+
+        if is_staff:
+            continue
+
+        total_businesses += 1
+        arch_id = u.get("architectureId") or "buy-and-sell"
+        if arch_id in arch_breakdown:
+            arch_breakdown[arch_id] += 1
+        else:
+            arch_breakdown[arch_id] = 1
+
+        plan = u.get("plan") or u.get("planTier") or "Free"
+        plan_key = plan.title() if plan.title() in plan_breakdown else "Free"
+        plan_breakdown[plan_key] += 1
+
+        billing_type = u.get("billingType") or ("Free" if plan_key == "Free" else "Paid")
+        monthly_spend = float(u.get("monthlySpendRWF") or 0)
+        if str(billing_type).lower() == "paid" and acct_status == "Active":
+            paid_mrr_rwf += monthly_spend
+        elif "complimentary" in str(billing_type).lower():
+            complimentary_count += 1
+
+        r_cnt = record_counts.get(email, 0)
+        t_cnt = tx_counts.get(email, 0)
+        b_cnt = max(1, branch_counts.get(email, 1))
+        s_cnt = staff_counts.get(email, 0)
+        rev_vol = revenue_totals.get(email, 0.0)
+        activity_score = (r_cnt * 4) + (t_cnt * 6) + (b_cnt * 10) + (s_cnt * 8) + (15 if last_login else 0)
+
+        leaderboard.append(
+            {
+                "email": email,
+                "fullName": u.get("fullName") or u.get("name") or email,
+                "businessName": u.get("businessName") or "ExBOS Workspace",
+                "architectureId": arch_id,
+                "plan": plan,
+                "billingType": billing_type,
+                "accountStatus": acct_status,
+                "recordCount": r_cnt,
+                "txCount": t_cnt,
+                "branchCount": b_cnt,
+                "staffCount": s_cnt,
+                "volumeRWF": rev_vol,
+                "lastLoginAt": last_login,
+                "activityScore": activity_score,
+            }
+        )
+
+    leaderboard.sort(key=lambda x: (x["activityScore"], x["volumeRWF"]), reverse=True)
+    top_users = leaderboard[:10]
+
+    return success_response(
+        data={
+            "summary": {
+                "totalUsers": len(all_users),
+                "totalBusinesses": total_businesses,
+                "activeUsers": active_users,
+                "suspendedUsers": suspended_users,
+                "paidMrrRWF": paid_mrr_rwf,
+                "complimentaryCount": complimentary_count,
+                "totalRecords": sum(record_counts.values()),
+                "totalTransactions": sum(tx_counts.values()),
+                "activeLast7Days": active_last_7d,
+            },
+            "topWorkingUsers": top_users,
+            "architectureBreakdown": arch_breakdown,
+            "planBreakdown": plan_breakdown,
+            "recentSignups": recent_signups,
+        }
+    )
+
+
 @super_admin_bp.route("/users", methods=["GET"])
 @require_super_admin
 def list_platform_users():

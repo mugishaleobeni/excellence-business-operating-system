@@ -233,6 +233,7 @@ export const exbosApi = {
     }),
   getBranchAnalytics: (archId) =>
     apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`)),
+  superAdminGetAnalytics: () => apiRequest('/super-admin/analytics'),
   superAdminGetUsers: (params = {}) => {
     const qs = new URLSearchParams()
     if (params.search) qs.set('search', params.search)
