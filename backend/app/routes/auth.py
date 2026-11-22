@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote, urlparse
 from flask import Blueprint, request
 from flask_jwt_extended import (
     create_access_token,
@@ -40,6 +41,31 @@ def _safe_jwt_email() -> str | None:
         return ident.lower() if isinstance(ident, str) and ident else None
     except Exception:
         return None
+
+
+def _resolve_frontend_origin() -> str:
+    """Resolve the active frontend origin for clickable email verification links."""
+    for raw in (
+        (request.get_json(silent=True) or {}).get("appOrigin") if request.is_json else None,
+        request.headers.get("Origin"),
+        request.headers.get("Referer"),
+    ):
+        if not raw:
+            continue
+        try:
+            parsed = urlparse(str(raw).strip())
+            if parsed.scheme in ("http", "https") and parsed.netloc:
+                host = parsed.netloc.lower()
+                if (
+                    host.startswith("localhost")
+                    or host.startswith("127.0.0.1")
+                    or host.endswith("exbos.pages.dev")
+                    or host.endswith("pylarix.com")
+                ):
+                    return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            pass
+    return os.getenv("FRONTEND_URL", "https://exbos.pages.dev").strip().rstrip("/")
 
 
 def _is_super_admin_user(user_doc: dict | None) -> bool:
@@ -118,24 +144,41 @@ def send_email_verification(validated_data: SendVerificationSchema):
             "created_at": now,
             "expires_at": now + timedelta(minutes=15),
             "used": False,
+            "verified": False,
         }
     )
 
+    frontend_origin = _resolve_frontend_origin()
+    verify_link = f"{frontend_origin}/register?verifyEmail={quote(email_lower)}&code={quote(code)}"
+    copy_link = f"{frontend_origin}/register?verifyEmail={quote(email_lower)}&code={quote(code)}&copy=1"
+
     email_sent = send_gmail_email(
         to_email=email_lower,
-        subject="ExBOS Account Verification Code",
+        subject=f"ExBOS Verification Code: {code}",
         text_body=(
             f"Hello {validated_data.fullName},\n\n"
             f"Your ExBOS 6-digit verification code is: {code}\n\n"
+            f"Or click this verified link to verify and auto-fill immediately:\n"
+            f"{verify_link}\n\n"
             f"This code expires in 15 minutes."
         ),
         html_body=(
-            f"<div style='font-family:sans-serif;padding:24px;background:#03091F;color:#ffffff;border-radius:12px;'>"
-            f"<h2 style='color:#218DFF;margin-top:0;'>Welcome to EXCELLENCE BOS</h2>"
-            f"<p>Hello <strong>{validated_data.fullName}</strong>, enter the 6-digit code below to verify your email address:</p>"
-            f"<div style='font-size:28px;font-weight:bold;letter-spacing:6px;padding:14px 20px;"
-            f"background:#071544;border:1px solid #218DFF;border-radius:8px;display:inline-block;'>{code}</div>"
-            f"<p style='color:#94a3b8;font-size:12px;margin-top:16px;'>Valid for 15 minutes.</p>"
+            f"<div style='font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:28px;background:#03091F;color:#ffffff;border-radius:16px;border:1px solid #218DFF;'>"
+            f"<div style='font-size:11px;font-weight:800;color:#9EDCFF;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;'>EXCELLENCE BUSINESS OPERATING SYSTEM</div>"
+            f"<h2 style='color:#ffffff;margin-top:0;margin-bottom:12px;'>Verify Your Email Address</h2>"
+            f"<p style='color:#cbd5e1;font-size:14px;line-height:1.6;'>Hello <strong>{validated_data.fullName}</strong>, copy the 6-digit code below or click the instant verification button:</p>"
+            f"<div style='margin:20px 0;padding:18px;background:#071544;border:2px dashed #218DFF;border-radius:12px;text-align:center;'>"
+            f"<div style='font-size:11px;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>6-Digit Verification Code (Tap to Select &amp; Copy)</div>"
+            f"<div style='font-size:32px;font-weight:800;letter-spacing:8px;color:#ffffff;font-family:monospace;user-select:all;-webkit-user-select:all;cursor:pointer;'>{code}</div>"
+            f"</div>"
+            f"<div style='text-align:center;margin:22px 0;'>"
+            f"<a href='{verify_link}' style='display:inline-block;margin:6px;padding:13px 24px;background:linear-gradient(135deg,#218DFF,#0055FF);color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;'>&#10003; Verify Email Instantly</a>"
+            f"<a href='{copy_link}' style='display:inline-block;margin:6px;padding:13px 20px;background:#0B215E;border:1px solid #9EDCFF;color:#9EDCFF;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;'>&#128203; Copy Code &amp; Auto-Fill</a>"
+            f"</div>"
+            f"<p style='color:#94a3b8;font-size:12px;line-height:1.5;margin-top:18px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;'>"
+            f"Valid for 15 minutes. If the buttons above do not open, paste this verified link into your browser:<br/>"
+            f"<a href='{verify_link}' style='color:#9EDCFF;word-break:break-all;'>{verify_link}</a>"
+            f"</p>"
             f"</div>"
         ),
     )
@@ -146,7 +189,7 @@ def send_email_verification(validated_data: SendVerificationSchema):
             "emailSent": email_sent,
             "expiresInMinutes": 15,
         },
-        message=f"6-digit verification code sent to {email_lower}.",
+        message=f"6-digit verification code and verified link sent to {email_lower}.",
         status_code=200,
     )
 
@@ -156,19 +199,21 @@ def send_email_verification(validated_data: SendVerificationSchema):
 def verify_email_code(validated_data: VerifyEmailCodeSchema):
     """
     Step 2 of Registration:
-    Verifies the 6-digit OTP code entered by the user against MongoDB.
+    Verifies the 6-digit OTP code entered by the user (or clicked via email link) against MongoDB.
+    Idempotent within the 15-minute validity window so clicking the email link and submitting on the page both work.
     """
     db = get_db()
     email_lower = validated_data.email.lower()
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
 
     doc = db.password_resets.find_one(
         {
             "email": email_lower,
             "code": validated_data.code,
             "purpose": "email_verification",
-            "used": False,
-        }
+        },
+        sort=[("created_at", -1)],
     )
     if not doc:
         return error_response(
@@ -176,9 +221,19 @@ def verify_email_code(validated_data: VerifyEmailCodeSchema):
             status_code=400,
         )
 
+    exp = doc.get("expires_at")
+    if isinstance(exp, datetime):
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if now_dt > exp:
+            return error_response(
+                error="This verification code has expired. Please request a new code.",
+                status_code=400,
+            )
+
     db.password_resets.update_one(
         {"_id": doc["_id"]},
-        {"$set": {"used": True, "used_at": now_iso}},
+        {"$set": {"used": True, "verified": True, "used_at": now_iso}},
     )
 
     return success_response(
@@ -186,6 +241,36 @@ def verify_email_code(validated_data: VerifyEmailCodeSchema):
         message="Email address verified successfully.",
         status_code=200,
     )
+
+
+@auth_bp.route("/verification-status", methods=["GET"])
+def check_email_verification_status():
+    """
+    Lightweight status check so an open Registration tab can detect when the user
+    clicked the 'Verify Email Instantly' link from their email (even on another device).
+    Never exposes the OTP code.
+    """
+    db = get_db()
+    email_lower = (request.args.get("email") or "").strip().lower()
+    if not email_lower or "@" not in email_lower:
+        return error_response("Valid email query parameter is required.", status_code=400)
+
+    now_dt = datetime.now(timezone.utc)
+    doc = db.password_resets.find_one(
+        {"email": email_lower, "purpose": "email_verification"},
+        sort=[("created_at", -1)],
+    )
+    is_verified = False
+    if doc and (doc.get("verified") or doc.get("used")):
+        exp = doc.get("expires_at")
+        if isinstance(exp, datetime):
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            is_verified = now_dt <= (exp + timedelta(minutes=15))
+        else:
+            is_verified = True
+
+    return success_response(data={"email": email_lower, "verified": bool(is_verified)})
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -478,21 +563,32 @@ def login_user(validated_data: LoginSchema):
                 }
             )
             user_name = user_doc.get("name") or user_doc.get("businessName") or "Business Owner"
+            frontend_origin = _resolve_frontend_origin()
+            verify_2fa_link = f"{frontend_origin}/login?email={quote(email_lower)}&otp={quote(code)}"
+            copy_2fa_link = f"{frontend_origin}/login?email={quote(email_lower)}&otp={quote(code)}&copy=1"
             html_body = f"""
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #040D29; color: #ffffff; border-radius: 16px; padding: 32px; border: 1px solid #218DFF;">
                 <h2 style="color: #9EDCFF; margin-top: 0;">ExBOS Login 2-Step Verification</h2>
                 <p style="color: #cbd5e1; font-size: 15px; line-height: 1.6;">
-                    Hello <strong>{user_name}</strong>, use the 6-digit security code below to complete signing in to your ExBOS account:
+                    Hello <strong>{user_name}</strong>, copy the 6-digit security code below or click the button to auto-fill your sign-in:
                 </p>
-                <div style="margin: 24px 0; padding: 20px; background: #0B194C; border: 2px solid #218DFF; border-radius: 12px; text-align: center;">
-                    <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #ffffff; font-family: monospace;">{code}</span>
+                <div style="margin: 22px 0; padding: 20px; background: #0B194C; border: 2px dashed #218DFF; border-radius: 12px; text-align: center;">
+                    <div style="font-size: 11px; color: #9EDCFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">6-Digit Security Code (Tap to Select &amp; Copy)</div>
+                    <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #ffffff; font-family: monospace; user-select: all; -webkit-user-select: all;">{code}</span>
                 </div>
-                <p style="color: #94a3b8; font-size: 13px;">
-                    This code expires in 15 minutes. If you did not attempt to sign in, please change your password immediately.
+                <div style="text-align: center; margin: 22px 0;">
+                    <a href="{verify_2fa_link}" style="display: inline-block; margin: 6px; padding: 13px 24px; background: linear-gradient(135deg, #218DFF, #0055FF); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 10px;">&#10003; Open Sign-In with Code Filled</a>
+                    <a href="{copy_2fa_link}" style="display: inline-block; margin: 6px; padding: 13px 20px; background: #0B215E; border: 1px solid #9EDCFF; color: #9EDCFF; text-decoration: none; font-size: 13px; font-weight: 700; border-radius: 10px;">&#128203; Copy 6-Digit Code</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
+                    This code expires in 15 minutes. Verified link: <a href="{verify_2fa_link}" style="color: #9EDCFF; word-break: break-all;">{verify_2fa_link}</a>
                 </p>
             </div>
             """
-            text_body = f"Your ExBOS 2-Step Login Verification code is: {code} (valid for 15 minutes)."
+            text_body = (
+                f"Your ExBOS 2-Step Login Verification code is: {code} (valid for 15 minutes).\n"
+                f"Or click this verified link to auto-fill your sign-in: {verify_2fa_link}"
+            )
             email_sent = send_gmail_email(
                 to_email=email_lower,
                 subject=f"ExBOS Login Verification Code: {code}",
@@ -687,17 +783,30 @@ def forgot_password(validated_data: ForgotPasswordSchema):
         }
     )
 
+    frontend_origin = _resolve_frontend_origin()
+    reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}"
+    copy_reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}&copy=1"
+
     email_sent = send_gmail_email(
         to_email=email_lower,
-        subject="ExBOS Password Reset Verification Code",
-        text_body=f"Your ExBOS password reset code is: {code} (valid for 15 minutes).",
+        subject=f"ExBOS Password Reset Code: {code}",
+        text_body=(
+            f"Your ExBOS password reset code is: {code} (valid for 15 minutes).\n"
+            f"Or open this verified reset link: {reset_link}"
+        ),
         html_body=(
-            f"<div style='font-family:sans-serif;padding:24px;background:#03091F;color:#ffffff;border-radius:12px;'>"
-            f"<h2 style='color:#218DFF;margin-top:0;'>ExBOS Security Verification</h2>"
-            f"<p>Use the 6-digit verification code below to reset your password:</p>"
-            f"<div style='font-size:28px;font-weight:bold;letter-spacing:6px;padding:14px 20px;"
-            f"background:#071544;border:1px solid #218DFF;border-radius:8px;display:inline-block;'>{code}</div>"
-            f"<p style='color:#94a3b8;font-size:12px;margin-top:16px;'>This code expires in 15 minutes.</p>"
+            f"<div style='font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:28px;background:#03091F;color:#ffffff;border-radius:16px;border:1px solid #218DFF;'>"
+            f"<h2 style='color:#218DFF;margin-top:0;'>ExBOS Password Reset Verification</h2>"
+            f"<p style='color:#cbd5e1;font-size:14px;line-height:1.6;'>Copy the 6-digit verification code below or click the button to open the password reset screen with your code pre-filled:</p>"
+            f"<div style='margin:20px 0;padding:18px;background:#071544;border:2px dashed #218DFF;border-radius:12px;text-align:center;'>"
+            f"<div style='font-size:11px;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>6-Digit Reset Code (Tap to Select &amp; Copy)</div>"
+            f"<div style='font-size:32px;font-weight:800;letter-spacing:8px;color:#ffffff;font-family:monospace;user-select:all;-webkit-user-select:all;'>{code}</div>"
+            f"</div>"
+            f"<div style='text-align:center;margin:22px 0;'>"
+            f"<a href='{reset_link}' style='display:inline-block;margin:6px;padding:13px 24px;background:linear-gradient(135deg,#218DFF,#0055FF);color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;'>&#10003; Reset Password via Verified Link</a>"
+            f"<a href='{copy_reset_link}' style='display:inline-block;margin:6px;padding:13px 20px;background:#0B215E;border:1px solid #9EDCFF;color:#9EDCFF;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;'>&#128203; Copy 6-Digit Code</a>"
+            f"</div>"
+            f"<p style='color:#94a3b8;font-size:12px;margin-top:16px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;'>This code expires in 15 minutes.<br/><a href='{reset_link}' style='color:#9EDCFF;word-break:break-all;'>{reset_link}</a></p>"
             f"</div>"
         ),
     )
@@ -705,11 +814,10 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     return success_response(
         data={
             "email": email_lower,
-            "resetCode": code,
             "emailSent": email_sent,
             "expiresInMinutes": 15,
         },
-        message="Password reset verification code sent to your email.",
+        message="Password reset verification code and verified link sent to your email.",
     )
 
 

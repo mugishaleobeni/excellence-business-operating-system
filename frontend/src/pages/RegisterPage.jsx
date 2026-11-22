@@ -62,10 +62,14 @@ export default function RegisterPage() {
   const queryArch = searchParams.get('arch')
   const queryPlan = searchParams.get('plan')
   const returnTo = searchParams.get('returnTo')
+  const queryVerifyEmail = searchParams.get('verifyEmail')
+  const queryVerifyCode = searchParams.get('code')
+  const queryCopyFlag = searchParams.get('copy')
 
   const [step, setStep] = useState(1)
   const [maxCompletedStep, setMaxCompletedStep] = useState(1)
   const [emailVerified, setEmailVerified] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const [serverOtpHint, setServerOtpHint] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [showPass, setShowPass] = useState(false)
@@ -113,6 +117,130 @@ export default function RegisterPage() {
       setForm((prev) => ({ ...prev, architectureId: queryArch }))
     }
   }, [queryArch])
+
+  const handleCopyCode = async (codeToCopy) => {
+    const clean = String(codeToCopy || form.verificationCode || '').trim()
+    if (!clean) return
+    try {
+      await navigator.clipboard.writeText(clean)
+      setCodeCopied(true)
+      showToast(`Verification code ${clean} copied to clipboard!`, 'Code Copied')
+      setTimeout(() => setCodeCopied(false), 3000)
+    } catch {
+      /* fallback */
+    }
+  }
+
+  // Handle 1-click Verified Email Link (?verifyEmail=...&code=...)
+  useEffect(() => {
+    if (!queryVerifyEmail || !queryVerifyCode) return
+    const targetEmail = queryVerifyEmail.trim().toLowerCase()
+    const cleanCode = queryVerifyCode.replace(/\D/g, '').slice(0, 6)
+    if (cleanCode.length !== 6) return
+
+    try {
+      const savedDraftRaw = localStorage.getItem('exbos_reg_draft')
+      if (savedDraftRaw) {
+        const draft = JSON.parse(savedDraftRaw)
+        if (draft && String(draft.email || '').trim().toLowerCase() === targetEmail) {
+          setForm((prev) => ({ ...prev, ...draft, email: targetEmail, verificationCode: cleanCode }))
+        } else {
+          setForm((prev) => ({ ...prev, email: targetEmail, verificationCode: cleanCode }))
+        }
+      } else {
+        setForm((prev) => ({ ...prev, email: targetEmail, verificationCode: cleanCode }))
+      }
+    } catch {
+      setForm((prev) => ({ ...prev, email: targetEmail, verificationCode: cleanCode }))
+    }
+
+    setStep(2)
+    setMaxCompletedStep((prev) => Math.max(prev, 2))
+
+    if (queryCopyFlag === '1' && navigator.clipboard) {
+      navigator.clipboard.writeText(cleanCode).then(() => setCodeCopied(true)).catch(() => {})
+    }
+
+    exbosApi
+      .verifyEmail({ email: targetEmail, code: cleanCode })
+      .then((res) => {
+        if (res?.ok) {
+          setEmailVerified(true)
+          setCodeStatus('success')
+          setMaxCompletedStep((prev) => Math.max(prev, 3))
+          try {
+            localStorage.setItem(
+              'exbos_email_verified_signal',
+              JSON.stringify({ email: targetEmail, code: cleanCode, ts: Date.now() })
+            )
+            if (typeof BroadcastChannel !== 'undefined') {
+              const bc = new BroadcastChannel('exbos_auth_channel')
+              bc.postMessage({ type: 'EMAIL_VERIFIED', email: targetEmail, code: cleanCode })
+              bc.close()
+            }
+          } catch {}
+        } else {
+          setCodeStatus('error')
+        }
+      })
+      .catch(() => setCodeStatus('error'))
+  }, [queryVerifyEmail, queryVerifyCode, queryCopyFlag])
+
+  // Listen for verification completed in another tab or device while waiting on Step 2
+  useEffect(() => {
+    if (step !== 2 || emailVerified) return
+    const targetEmail = form.email.trim().toLowerCase()
+    if (!targetEmail) return
+
+    const applyVerifiedSignal = (incomingEmail, incomingCode) => {
+      if (String(incomingEmail || '').trim().toLowerCase() !== targetEmail) return
+      if (incomingCode) {
+        setForm((prev) => ({ ...prev, verificationCode: String(incomingCode).slice(0, 6) }))
+      }
+      setEmailVerified(true)
+      setCodeStatus('success')
+      setMaxCompletedStep((prev) => Math.max(prev, 3))
+    }
+
+    const onStorage = (e) => {
+      if (e.key === 'exbos_email_verified_signal' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue)
+          applyVerifiedSignal(parsed.email, parsed.code)
+        } catch {}
+      }
+    }
+    window.addEventListener('storage', onStorage)
+
+    let bc = null
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('exbos_auth_channel')
+        bc.onmessage = (ev) => {
+          if (ev?.data?.type === 'EMAIL_VERIFIED') {
+            applyVerifiedSignal(ev.data.email, ev.data.code)
+          }
+        }
+      } catch {}
+    }
+
+    const pollTimer = setInterval(async () => {
+      try {
+        const res = await exbosApi.getVerificationStatus(targetEmail)
+        if (res?.ok && res?.data?.verified) {
+          setEmailVerified(true)
+          setCodeStatus('success')
+          setMaxCompletedStep((prev) => Math.max(prev, 3))
+        }
+      } catch {}
+    }, 3000)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      if (bc) bc.close()
+      clearInterval(pollTimer)
+    }
+  }, [step, emailVerified, form.email])
 
   const getEmailValidationError = (email) => {
     if (!email || !email.trim()) return 'Please fill out this field.'
@@ -231,6 +359,20 @@ export default function RegisterPage() {
     if (step === 1) {
       setSubmitting(true)
       try {
+        try {
+          localStorage.setItem(
+            'exbos_reg_draft',
+            JSON.stringify({
+              fullName: form.fullName,
+              email: form.email.trim().toLowerCase(),
+              phone: form.phone,
+              password: form.password,
+              confirmPassword: form.confirmPassword,
+              architectureId: form.architectureId,
+              planTier: form.planTier
+            })
+          )
+        } catch {}
         const res = await exbosApi.sendVerification({
           email: form.email.trim().toLowerCase(),
           fullName: form.fullName.trim()
@@ -250,8 +392,8 @@ export default function RegisterPage() {
 
     // Step 2 -> Step 3: Verify the 6-digit OTP code against MongoDB before unlocking Step 3
     if (step === 2) {
-      if (form.verificationCode.trim().length < 6) {
-        showToast('Please enter the 6-digit verification code sent to your email.', 'Verification Required')
+      if (!emailVerified && form.verificationCode.trim().length < 6) {
+        showToast('Please enter the 6-digit verification code or click the verified link in your email.', 'Verification Required')
         return
       }
       if (!emailVerified) {
@@ -346,6 +488,8 @@ export default function RegisterPage() {
       const targetArch = createdUser?.architectureId || form.architectureId || 'buy-and-sell'
       try {
         localStorage.setItem('exbos_active_arch', targetArch)
+        localStorage.removeItem('exbos_reg_draft')
+        localStorage.removeItem('exbos_email_verified_signal')
       } catch {}
       if (returnTo === 'calculator' || pendingCalculator) {
         navigate('/business-tools')
@@ -717,8 +861,17 @@ export default function RegisterPage() {
                 </div>
 
                 {codeStatus === 'success' && (
-                  <div className="text-xs text-emerald-300 font-semibold flex items-center gap-1">
-                    ✓ 6-Digit code verified successfully!
+                  <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-xs text-emerald-200 font-semibold flex items-center justify-between gap-3 flex-wrap">
+                    <span>✓ Email verified successfully! You can now continue to Step 3.</span>
+                    {form.verificationCode && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCode(form.verificationCode)}
+                        className="px-3 py-1 rounded-lg bg-emerald-400/20 hover:bg-emerald-400/30 border border-emerald-300/40 text-emerald-100 text-[11px] font-bold cursor-pointer"
+                      >
+                        {codeCopied ? '✓ Code Copied' : `📋 Copy Code (${form.verificationCode})`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -734,7 +887,7 @@ export default function RegisterPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={form.verificationCode.length < 6}
+                  disabled={!emailVerified && form.verificationCode.length < 6}
                   className="btn-sapphire px-6 py-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span>Verify Email &amp; Continue</span>

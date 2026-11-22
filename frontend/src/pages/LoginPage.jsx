@@ -64,6 +64,95 @@ export default function LoginPage({ isForgotPassword = false }) {
   const [resetCode, setResetCode] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [copiedCodeBadge, setCopiedCodeBadge] = useState(false)
+
+  const handleCopyOtp = async (val) => {
+    const clean = String(val || '').trim()
+    if (!clean) return
+    try {
+      await navigator.clipboard.writeText(clean)
+      setCopiedCodeBadge(true)
+      addToast &&
+        addToast({
+          type: 'success',
+          title: 'Code Copied',
+          message: `Verification code ${clean} copied to clipboard.`
+        })
+      setTimeout(() => setCopiedCodeBadge(false), 3000)
+    } catch {}
+  }
+
+  // Handle verified email links for 2-Step Login (?email=...&otp=...) and Forgot Password (?email=...&code=...)
+  useEffect(() => {
+    const qEmail = (searchParams.get('email') || '').trim().toLowerCase()
+    const qOtp = (searchParams.get('otp') || '').replace(/\D/g, '').slice(0, 6)
+    const qCode = (searchParams.get('code') || '').replace(/\D/g, '').slice(0, 6)
+    const qCopy = searchParams.get('copy')
+
+    if (qEmail) setEmail(qEmail)
+
+    if (!isForgotPassword && qOtp.length === 6) {
+      setTwoFactorRequired(true)
+      setTwoFactorCode(qOtp)
+      if (qCopy === '1' && navigator.clipboard) {
+        navigator.clipboard.writeText(qOtp).then(() => setCopiedCodeBadge(true)).catch(() => {})
+      }
+      try {
+        localStorage.setItem(
+          'exbos_2fa_otp_signal',
+          JSON.stringify({ email: qEmail, otp: qOtp, ts: Date.now() })
+        )
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('exbos_auth_channel')
+          bc.postMessage({ type: 'LOGIN_2FA_CODE', email: qEmail, otp: qOtp })
+          bc.close()
+        }
+      } catch {}
+    }
+
+    if (isForgotPassword && qCode.length === 6) {
+      setResetCode(qCode)
+      setForgotStep(2)
+      if (qCopy === '1' && navigator.clipboard) {
+        navigator.clipboard.writeText(qCode).then(() => setCopiedCodeBadge(true)).catch(() => {})
+      }
+    }
+  }, [searchParams, isForgotPassword])
+
+  // Receive 2FA code in an already-open Login tab when user clicks the verified link in their email
+  useEffect(() => {
+    if (isForgotPassword) return
+    const applyOtp = (incomingEmail, incomingOtp) => {
+      if (!incomingOtp) return
+      if (email && incomingEmail && email.trim().toLowerCase() !== incomingEmail.trim().toLowerCase()) return
+      setTwoFactorRequired(true)
+      setTwoFactorCode(String(incomingOtp).slice(0, 6))
+    }
+    const onStorage = (e) => {
+      if (e.key === 'exbos_2fa_otp_signal' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue)
+          applyOtp(parsed.email, parsed.otp)
+        } catch {}
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    let bc = null
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('exbos_auth_channel')
+        bc.onmessage = (ev) => {
+          if (ev?.data?.type === 'LOGIN_2FA_CODE') {
+            applyOtp(ev.data.email, ev.data.otp)
+          }
+        }
+      } catch {}
+    }
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      if (bc) bc.close()
+    }
+  }, [isForgotPassword, email])
 
   const handleSignIn = async (e) => {
     e.preventDefault()
@@ -407,6 +496,17 @@ export default function LoginPage({ isForgotPassword = false }) {
                         autoFocus
                         className="w-full py-2.5 px-3.5 rounded-xl bg-slate-950/70 border border-[#218DFF]/50 text-white placeholder-slate-400 text-center text-base font-bold tracking-[0.35em] font-orbitron focus:outline-none focus:border-[#218DFF]"
                       />
+                      {twoFactorCode.length === 6 && (
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyOtp(twoFactorCode)}
+                            className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
+                          >
+                            {copiedCodeBadge ? '✓ Code Copied' : `📋 Copy Code (${twoFactorCode})`}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -491,9 +591,20 @@ export default function LoginPage({ isForgotPassword = false }) {
                       Verification code sent to <strong className="text-white">{email}</strong>. Enter the 6-digit code and your new password below.
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#9EDCFF]">
-                        6-Digit Verification Code
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#9EDCFF]">
+                          6-Digit Verification Code
+                        </label>
+                        {resetCode.length === 6 && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyOtp(resetCode)}
+                            className="px-2.5 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
+                          >
+                            {copiedCodeBadge ? '✓ Copied' : `📋 Copy (${resetCode})`}
+                          </button>
+                        )}
+                      </div>
                       <input
                         type="text"
                         required

@@ -151,6 +151,8 @@ export const exbosApi = {
     apiRequest('/auth/send-verification', { method: 'POST', body: payload }),
   verifyEmail: (payload) =>
     apiRequest('/auth/verify-email', { method: 'POST', body: payload }),
+  getVerificationStatus: (email) =>
+    apiRequest(`/auth/verification-status?email=${encodeURIComponent(email || '')}`),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload }),
   register: (payload) => apiRequest('/auth/register', { method: 'POST', body: payload }),
   getMe: () => apiRequest('/auth/me'),
