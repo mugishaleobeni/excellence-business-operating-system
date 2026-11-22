@@ -1425,3 +1425,152 @@ def review_upgrade_request(req_id: str):
     )
 
 
+@super_admin_bp.route("/plan-limits", methods=["GET"])
+def get_editable_plan_limits():
+    """
+    Publicly readable live PLAN_LIMITS & Feature Matrix (Free, Bronze, Silver, Gold, Platinum).
+    Super Admin edits immediately reflect across backend enforcement and frontend UI.
+    """
+    from app.utils.entitlements import get_all_plan_limits
+
+    db = get_db()
+    limits = get_all_plan_limits(db=db)
+    return success_response(data=limits)
+
+
+@super_admin_bp.route("/plan-limits/<string:plan_key>", methods=["PUT"])
+@require_super_admin
+def update_editable_plan_limits(plan_key: str):
+    """
+    Super Admin live editor for any tier's quotas (maxBranches, maxStaff, maxProducts,
+    maxMonthlySales, maxArchitectures — numeric or null for unlimited) and feature switches.
+    """
+    from app.utils.entitlements import (
+        DEFAULT_PLAN_LIMITS,
+        PLAN_ORDER,
+        get_all_plan_limits,
+        invalidate_plan_limits_cache,
+        normalize_plan_name,
+    )
+
+    norm_key = normalize_plan_name(plan_key)
+    if norm_key not in PLAN_ORDER:
+        return error_response(f"Unknown plan tier '{plan_key}'.", status_code=400)
+
+    db = get_db()
+    payload = request.get_json(silent=True) or {}
+    all_limits = get_all_plan_limits(db=db)
+    current_tier = dict(all_limits.get(norm_key, DEFAULT_PLAN_LIMITS[norm_key]))
+
+    numeric_nullable_keys = (
+        "maxArchitectures",
+        "maxBranches",
+        "maxStaff",
+        "maxProducts",
+        "maxMonthlySales",
+    )
+    bool_keys = (
+        "allowHybrid",
+        "allowFullMoneyBuckets",
+        "allowWhatsappAutomation",
+        "allowGoogleDrive",
+        "allowGmailReports",
+        "allowMultiBranchTransfer",
+        "allowBranchFreeze",
+        "allowPublicDocLinks",
+        "allowAdvancedReports",
+        "allowTwoFactorSecurity",
+    )
+    str_keys = ("name", "targetBusiness", "supportSla")
+
+    updated_fields: dict = {}
+    for k in numeric_nullable_keys:
+        if k in payload:
+            val = payload[k]
+            if val is None or val == "" or str(val).lower() == "unlimited":
+                updated_fields[k] = None
+            else:
+                updated_fields[k] = max(0, int(val))
+
+    for k in bool_keys:
+        if k in payload:
+            updated_fields[k] = bool(payload[k])
+
+    for k in str_keys:
+        if k in payload and payload[k] is not None:
+            updated_fields[k] = str(payload[k]).strip()
+
+    if "priceRWF" in payload and payload["priceRWF"] is not None:
+        updated_fields["priceRWF"] = max(0.0, float(payload["priceRWF"]))
+
+    current_tier.update(updated_fields)
+    all_limits[norm_key] = current_tier
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    db.platform_config.update_one(
+        {"key": "plan_limits"},
+        {"$set": {"key": "plan_limits", "value": all_limits, "updated_at": now_iso}},
+        upsert=True,
+    )
+    invalidate_plan_limits_cache()
+
+    # Keep pricing_plans priceRWF synced if price changed
+    if "priceRWF" in updated_fields:
+        pdoc = db.platform_config.find_one({"key": "pricing_plans"})
+        if pdoc and isinstance(pdoc.get("value"), list):
+            plist = list(pdoc["value"])
+            for idx, p in enumerate(plist):
+                if str(p.get("id") or "").lower() == norm_key or str(p.get("tier") or "").lower() == norm_key:
+                    plist[idx] = {
+                        **p,
+                        "priceRWF": updated_fields["priceRWF"],
+                        "monthlyPriceRWF": updated_fields["priceRWF"],
+                    }
+            db.platform_config.update_one(
+                {"key": "pricing_plans"},
+                {"$set": {"key": "pricing_plans", "value": plist, "updated_at": now_iso}},
+            )
+
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email=f"plan_limits:{norm_key}",
+        action=f"Updated {norm_key.title()} Plan Limits & Features",
+        details=updated_fields,
+        reason="Super Admin plan feature matrix update",
+    )
+
+    return success_response(
+        data=current_tier,
+        extra={"allPlanLimits": all_limits},
+        message=f"Saved live limits & feature switches for {current_tier.get('name', norm_key.title())}.",
+    )
+
+
+@super_admin_bp.route("/plan-limits/reset", methods=["POST"])
+@require_super_admin
+def reset_editable_plan_limits():
+    """Reset all plan limits & feature toggles back to ExBOS factory defaults."""
+    from app.utils.entitlements import DEFAULT_PLAN_LIMITS, invalidate_plan_limits_cache
+
+    db = get_db()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    fresh = {k: dict(v) for k, v in DEFAULT_PLAN_LIMITS.items()}
+    db.platform_config.update_one(
+        {"key": "plan_limits"},
+        {"$set": {"key": "plan_limits", "value": fresh, "updated_at": now_iso}},
+        upsert=True,
+    )
+    invalidate_plan_limits_cache()
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email="plan_limits:all",
+        action="Reset Plan Limits to Defaults",
+        details={},
+        reason="Factory defaults restored",
+    )
+    return success_response(data=fresh, message="All plan limits reset to defaults.")
+
+
+

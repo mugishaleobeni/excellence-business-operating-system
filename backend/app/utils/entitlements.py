@@ -1,17 +1,22 @@
 from datetime import datetime, timezone
+import time
 from flask import current_app
 
 PLAN_ORDER = ("free", "bronze", "silver", "gold", "platinum")
 
-PLAN_LIMITS: dict[str, dict] = {
+DEFAULT_PLAN_LIMITS: dict[str, dict] = {
     "free": {
         "name": "Forever Free",
         "priceRWF": 0,
+        "targetBusiness": "Solo trader getting off paper",
+        "supportSla": "Community / Help Center",
+        "maxArchitectures": 1,
         "maxBranches": 1,
         "maxStaff": 0,
         "maxProducts": 100,
         "maxMonthlySales": 150,
         "allowHybrid": False,
+        "allowFullMoneyBuckets": False,
         "allowWhatsappAutomation": False,
         "allowGoogleDrive": False,
         "allowGmailReports": False,
@@ -19,15 +24,20 @@ PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": False,
         "allowPublicDocLinks": False,
         "allowAdvancedReports": False,
+        "allowTwoFactorSecurity": True,
     },
     "bronze": {
         "name": "Bronze Growth",
         "priceRWF": 10000,
+        "targetBusiness": "Busy single-shop or workshop",
+        "supportSla": "WhatsApp Business Support",
+        "maxArchitectures": 1,
         "maxBranches": 1,
         "maxStaff": 2,
         "maxProducts": 1000,
         "maxMonthlySales": None,
         "allowHybrid": False,
+        "allowFullMoneyBuckets": True,
         "allowWhatsappAutomation": True,
         "allowGoogleDrive": False,
         "allowGmailReports": True,
@@ -35,15 +45,20 @@ PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": False,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowTwoFactorSecurity": True,
     },
     "silver": {
         "name": "Silver Enterprise",
         "priceRWF": 20000,
+        "targetBusiness": "Growing multi-branch SME",
+        "supportSla": "Priority Same-Day Support",
+        "maxArchitectures": 2,
         "maxBranches": 5,
         "maxStaff": 10,
         "maxProducts": None,
         "maxMonthlySales": None,
         "allowHybrid": True,
+        "allowFullMoneyBuckets": True,
         "allowWhatsappAutomation": True,
         "allowGoogleDrive": True,
         "allowGmailReports": True,
@@ -51,15 +66,20 @@ PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowTwoFactorSecurity": True,
     },
     "gold": {
         "name": "Gold Corporate",
         "priceRWF": 35000,
+        "targetBusiness": "Chains, farms, hospitality & large teams",
+        "supportSla": "24/7 Dedicated Account Manager",
+        "maxArchitectures": 6,
         "maxBranches": None,
         "maxStaff": None,
         "maxProducts": None,
         "maxMonthlySales": None,
         "allowHybrid": True,
+        "allowFullMoneyBuckets": True,
         "allowWhatsappAutomation": True,
         "allowGoogleDrive": True,
         "allowGmailReports": True,
@@ -67,15 +87,20 @@ PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowTwoFactorSecurity": True,
     },
     "platinum": {
         "name": "Platinum Partner",
         "priceRWF": 0,
+        "targetBusiness": "Top ExBOS brand ambassadors",
+        "supportSla": "VIP Partner Support",
+        "maxArchitectures": 6,
         "maxBranches": None,
         "maxStaff": None,
         "maxProducts": None,
         "maxMonthlySales": None,
         "allowHybrid": True,
+        "allowFullMoneyBuckets": True,
         "allowWhatsappAutomation": True,
         "allowGoogleDrive": True,
         "allowGmailReports": True,
@@ -83,15 +108,21 @@ PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowTwoFactorSecurity": True,
     },
 }
+
+# Backward-compatible alias
+PLAN_LIMITS = DEFAULT_PLAN_LIMITS
 
 REQUIRED_TIER_FOR_FEATURE: dict[str, str] = {
     "maxBranches": "Silver",
     "maxStaff": "Bronze",
     "maxProducts": "Bronze",
     "maxMonthlySales": "Bronze",
+    "maxArchitectures": "Silver",
     "allowHybrid": "Silver",
+    "allowFullMoneyBuckets": "Bronze",
     "allowWhatsappAutomation": "Bronze",
     "allowGoogleDrive": "Silver",
     "allowGmailReports": "Bronze",
@@ -99,7 +130,43 @@ REQUIRED_TIER_FOR_FEATURE: dict[str, str] = {
     "allowBranchFreeze": "Silver",
     "allowPublicDocLinks": "Bronze",
     "allowAdvancedReports": "Bronze",
+    "allowTwoFactorSecurity": "Free",
 }
+
+_LIMITS_CACHE: dict = {"data": None, "ts": 0.0}
+
+
+def invalidate_plan_limits_cache() -> None:
+    _LIMITS_CACHE["data"] = None
+    _LIMITS_CACHE["ts"] = 0.0
+
+
+def get_all_plan_limits(db=None) -> dict[str, dict]:
+    """
+    Load live Super-Admin-configurable plan limits from MongoDB platform_config
+    ('plan_limits'), merged cleanly over DEFAULT_PLAN_LIMITS.
+    """
+    now = time.monotonic()
+    if _LIMITS_CACHE["data"] is not None and (now - _LIMITS_CACHE["ts"]) < 5.0:
+        return {k: dict(v) for k, v in _LIMITS_CACHE["data"].items()}
+
+    merged = {k: dict(v) for k, v in DEFAULT_PLAN_LIMITS.items()}
+    try:
+        if db is None:
+            from app.database import get_db
+            db = get_db()
+        doc = db.platform_config.find_one({"key": "plan_limits"})
+        stored = doc.get("value") if doc and isinstance(doc.get("value"), dict) else {}
+        for tier_key, overrides in stored.items():
+            norm = normalize_plan_name(tier_key)
+            if norm in merged and isinstance(overrides, dict):
+                merged[norm] = {**merged[norm], **overrides}
+    except Exception:
+        pass
+
+    _LIMITS_CACHE["data"] = {k: dict(v) for k, v in merged.items()}
+    _LIMITS_CACHE["ts"] = now
+    return merged
 
 
 def _is_super_admin(user_doc: dict | None) -> bool:
@@ -149,7 +216,6 @@ def get_effective_plan(user_doc: dict | None) -> tuple[str, bool]:
         try:
             exp_date = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
             if exp_date.tzinfo is None:
-                # Treat YYYY-MM-DD as end of that day UTC
                 exp_date = exp_date.replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
             if datetime.now(timezone.utc) > exp_date:
                 return "free", True
@@ -159,8 +225,9 @@ def get_effective_plan(user_doc: dict | None) -> tuple[str, bool]:
     return plan_key, False
 
 
-def get_plan_limits(plan_key: str) -> dict:
-    return dict(PLAN_LIMITS.get(normalize_plan_name(plan_key), PLAN_LIMITS["free"]))
+def get_plan_limits(plan_key: str, db=None) -> dict:
+    all_limits = get_all_plan_limits(db=db)
+    return dict(all_limits.get(normalize_plan_name(plan_key), all_limits["free"]))
 
 
 def get_tenant_usage(db, owner_scope: str) -> dict:
@@ -211,14 +278,12 @@ def check_entitlement(
 ) -> tuple[bool, dict | None]:
     """
     Check whether a tenant can use a boolean feature or create another resource
-    under a numeric quota. Returns (True, None) if allowed, or (False, error_payload)
-    ready to be returned with HTTP 402 Payment Required.
+    under the live Super-Admin-configured PLAN_LIMITS.
     """
     scope = (owner_scope or "").strip().lower()
     owner_doc = user_doc
     if not owner_doc and scope and "@" in scope:
         owner_doc = db.users.find_one({"email": scope})
-    # If caller is a staff account, check their business owner's plan
     if owner_doc and owner_doc.get("ownerScopeKey"):
         parent = db.users.find_one({"email": str(owner_doc["ownerScopeKey"]).strip().lower()})
         if parent:
@@ -229,10 +294,9 @@ def check_entitlement(
         return True, None
 
     eff_plan, is_expired = get_effective_plan(owner_doc)
-    limits = get_plan_limits(eff_plan)
+    limits = get_plan_limits(eff_plan, db=db)
     req_tier = REQUIRED_TIER_FOR_FEATURE.get(feature_key, "Silver")
 
-    # Boolean feature check
     if feature_key.startswith("allow"):
         if limits.get(feature_key, False):
             return True, None
@@ -245,7 +309,6 @@ def check_entitlement(
             "message": f"Upgrade to {req_tier} to unlock this feature (current plan: {eff_plan.title()}).",
         }
 
-    # Numeric quota check
     limit_val = limits.get(feature_key)
     if limit_val is None:
         return True, None
@@ -261,7 +324,6 @@ def check_entitlement(
     if used < int(limit_val):
         return True, None
 
-    # Determine next tier that raises this specific limit
     next_tier = req_tier
     if feature_key == "maxBranches" and eff_plan == "silver":
         next_tier = "Gold"
@@ -289,4 +351,3 @@ def check_entitlement(
         "subscriptionExpired": is_expired,
         "message": f"You reached your {eff_plan.title()} plan limit of {limit_val} {label}. Upgrade to {next_tier} to continue.",
     }
-

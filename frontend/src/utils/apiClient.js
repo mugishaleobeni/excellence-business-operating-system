@@ -305,7 +305,15 @@ export const exbosApi = {
     apiRequest(`/super-admin/upgrade-requests/${encodeURIComponent(reqId)}/review`, {
       method: 'POST',
       body: payload
-    })
+    }),
+  superAdminGetPlanLimits: () => apiRequest('/super-admin/plan-limits'),
+  superAdminUpdatePlanLimits: (planKey, payload = {}) =>
+    apiRequest(`/super-admin/plan-limits/${encodeURIComponent(planKey)}`, {
+      method: 'PUT',
+      body: payload
+    }),
+  superAdminResetPlanLimits: () =>
+    apiRequest('/super-admin/plan-limits/reset', { method: 'POST' })
 }
 
 export const apiClient = exbosApi

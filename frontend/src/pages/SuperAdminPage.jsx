@@ -111,6 +111,11 @@ export default function SuperAdminPage() {
   const [upgradeRequests, setUpgradeRequests] = useState([])
   const [pendingUpgradesCount, setPendingUpgradesCount] = useState(0)
 
+  // Live Editable Plan Limits & Feature Matrix (Free, Bronze, Silver, Gold, Platinum)
+  const [planLimitsMap, setPlanLimitsMap] = useState(null)
+  const [editingTierKey, setEditingTierKey] = useState('free')
+  const [savingLimits, setSavingLimits] = useState(false)
+
   // Subscription / Complimentary Access Form
   const [selectedUserEmail, setSelectedUserEmail] = useState('')
   const [grantPlan, setGrantPlan] = useState('Gold')
@@ -198,6 +203,60 @@ export default function SuperAdminPage() {
     }
   }, [])
 
+  const fetchPlanLimits = useCallback(async () => {
+    const res = await apiClient.superAdminGetPlanLimits()
+    if (res.ok && res.data?.data) {
+      setPlanLimitsMap(res.data.data)
+    }
+  }, [])
+
+  const updateEditingTierField = (field, value) => {
+    setPlanLimitsMap((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        [editingTierKey]: {
+          ...(prev[editingTierKey] || {}),
+          [field]: value
+        }
+      }
+    })
+  }
+
+  const handleSaveTierLimits = async () => {
+    if (!planLimitsMap?.[editingTierKey]) return
+    setSavingLimits(true)
+    const res = await apiClient.superAdminUpdatePlanLimits(
+      editingTierKey,
+      planLimitsMap[editingTierKey]
+    )
+    setSavingLimits(false)
+    if (!res.ok) {
+      showError(res.error || 'Could not save plan limits.')
+      return
+    }
+    if (res.data?.allPlanLimits) {
+      setPlanLimitsMap(res.data.allPlanLimits)
+    }
+    showNotice(res.data?.message || `Saved live feature matrix for ${editingTierKey}.`)
+    fetchAuditLogs()
+  }
+
+  const handleResetAllPlanLimits = async () => {
+    setSavingLimits(true)
+    const res = await apiClient.superAdminResetPlanLimits()
+    setSavingLimits(false)
+    if (!res.ok) {
+      showError(res.error || 'Could not reset plan limits.')
+      return
+    }
+    if (res.data?.data) {
+      setPlanLimitsMap(res.data.data)
+    }
+    showNotice('All plan limits & feature switches reset to factory defaults.')
+    fetchAuditLogs()
+  }
+
   const handleReviewUpgrade = async (reqId, action) => {
     const res = await apiClient.superAdminReviewUpgradeRequest(reqId, {
       action,
@@ -251,14 +310,16 @@ export default function SuperAdminPage() {
     fetchAuditLogs()
     fetchSystemHealth()
     fetchUpgradeRequests()
-  }, [fetchAnalytics, fetchUsers, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests])
+    fetchPlanLimits()
+  }, [fetchAnalytics, fetchUsers, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests, fetchPlanLimits])
 
   useEffect(() => {
     fetchAnalytics()
     fetchAuditLogs()
     fetchSystemHealth()
     fetchUpgradeRequests()
-  }, [fetchAnalytics, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests])
+    fetchPlanLimits()
+  }, [fetchAnalytics, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests, fetchPlanLimits])
 
   useEffect(() => {
     fetchUsers()
@@ -1589,9 +1650,223 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* TAB 3: PRICING PLANS & PLATINUM REFERRAL */}
+        {/* TAB 3: PRICING PLANS, LIVE PLAN_LIMITS FEATURE MATRIX & PLATINUM REFERRAL */}
         {activeTab === 'pricing' && (
           <div className="space-y-6">
+            {/* Live Editable PLAN_LIMITS & Feature Matrix Controller */}
+            {planLimitsMap && planLimitsMap[editingTierKey] && (
+              <div className="rounded-3xl p-6 bg-gradient-to-br from-[#071544] via-[#0A2786]/60 to-[#040D29] border border-[#9EDCFF]/35 shadow-2xl space-y-5">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                  <div>
+                    <span className="text-[10px] font-orbitron uppercase tracking-wider text-amber-300 font-bold">
+                      Live Backend Entitlements Controller (MongoDB Synced)
+                    </span>
+                    <h3 className="font-orbitron text-lg sm:text-xl font-extrabold text-white mt-0.5">
+                      Edit Plan Limits &amp; Feature Access Per Tier
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Modify numeric quotas (or mark Unlimited) and toggle any ExBOS feature ON/OFF per tier. Changes enforce immediately on all APIs.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={savingLimits}
+                      onClick={handleResetAllPlanLimits}
+                      className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-slate-200 cursor-pointer"
+                    >
+                      Reset Defaults
+                    </button>
+                    <button
+                      type="button"
+                      disabled={savingLimits}
+                      onClick={handleSaveTierLimits}
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-orbitron text-xs font-extrabold cursor-pointer disabled:opacity-60 shadow-lg"
+                    >
+                      {savingLimits
+                        ? 'Saving...'
+                        : `Save ${planLimitsMap[editingTierKey].name || editingTierKey.toUpperCase()}`}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tier Selector Pills */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { key: 'free', label: 'Forever Free' },
+                    { key: 'bronze', label: 'Bronze Growth' },
+                    { key: 'silver', label: 'Silver Enterprise' },
+                    { key: 'gold', label: 'Gold Corporate' },
+                    { key: 'platinum', label: 'Platinum Partner' }
+                  ].map((tier) => (
+                    <button
+                      key={tier.key}
+                      type="button"
+                      onClick={() => setEditingTierKey(tier.key)}
+                      className={`px-4 py-2 rounded-xl font-orbitron text-xs font-bold cursor-pointer transition border ${
+                        editingTierKey === tier.key
+                          ? 'bg-[#218DFF] text-white border-[#9EDCFF] shadow-md'
+                          : 'bg-[#03091F]/70 text-slate-300 border-white/10 hover:border-[#218DFF]/60'
+                      }`}
+                    >
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tier Metadata Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[#9EDCFF] mb-1">
+                      Tier Display Name
+                    </label>
+                    <input
+                      type="text"
+                      value={planLimitsMap[editingTierKey].name || ''}
+                      onChange={(e) => updateEditingTierField('name', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[#9EDCFF] mb-1">
+                      Monthly Price (RWF)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={planLimitsMap[editingTierKey].priceRWF ?? 0}
+                      onChange={(e) => updateEditingTierField('priceRWF', Number(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white font-orbitron font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[#9EDCFF] mb-1">
+                      Target Business
+                    </label>
+                    <input
+                      type="text"
+                      value={planLimitsMap[editingTierKey].targetBusiness || ''}
+                      onChange={(e) => updateEditingTierField('targetBusiness', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-[#9EDCFF] mb-1">
+                      Support SLA
+                    </label>
+                    <input
+                      type="text"
+                      value={planLimitsMap[editingTierKey].supportSla || ''}
+                      onChange={(e) => updateEditingTierField('supportSla', e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white"
+                    />
+                  </div>
+                </div>
+
+                {/* Numeric Quotas with Unlimited Toggle */}
+                <div>
+                  <h4 className="text-xs font-orbitron uppercase text-[#9EDCFF] font-bold mb-2.5">
+                    Numeric Quotas (Check &ldquo;∞ Unlimited&rdquo; for no limit)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+                    {[
+                      { key: 'maxBranches', label: 'Max Branches' },
+                      { key: 'maxStaff', label: 'Max Staff Logins' },
+                      { key: 'maxProducts', label: 'Max Products / Items' },
+                      { key: 'maxMonthlySales', label: 'Max Monthly Sales' },
+                      { key: 'maxArchitectures', label: 'Max Architectures' }
+                    ].map((q) => {
+                      const val = planLimitsMap[editingTierKey][q.key]
+                      const isUnlim = val === null || val === undefined
+                      return (
+                        <div
+                          key={q.key}
+                          className="p-3 rounded-2xl bg-[#03091F]/80 border border-white/10 space-y-2"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-white text-[11px]">{q.label}</span>
+                            <label className="inline-flex items-center gap-1 text-[10px] text-emerald-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isUnlim}
+                                onChange={(e) =>
+                                  updateEditingTierField(q.key, e.target.checked ? null : 1)
+                                }
+                              />
+                              <span>∞</span>
+                            </label>
+                          </div>
+                          {isUnlim ? (
+                            <div className="py-1.5 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-orbitron font-bold text-center text-[11px]">
+                              ∞ Unlimited
+                            </div>
+                          ) : (
+                            <input
+                              type="number"
+                              min="0"
+                              value={val}
+                              onChange={(e) =>
+                                updateEditingTierField(q.key, Math.max(0, Number(e.target.value) || 0))
+                              }
+                              className="w-full px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/15 text-white font-orbitron font-bold"
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Feature Switches Grid */}
+                <div>
+                  <h4 className="text-xs font-orbitron uppercase text-[#9EDCFF] font-bold mb-2.5">
+                    Feature Access Switches (Toggle ON / OFF for {planLimitsMap[editingTierKey].name})
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
+                    {[
+                      { key: 'allowHybrid', label: 'Hybrid Multi-Activity' },
+                      { key: 'allowFullMoneyBuckets', label: 'Full 8-Bucket Money View' },
+                      { key: 'allowPublicDocLinks', label: 'Public Share Links (/d/:id)' },
+                      { key: 'allowWhatsappAutomation', label: 'WhatsApp Automation' },
+                      { key: 'allowGmailReports', label: 'Gmail Financial Reports' },
+                      { key: 'allowGoogleDrive', label: 'Google Drive Export Vault' },
+                      { key: 'allowMultiBranchTransfer', label: 'Inter-Branch Stock Transfer' },
+                      { key: 'allowBranchFreeze', label: 'Branch Freeze & Owner Lock' },
+                      { key: 'allowAdvancedReports', label: 'Full P&L & Branch Analytics' },
+                      { key: 'allowTwoFactorSecurity', label: '2-Step Security & Audit Log' }
+                    ].map((feat) => {
+                      const enabled = Boolean(planLimitsMap[editingTierKey][feat.key])
+                      return (
+                        <button
+                          key={feat.key}
+                          type="button"
+                          onClick={() => updateEditingTierField(feat.key, !enabled)}
+                          className={`p-3 rounded-2xl border text-left transition flex items-center justify-between gap-2 cursor-pointer ${
+                            enabled
+                              ? 'bg-emerald-500/15 border-emerald-400/40 text-white'
+                              : 'bg-[#03091F]/70 border-white/10 text-slate-400 hover:border-white/25'
+                          }`}
+                        >
+                          <span className="font-semibold text-[11px] leading-tight">
+                            {feat.label}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-orbitron font-black shrink-0 ${
+                              enabled
+                                ? 'bg-emerald-400 text-slate-950'
+                                : 'bg-white/10 text-slate-400'
+                            }`}
+                          >
+                            {enabled ? 'ON' : 'OFF'}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               {pricingPlans.map((plan) => (
                 <div
