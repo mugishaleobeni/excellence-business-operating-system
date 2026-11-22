@@ -638,10 +638,25 @@ def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
     )
 
     patch_fields = validated_data.model_dump(exclude_none=True)
+    target_norm = str(plan_id or "").strip().lower()
     updated_plan = None
     for idx, plan in enumerate(plans):
-        if str(plan.get("id")) == str(plan_id):
-            plans[idx] = {**plan, **patch_fields}
+        p_id = str(plan.get("id") or "").strip().lower()
+        p_tier = str(plan.get("tier") or "").strip().lower()
+        p_name = str(plan.get("name") or "").strip().lower()
+        if (
+            p_id == target_norm
+            or p_tier == target_norm
+            or p_id.replace("plan-", "") == target_norm.replace("plan-", "")
+            or (target_norm and target_norm in p_name)
+        ):
+            merged = {**plan, **patch_fields}
+            # Keep priceRWF and monthlyPriceRWF in sync for all consumers
+            if "priceRWF" in patch_fields and "monthlyPriceRWF" not in patch_fields:
+                merged["monthlyPriceRWF"] = patch_fields["priceRWF"]
+            elif "monthlyPriceRWF" in patch_fields and "priceRWF" not in patch_fields:
+                merged["priceRWF"] = patch_fields["monthlyPriceRWF"]
+            plans[idx] = merged
             updated_plan = plans[idx]
             break
 

@@ -47,7 +47,7 @@ export const OPTIMIZED_IMAGES = {
     small: whyChooseWoman_480w,
     large: whyChooseWoman_1440w,
     srcSet: whyChooseWoman_480w + " 480w" + ", " + whyChooseWoman_960w + " 960w" + ", " + whyChooseWoman_1440w + " 1440w",
-    lqip: "data:image/webp;base64,UklGRgoBAABXRUJQVlA4IP4AAADwBQCdASoYABgAPwFyslGrJqSiqAqpYCAJbAC/YIAa0VgdN5IRhOuPogNEHqADV5p5mFA+DDrMAAD+8qQqsF03wR6xOU64iFYYLeqgG51LtCJRkOoxvq+JilOMmf12Smwl7m5X6gnvXVdCUESu3+9Pi6YivFZhnUYDjunqQX+T1cd2gT7gZJhoP6rbSUB9/rcF+WV2jmfDmf5co3rRNNb7id0ueQszOd4xqfqZyzg0xbgGXj/1M4gl47JjnT+9WhmaBQH/hiXn6QdbLId7B2TXPtJYPP6OE3PurQ+gz1v1+1kIBOvIJ4IEORw0r1KAuYJu9BJQfqpk21wsoSrAAA==",
+    lqip: "",
     width: 1247,
     height: 1261
   },
