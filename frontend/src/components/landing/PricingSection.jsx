@@ -1,7 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, amountToWords } from '../../utils/currencyWords'
+import { apiClient } from '../../utils/apiClient'
+import { buildDisplayPlansFromLimits } from '../../utils/planEntitlements'
 import {
   Check,
   X,
@@ -208,6 +210,24 @@ function PlanCard({ plan, language, onSelect }) {
 export default function PricingSection() {
   const { pricingPlans, platinumProgram, language } = useExbos()
   const navigate = useNavigate()
+  const [liveLimits, setLiveLimits] = useState(null)
+
+  useEffect(() => {
+    let active = true
+    apiClient.superAdminGetPlanLimits().then((res) => {
+      if (active && res.ok && res.data?.data) {
+        setLiveLimits(res.data.data)
+      }
+    }).catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const displayPlans = useMemo(
+    () => (liveLimits ? buildDisplayPlansFromLimits(liveLimits, pricingPlans) : pricingPlans),
+    [liveLimits, pricingPlans]
+  )
 
   return (
     <section
@@ -276,7 +296,7 @@ export default function PricingSection() {
 
       {/* Glass pricing cards */}
       <div className="pricing-grid">
-        {pricingPlans.map((plan) => (
+        {displayPlans.map((plan) => (
           <PlanCard
             key={plan.id}
             plan={plan}

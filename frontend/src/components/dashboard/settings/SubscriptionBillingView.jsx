@@ -14,7 +14,8 @@ import { useExbos } from '../../../context/ExbosContext'
 import { apiClient } from '../../../utils/apiClient'
 import {
   getEffectivePlanForUser,
-  getPlanLimitsForUser
+  getPlanLimitsForUser,
+  buildDisplayPlansFromLimits
 } from '../../../utils/planEntitlements'
 
 function UsageMeter({ label, used = 0, limit = null }) {
@@ -65,11 +66,18 @@ export default function SubscriptionBillingView({
   const [payerPhone, setPayerPhone] = useState(user?.phone || '')
   const [submitting, setSubmitting] = useState(false)
   const [myRequests, setMyRequests] = useState([])
+  const [liveLimitsMap, setLiveLimitsMap] = useState(null)
 
   const loadRequests = useCallback(async () => {
-    const res = await apiClient.getMySubscriptionRequests()
-    if (res.ok && Array.isArray(res.data?.data?.requests)) {
-      setMyRequests(res.data.data.requests)
+    const [reqRes, limRes] = await Promise.all([
+      apiClient.getMySubscriptionRequests(),
+      apiClient.superAdminGetPlanLimits()
+    ])
+    if (reqRes.ok && Array.isArray(reqRes.data?.data?.requests)) {
+      setMyRequests(reqRes.data.data.requests)
+    }
+    if (limRes.ok && limRes.data?.data) {
+      setLiveLimitsMap(limRes.data.data)
     }
   }, [])
 
@@ -77,68 +85,16 @@ export default function SubscriptionBillingView({
     loadRequests()
   }, [loadRequests])
 
-  const plans = [
-    {
-      id: 'Free',
-      name: 'Forever Free',
-      priceRWF: '0',
-      period: 'Forever',
-      description: 'Solo trader core ledgers to get off paper notebooks.',
-      features: [
-        '1 Branch (Main HQ)',
-        'Owner Login Only',
-        'Up to 100 Catalog Items',
-        'Up to 150 Sales / Month',
-        'Basic Cash + MoMo Summary'
-      ],
-      badge: 'Starter'
-    },
-    {
-      id: 'Bronze',
-      name: 'Bronze Growth',
-      priceRWF: '10,000',
-      period: '/ month',
-      description: 'Ideal for busy single-shop retail, salons & workshops.',
-      features: [
-        'Up to 2 Staff Logins',
-        'Up to 1,000 Catalog Items',
-        'Unlimited Monthly Sales',
-        'WhatsApp Receipts & Public Links',
-        'Gmail Financial Reports'
-      ],
-      badge: 'Popular'
-    },
-    {
-      id: 'Silver',
-      name: 'Silver Enterprise',
-      priceRWF: '20,000',
-      period: '/ month',
-      description: 'Full multi-branch control, Hybrid mode & Google Drive Vault.',
-      features: [
-        'Up to 5 Branches + Stock Transfers',
-        'Up to 10 Staff + Custom Permissions',
-        'Unlimited Products & Sales',
-        'Google Drive Vault & Hybrid Mode',
-        'Branch Freeze & Priority Support'
-      ],
-      badge: 'Recommended'
-    },
-    {
-      id: 'Gold',
-      name: 'Gold Corporate',
-      priceRWF: '35,000',
-      period: '/ month',
-      description: 'Unlimited branches, unlimited staff & dedicated support.',
-      features: [
-        'Unlimited Branches & HQ Analytics',
-        'Unlimited Staff & Manager Locks',
-        'All 6 Architectures + Hybrid',
-        'Automated Backups & Audit Trail',
-        '24/7 Dedicated Account Manager'
-      ],
-      badge: 'Full Power'
-    }
-  ]
+  const liveDisplayPlans = buildDisplayPlansFromLimits(liveLimitsMap)
+  const plans = liveDisplayPlans.map((p) => ({
+    id: p.tier,
+    name: p.name,
+    priceRWF: Number(p.priceRWF || 0).toLocaleString(),
+    period: Number(p.priceRWF || 0) === 0 ? 'Forever' : '/ month',
+    description: p.description,
+    features: p.features.filter((f) => f.included).slice(0, 6).map((f) => f.name),
+    badge: p.badge
+  }))
 
   const handleSelectPlan = async (planObj) => {
     if (planObj.id === currentPlan) return

@@ -5,6 +5,7 @@ import { formatRWF } from '../utils/currencyWords'
 import MoneyInput from '../components/common/MoneyInput'
 import PublicNavbar from '../components/layout/PublicNavbar'
 import { apiClient } from '../utils/apiClient'
+import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
 import {
   ShieldCheck,
   Crown,
@@ -237,6 +238,7 @@ export default function SuperAdminPage() {
     }
     if (res.data?.allPlanLimits) {
       setPlanLimitsMap(res.data.allPlanLimits)
+      setPricingPlans(buildDisplayPlansFromLimits(res.data.allPlanLimits, pricingPlans))
     }
     showNotice(res.data?.message || `Saved live feature matrix for ${editingTierKey}.`)
     fetchAuditLogs()
