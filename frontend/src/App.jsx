@@ -9,6 +9,8 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import GlobalToastContainer from './components/common/GlobalToastContainer'
 import GlobalKinyarwandaTranslator from './components/common/GlobalKinyarwandaTranslator'
+import PwaInstallBanner from './components/common/PwaInstallBanner'
+import UpgradePromptModal from './components/common/UpgradePromptModal'
 import PreloaderScreen from './components/common/PreloaderScreen'
 import {
   FeaturesPage,
@@ -126,6 +128,8 @@ export default function App() {
         </Suspense>
         <GlobalToastContainer />
         <GlobalKinyarwandaTranslator />
+        <PwaInstallBanner />
+        <UpgradePromptModal />
       </BrowserRouter>
     </ExbosProvider>
     </GlobalErrorBoundary>

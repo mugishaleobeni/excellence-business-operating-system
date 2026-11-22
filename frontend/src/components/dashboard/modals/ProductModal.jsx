@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Box, X, Camera, VideoOff, TrendingUp, Percent, Tag, Plus, Check, Barcode, QrCode } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 import { renderBarcodeSvg } from "../../../utils/barcodeUtils";
+import BarcodeScannerModal from "../../common/BarcodeScannerModal";
 import ProductQrCode from "../../../utils/qrCodeGenerator";
 import CustomSelect from "../../common/CustomSelect";
 
@@ -103,26 +104,9 @@ export default function ProductModal({
     setShowInlineCategoryInput(false);
   };
 
-  const startCameraScan = async () => {
+  const startCameraScan = () => {
     setCameraError("");
     setCameraActive(true);
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-      } else {
-        setCameraError("Camera access not supported on this browser.");
-      }
-    } catch (err) {
-      setCameraError("Unable to access camera. Please enter barcode manually.");
-      setCameraActive(false);
-    }
   };
 
   const stopCameraScan = () => {
@@ -206,6 +190,15 @@ export default function ProductModal({
         onClose();
       }}
     >
+      <BarcodeScannerModal
+        isOpen={cameraActive}
+        onClose={stopCameraScan}
+        onDetected={(code) => {
+          setProductSku(code);
+          stopCameraScan();
+        }}
+        title="Scan Product SKU / Barcode"
+      />
                   <div
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg max-h-[92vh] flex flex-col rounded-3xl bg-gradient-to-b from-[#0B215E] via-[#071644] to-[#040C26] border-2 border-[#218DFF]/40 shadow-2xl text-white animate-in zoom-in-95 duration-150 overflow-hidden my-auto"

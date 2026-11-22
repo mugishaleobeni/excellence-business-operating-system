@@ -1,0 +1,40 @@
+{
+  "name": "ExBOS — Excellence Business Operations System",
+  "short_name": "ExBOS",
+  "description": "Rwanda's all-in-one POS, stock inventory, MTN MoMo cash-flow, WhatsApp receipts, and multi-branch profit operating system by PYLARIX.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#03091F",
+  "theme_color": "#0A2786",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/logo/exboslogo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo/exboslogo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Open Business Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/logo/exboslogo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sign In to ExBOS",
+      "short_name": "Login",
+      "url": "/login",
+      "icons": [{ "src": "/logo/exboslogo.png", "sizes": "192x192" }]
+    }
+  ]
+}

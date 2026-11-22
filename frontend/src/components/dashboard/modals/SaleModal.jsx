@@ -6,6 +6,7 @@ import SendDocumentModal from "../documents/SendDocumentModal";
 import DocumentPreviewModal from "../documents/DocumentPreviewModal";
 import { downloadDocumentFile } from "../documents/documentUtils";
 import { useExbos } from "../../../context/ExbosContext";
+import BarcodeScannerModal from "../../common/BarcodeScannerModal";
 
 export default function SaleModal({
   isOpen,
@@ -29,6 +30,29 @@ export default function SaleModal({
   const [saleProductSearch, setSaleProductSearch] = useState("");
   const [saleUpdateCatalogPrice, setSaleUpdateCatalogPrice] = useState(false);
   const [savedSaleDoc, setSavedSaleDoc] = useState(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleBarcodeDetectedForSale = (code) => {
+    const q = String(code || "").trim().toLowerCase();
+    if (!q) return;
+    const match = (allProducts || []).find(
+      (p) =>
+        String(p.sku || "").trim().toLowerCase() === q ||
+        String(p.barcode || "").trim().toLowerCase() === q ||
+        String(p.id || "").trim().toLowerCase() === q ||
+        String(p.name || p.title || "").trim().toLowerCase().includes(q)
+    );
+    if (match) {
+      setSelectedSaleProduct(match);
+      setSaleProductSearch(match.name || match.title || code);
+      const price = Number(match.sellingPriceRWF || match.sellingPrice || match.priceRWF || match.price || 0);
+      if (price > 0) setSaleUnitPrice(String(price));
+      setSaleProductDropdownOpen(false);
+    } else {
+      setSaleProductSearch(code);
+      setSaleProductDropdownOpen(true);
+    }
+  };
   const [previewOpen, setPreviewOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const saleProductDropdownRef = useRef(null);
@@ -260,15 +284,31 @@ export default function SaleModal({
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose()
-                  }}
-                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScannerOpen(true)}
+                    className="px-2.5 py-1.5 rounded-xl bg-[#218DFF]/20 hover:bg-[#218DFF]/35 border border-[#9EDCFF]/30 text-[#9EDCFF] hover:text-white text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer transition-colors"
+                    title="Scan Product Barcode / QR"
+                  >
+                    <span>Scan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                    }}
+                    className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <BarcodeScannerModal
+                  isOpen={scannerOpen}
+                  onClose={() => setScannerOpen(false)}
+                  onDetected={handleBarcodeDetectedForSale}
+                  title="Scan Product for Sale"
+                />
               </div>
 
               {/* Form Body or Success Invoice Actions */}

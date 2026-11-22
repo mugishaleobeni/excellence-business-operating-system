@@ -91,6 +91,15 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
       }
     }
     const data = await response.json().catch(() => null)
+    if (response.status === 402 && typeof window !== 'undefined') {
+      const detail =
+        (data?.details && typeof data.details === 'object' ? data.details : null) || {
+          code: 'PLAN_LIMIT_REACHED',
+          message: data?.error || data?.message || 'Upgrade your ExBOS plan to unlock this feature.',
+          requiredPlan: 'Silver'
+        }
+      window.dispatchEvent(new CustomEvent('exbos:plan-limit', { detail }))
+    }
     if (response.status >= 500 && !String(endpoint || '').includes('/health/report-error')) {
       import('./errorReporter')
         .then(({ reportSystemError }) =>
