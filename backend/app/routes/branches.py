@@ -161,6 +161,15 @@ def create_branch():
         return error_response("Only the Business Owner at Main HQ can create new branches.", status_code=403)
     _ensure_main_branch(db, scope_key, user_doc)
 
+    from app.utils.entitlements import check_entitlement
+    allowed, limit_err = check_entitlement(db, scope_key, "maxBranches", user_doc)
+    if not allowed:
+        return error_response(
+            error=limit_err["message"],
+            details=limit_err,
+            status_code=402,
+        )
+
     payload = request.get_json(silent=True) or {}
     name = (payload.get("name") or "").strip()
     if not name:
@@ -462,6 +471,15 @@ def transfer_branch_stock(branch_id: str):
     scope_key, user_doc = _resolve_scope_and_user(db)
     if _is_branch_manager(user_doc):
         return error_response("Only the Business Owner at Main HQ can transfer stock between branches.", status_code=403)
+
+    from app.utils.entitlements import check_entitlement
+    allowed, limit_err = check_entitlement(db, scope_key, "allowMultiBranchTransfer", user_doc)
+    if not allowed:
+        return error_response(
+            error=limit_err["message"],
+            details=limit_err,
+            status_code=402,
+        )
     if branch_id == "main":
         return error_response("Select a destination sub-branch to receive stock from Main HQ.", status_code=400)
 

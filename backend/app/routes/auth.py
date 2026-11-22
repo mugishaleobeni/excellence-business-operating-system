@@ -56,12 +56,24 @@ def _is_super_admin_user(user_doc: dict | None) -> bool:
 
 
 def _strip_sensitive_user_fields(user_doc: dict) -> dict:
+    from app.utils.entitlements import get_effective_plan, get_plan_limits, get_tenant_usage
+
     clean = serialize_doc(user_doc)
     clean.pop("password_hash", None)
     clean["isSuperAdmin"] = _is_super_admin_user(user_doc)
     clean["accountStatus"] = clean.get("accountStatus") or "Active"
     clean["billingType"] = clean.get("billingType") or "Free"
     clean["subscriptionExpiry"] = clean.get("subscriptionExpiry") or ""
+
+    eff_plan, is_expired = get_effective_plan(user_doc)
+    clean["effectivePlan"] = eff_plan.title()
+    clean["planLimits"] = get_plan_limits(eff_plan)
+    clean["subscriptionExpired"] = is_expired
+    try:
+        owner_scope = (user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
+        clean["planUsage"] = get_tenant_usage(get_db(), owner_scope)
+    except Exception:
+        clean["planUsage"] = {}
     return clean
 
 
@@ -622,6 +634,15 @@ def update_current_user(validated_data: UpdateProfileSchema):
     if not user_doc:
         return error_response("Authenticated user account not found.", status_code=404)
 
+    # Prevent non-Super-Admin users from self-upgrading to paid plans without payment verification
+    if not _is_super_admin_user(user_doc):
+        cur_plan = str(user_doc.get("plan") or user_doc.get("planTier") or "Free").strip().lower()
+        for field_name in ("plan", "planTier"):
+            if field_name in update_fields:
+                req_plan = str(update_fields[field_name] or "free").strip().lower()
+                if req_plan not in ("free", cur_plan):
+                    update_fields.pop(field_name, None)
+
     db.users.update_one({"_id": user_doc["_id"]}, {"$set": update_fields})
     user_doc.update(update_fields)
     clean_user = _strip_sensitive_user_fields(user_doc)
@@ -911,6 +932,15 @@ def invite_team_member():
         full_name = member_email.split("@")[0].replace(".", " ").title()
 
     existing = db.users.find_one({"email": member_email})
+    if not existing:
+        from app.utils.entitlements import check_entitlement
+        allowed, limit_err = check_entitlement(db, owner_scope, "maxStaff", actor)
+        if not allowed:
+            return error_response(
+                error=limit_err["message"],
+                details=limit_err,
+                status_code=402,
+            )
     if existing and (existing.get("ownerScopeKey") or "").strip().lower() != owner_scope:
         if not existing.get("ownerScopeKey"):
             return error_response(
@@ -1053,5 +1083,82 @@ def remove_team_member(member_email: str):
         return error_response("Team member not found in your organization.", status_code=404)
 
     return success_response(message=f"Access revoked for {target_email}.")
+
+
+@auth_bp.route("/subscription/requests", methods=["GET"])
+def list_my_upgrade_requests():
+    """Return the authenticated business owner's subscription upgrade requests."""
+    db = get_db()
+    actor, owner_scope = _resolve_team_actor(db)
+    if not actor or not owner_scope:
+        return error_response("Authentication required.", status_code=401)
+
+    docs = list(
+        db.subscription_requests.find({"email": owner_scope}).sort("createdAt", -1).limit(10)
+    )
+    cleaned = []
+    for d in docs:
+        item = serialize_doc(d)
+        item.pop("_id", None)
+        cleaned.append(item)
+    return success_response(data={"requests": cleaned})
+
+
+@auth_bp.route("/subscription/request-upgrade", methods=["POST"])
+def submit_subscription_upgrade_request():
+    """
+    Submit a Rwanda payment verification request (MTN MoMo / Airtel Money / Bank Transfer)
+    to upgrade to Bronze, Silver, or Gold. Reviewed & activated in 1 click by Super Admin.
+    """
+    from app.utils.entitlements import get_plan_limits, normalize_plan_name
+
+    db = get_db()
+    actor, owner_scope = _resolve_team_actor(db)
+    if not actor or not owner_scope:
+        return error_response("Authentication required.", status_code=401)
+
+    payload = request.get_json(silent=True) or {}
+    requested_plan = normalize_plan_name(payload.get("plan"))
+    if requested_plan not in ("bronze", "silver", "gold"):
+        return error_response("Select a valid paid plan: Bronze, Silver, or Gold.", status_code=400)
+
+    payment_method = str(payload.get("paymentMethod") or "MTN MoMo Business").strip()
+    payment_reference = str(payload.get("paymentReference") or "").strip()
+    payer_phone = str(payload.get("payerPhone") or actor.get("phone") or "").strip()
+    notes = str(payload.get("notes") or "").strip()
+
+    if not payment_reference:
+        return error_response(
+            "Please enter your MTN MoMo, Airtel Money, or Bank transaction reference ID.",
+            status_code=400,
+        )
+
+    plan_info = get_plan_limits(requested_plan)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    req_id = f"UPG-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+
+    req_doc = {
+        "id": req_id,
+        "email": owner_scope,
+        "fullName": actor.get("fullName") or actor.get("name") or owner_scope,
+        "businessName": actor.get("businessName") or "ExBOS Business",
+        "currentPlan": actor.get("plan") or actor.get("planTier") or "Free",
+        "requestedPlan": requested_plan.title(),
+        "amountRWF": float(plan_info.get("priceRWF") or 0),
+        "paymentMethod": payment_method,
+        "paymentReference": payment_reference,
+        "payerPhone": payer_phone,
+        "notes": notes,
+        "status": "pending",
+        "createdAt": now_iso,
+    }
+    db.subscription_requests.insert_one(dict(req_doc))
+
+    return success_response(
+        data=req_doc,
+        message=f"Upgrade request for {requested_plan.title()} submitted (Ref: {payment_reference}). Your plan will activate as soon as Super Admin verifies payment.",
+        status_code=201,
+    )
+
 
 

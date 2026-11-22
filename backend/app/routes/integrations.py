@@ -401,6 +401,11 @@ def send_report_via_gmail():
     payload = request.get_json(silent=True) or {}
     user_email, default_business_name = _resolve_user_email(payload)
 
+    from app.utils.entitlements import check_entitlement
+    allowed, limit_err = check_entitlement(db, user_email, "allowGmailReports")
+    if not allowed:
+        return error_response(error=limit_err["message"], details=limit_err, status_code=402)
+
     recipient = (payload.get("recipientEmail") or user_email).strip().lower()
     if not recipient or "@" not in recipient:
         return error_response("A valid recipient email address is required.", status_code=400)
@@ -529,6 +534,13 @@ def get_google_drive_auth_url():
     """Generates the official Google Cloud OAuth 2.0 authorization URL."""
     from flask import current_app
     import urllib.parse
+    from app.utils.entitlements import check_entitlement
+
+    db = get_db()
+    user_email, _ = _resolve_user_email()
+    allowed, limit_err = check_entitlement(db, user_email, "allowGoogleDrive")
+    if not allowed:
+        return error_response(error=limit_err["message"], details=limit_err, status_code=402)
 
     client_id = current_app.config.get("GOOGLE_CLIENT_ID", "").strip()
     redirect_uri = _resolve_google_redirect_uri()

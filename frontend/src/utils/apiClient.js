@@ -214,6 +214,13 @@ export const exbosApi = {
     }),
   removeTeamMember: (email) =>
     apiRequest(withScope(`/auth/team/${encodeURIComponent(email)}`), { method: 'DELETE' }),
+  requestSubscriptionUpgrade: (payload = {}) =>
+    apiRequest(withScope('/auth/subscription/request-upgrade'), {
+      method: 'POST',
+      body: payload
+    }),
+  getMySubscriptionRequests: () =>
+    apiRequest(withScope('/auth/subscription/requests')),
   getPublicDocument: (docId) =>
     apiRequest(`/workspaces/public-document/${encodeURIComponent(docId)}`),
   whatsappStatus: () => apiRequest(withScope('/whatsapp/status')),
@@ -291,7 +298,14 @@ export const exbosApi = {
       body: { status }
     }),
   superAdminClearResolvedErrors: () =>
-    apiRequest('/super-admin/error-reports/clear-resolved', { method: 'DELETE' })
+    apiRequest('/super-admin/error-reports/clear-resolved', { method: 'DELETE' }),
+  superAdminGetUpgradeRequests: (status = 'all') =>
+    apiRequest(`/super-admin/upgrade-requests?status=${encodeURIComponent(status)}`),
+  superAdminReviewUpgradeRequest: (reqId, payload = {}) =>
+    apiRequest(`/super-admin/upgrade-requests/${encodeURIComponent(reqId)}/review`, {
+      method: 'POST',
+      body: payload
+    })
 }
 
 export const apiClient = exbosApi

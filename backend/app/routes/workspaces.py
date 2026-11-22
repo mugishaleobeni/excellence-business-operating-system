@@ -391,6 +391,17 @@ def create_module_record(
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
 
+    # Enforce subscription quotas for catalog items & monthly sales
+    from app.utils.entitlements import check_entitlement
+    if module_name in ("Products", "Inventory", "FinishedGoods", "MenuItems", "Services", "HybridItems"):
+        allowed, limit_err = check_entitlement(db, scope_key, "maxProducts")
+        if not allowed:
+            return error_response(error=limit_err["message"], details=limit_err, status_code=402)
+    elif module_name in ("Sales", "Jobs", "KitchenOrders", "MixedSales"):
+        allowed, limit_err = check_entitlement(db, scope_key, "maxMonthlySales")
+        if not allowed:
+            return error_response(error=limit_err["message"], details=limit_err, status_code=402)
+
     ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
     raw_dump = validated_data.model_dump(exclude_none=True)
 

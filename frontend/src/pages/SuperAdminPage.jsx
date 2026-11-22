@@ -107,6 +107,10 @@ export default function SuperAdminPage() {
   const [diagResults, setDiagResults] = useState(null)
   const [runningDiag, setRunningDiag] = useState(false)
 
+  // Customer Payment Upgrade Requests
+  const [upgradeRequests, setUpgradeRequests] = useState([])
+  const [pendingUpgradesCount, setPendingUpgradesCount] = useState(0)
+
   // Subscription / Complimentary Access Form
   const [selectedUserEmail, setSelectedUserEmail] = useState('')
   const [grantPlan, setGrantPlan] = useState('Gold')
@@ -186,6 +190,27 @@ export default function SuperAdminPage() {
     setLoadingHealth(false)
   }, [])
 
+  const fetchUpgradeRequests = useCallback(async () => {
+    const res = await apiClient.superAdminGetUpgradeRequests('all')
+    if (res.ok) {
+      setUpgradeRequests(Array.isArray(res.data?.data) ? res.data.data : [])
+      setPendingUpgradesCount(Number(res.data?.meta?.pendingCount || 0))
+    }
+  }, [])
+
+  const handleReviewUpgrade = async (reqId, action) => {
+    const res = await apiClient.superAdminReviewUpgradeRequest(reqId, {
+      action,
+      durationDays: 30
+    })
+    if (!res.ok) {
+      showError(res.error || 'Could not review upgrade request.')
+      return
+    }
+    showNotice(res.data?.message || `Upgrade request ${action}d.`)
+    refreshAll()
+  }
+
   const handleRunDiagnostics = async () => {
     setRunningDiag(true)
     const res = await apiClient.superAdminRunDiagnostics()
@@ -225,13 +250,15 @@ export default function SuperAdminPage() {
     fetchUsers()
     fetchAuditLogs()
     fetchSystemHealth()
-  }, [fetchAnalytics, fetchUsers, fetchAuditLogs, fetchSystemHealth])
+    fetchUpgradeRequests()
+  }, [fetchAnalytics, fetchUsers, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests])
 
   useEffect(() => {
     fetchAnalytics()
     fetchAuditLogs()
     fetchSystemHealth()
-  }, [fetchAnalytics, fetchAuditLogs, fetchSystemHealth])
+    fetchUpgradeRequests()
+  }, [fetchAnalytics, fetchAuditLogs, fetchSystemHealth, fetchUpgradeRequests])
 
   useEffect(() => {
     fetchUsers()
@@ -542,7 +569,12 @@ export default function SuperAdminPage() {
               badge: systemHealth?.errorSummary?.openCount || 0
             },
             { id: 'users', label: 'Users & Access', icon: Users },
-            { id: 'subscriptions', label: 'Subscriptions & Grants', icon: CreditCard },
+            {
+              id: 'subscriptions',
+              label: 'Subscriptions & Grants',
+              icon: CreditCard,
+              badge: pendingUpgradesCount
+            },
             { id: 'pricing', label: 'Pricing & Platinum', icon: Crown },
             { id: 'broadcast', label: 'Broadcast', icon: Megaphone },
             { id: 'audit', label: 'Audit Trail', icon: ScrollText }
@@ -1315,8 +1347,71 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        {/* TAB 2: SUBSCRIPTIONS & COMPLIMENTARY ACCESS */}
+        {/* TAB 2: SUBSCRIPTIONS, PAYMENT APPROVALS & COMPLIMENTARY ACCESS */}
         {activeTab === 'subscriptions' && (
+          <div className="space-y-6">
+            {/* Pending Customer MoMo / Bank Upgrade Requests */}
+            {upgradeRequests.length > 0 && (
+              <div className="rounded-3xl p-6 bg-gradient-to-r from-amber-500/10 via-[#071544] to-[#071544] border border-amber-400/35 shadow-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-orbitron text-base font-extrabold text-amber-200 flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-amber-300" />
+                    <span>Customer MoMo / Bank Upgrade Requests ({pendingUpgradesCount} Pending)</span>
+                  </h3>
+                </div>
+                <div className="space-y-2.5">
+                  {upgradeRequests.slice(0, 10).map((req) => (
+                    <div
+                      key={req.id}
+                      className="p-3.5 rounded-2xl bg-[#03091F]/80 border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <strong className="text-white">{req.businessName}</strong>
+                          <span className="text-slate-300">({req.email})</span>
+                          <span className="px-2 py-0.5 rounded-full bg-[#218DFF]/20 text-[#9EDCFF] font-bold text-[10px]">
+                            {req.currentPlan} → {req.requestedPlan} ({formatRWF(req.amountRWF)})
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              req.status === 'approved'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : req.status === 'rejected'
+                                ? 'bg-rose-500/20 text-rose-300'
+                                : 'bg-amber-500/25 text-amber-200'
+                            }`}
+                          >
+                            {req.status}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          {req.paymentMethod} · Ref: <code className="text-[#9EDCFF]">{req.paymentReference}</code> · Phone: {req.payerPhone || 'N/A'}
+                        </div>
+                      </div>
+                      {req.status === 'pending' && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleReviewUpgrade(req.id, 'approve')}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] cursor-pointer"
+                          >
+                            ✓ Approve (30d Paid)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReviewUpgrade(req.id, 'reject')}
+                            className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-[11px] cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 rounded-3xl p-6 bg-[#071544]/75 border border-white/12 shadow-xl space-y-4">
               <div>
@@ -1490,6 +1585,7 @@ export default function SuperAdminPage() {
                 {submittingSub ? 'Saving to MongoDB...' : 'Apply Subscription & Record Audit'}
               </button>
             </form>
+          </div>
           </div>
         )}
 

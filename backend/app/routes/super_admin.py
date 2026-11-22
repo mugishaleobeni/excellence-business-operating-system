@@ -1266,3 +1266,162 @@ def clear_resolved_error_reports():
         message=f"Cleared {res.deleted_count} resolved error report(s).",
     )
 
+
+@super_admin_bp.route("/upgrade-requests", methods=["GET"])
+@require_super_admin
+def list_upgrade_requests():
+    """List all customer MoMo/Bank subscription upgrade requests for Super Admin review."""
+    db = get_db()
+    status_filter = (request.args.get("status") or "").strip().lower()
+    query = {}
+    if status_filter and status_filter != "all":
+        query["status"] = status_filter
+    docs = list(db.subscription_requests.find(query).sort("createdAt", -1).limit(100))
+    items = []
+    for d in docs:
+        clean = serialize_doc(d)
+        clean.pop("_id", None)
+        items.append(clean)
+    pending_count = db.subscription_requests.count_documents({"status": "pending"})
+    return success_response(data=items, extra={"meta": {"pendingCount": pending_count}})
+
+
+@super_admin_bp.route("/upgrade-requests/<string:req_id>/review", methods=["POST"])
+@require_super_admin
+def review_upgrade_request(req_id: str):
+    """
+    Approve or reject a customer's MTN MoMo / Bank payment upgrade request.
+    Approving immediately activates their Paid tier for durationDays (default 30),
+    updates Paid MRR, syncs staff accounts, emails confirmation, and logs an audit entry.
+    """
+    from datetime import timedelta
+
+    db = get_db()
+    req_doc = db.subscription_requests.find_one({"id": req_id})
+    if not req_doc:
+        return error_response("Upgrade request not found.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action") or "approve").strip().lower()
+    duration_days = max(1, int(payload.get("durationDays") or 30))
+    note = str(payload.get("note") or "").strip()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    target_email = str(req_doc.get("email") or "").strip().lower()
+    requested_plan = str(req_doc.get("requestedPlan") or "Bronze").strip()
+    amount_rwf = float(req_doc.get("amountRWF") or _resolve_plan_price_rwf(db, requested_plan))
+
+    if action == "reject":
+        db.subscription_requests.update_one(
+            {"_id": req_doc["_id"]},
+            {
+                "$set": {
+                    "status": "rejected",
+                    "reviewedBy": g.super_admin_email,
+                    "reviewedAt": now_iso,
+                    "reviewNote": note or "Payment reference could not be verified.",
+                }
+            },
+        )
+        _record_audit_log(
+            db=db,
+            actor_email=g.super_admin_email,
+            target_email=target_email,
+            action=f"Rejected Upgrade -> {requested_plan}",
+            details={"requestId": req_id, "paymentReference": req_doc.get("paymentReference")},
+            reason=note or "Payment not verified",
+        )
+        return success_response(message=f"Upgrade request {req_id} rejected.")
+
+    # Approve: activate paid plan + 30-day expiry + sync staff + sync business
+    expiry_date = (now_dt + timedelta(days=duration_days)).strftime("%Y-%m-%d")
+    audit_note = f"[Paid Approved · {now_iso[:10]} · Ref: {req_doc.get('paymentReference')}] {note or 'Verified payment'}"
+
+    user_updates = {
+        "plan": requested_plan,
+        "planTier": requested_plan,
+        "billingType": "Paid",
+        "subscriptionStatus": "Active",
+        "subscriptionExpiry": expiry_date,
+        "monthlySpendRWF": amount_rwf,
+        "auditNote": audit_note,
+        "updated_at": now_iso,
+    }
+    db.users.update_one({"email": target_email}, {"$set": user_updates})
+    db.users.update_many(
+        {"ownerScopeKey": target_email},
+        {
+            "$set": {
+                "plan": requested_plan,
+                "planTier": requested_plan,
+                "billingType": "Paid",
+                "subscriptionExpiry": expiry_date,
+                "updated_at": now_iso,
+            }
+        },
+    )
+    db.businesses.update_one(
+        {"email": target_email},
+        {
+            "$set": {
+                "plan": requested_plan,
+                "billingType": "Paid",
+                "status": "Active",
+                "mrrRWF": amount_rwf,
+                "monthlySpendRWF": amount_rwf,
+                "expiryDate": expiry_date,
+                "auditNote": audit_note,
+                "updated_at": now_iso,
+            }
+        },
+        upsert=True,
+    )
+    db.subscription_requests.update_one(
+        {"_id": req_doc["_id"]},
+        {
+            "$set": {
+                "status": "approved",
+                "reviewedBy": g.super_admin_email,
+                "reviewedAt": now_iso,
+                "expiryDate": expiry_date,
+                "reviewNote": note or "Payment verified",
+            }
+        },
+    )
+    _record_audit_log(
+        db=db,
+        actor_email=g.super_admin_email,
+        target_email=target_email,
+        action=f"Approved Paid Upgrade -> {requested_plan} ({amount_rwf:,.0f} RWF)",
+        details={
+            "requestId": req_id,
+            "paymentReference": req_doc.get("paymentReference"),
+            "expiryDate": expiry_date,
+        },
+        reason=note or f"Verified {req_doc.get('paymentMethod')} ref {req_doc.get('paymentReference')}",
+    )
+
+    try:
+        send_gmail_email(
+            to_email=target_email,
+            subject=f"[ExBOS Receipt] {requested_plan} Plan Activated until {expiry_date}",
+            html_body=(
+                f"<div style='font-family:sans-serif;background:#03091F;color:#fff;padding:24px;border-radius:12px;'>"
+                f"<h2 style='color:#9EDCFF;'>ExBOS Subscription Activated</h2>"
+                f"<p>Your payment (Ref: <strong>{req_doc.get('paymentReference')}</strong>) has been verified.</p>"
+                f"<p><strong>Plan:</strong> {requested_plan} (Paid)<br/>"
+                f"<strong>Amount:</strong> {amount_rwf:,.0f} RWF<br/>"
+                f"<strong>Valid Until:</strong> {expiry_date}</p>"
+                f"</div>"
+            ),
+            text_body=f"Your ExBOS {requested_plan} plan is now active until {expiry_date}. Payment ref: {req_doc.get('paymentReference')}.",
+        )
+    except Exception:
+        pass
+
+    return success_response(
+        data={"plan": requested_plan, "expiryDate": expiry_date, "amountRWF": amount_rwf},
+        message=f"Approved {requested_plan} plan for {target_email} (valid until {expiry_date}).",
+    )
+
+
