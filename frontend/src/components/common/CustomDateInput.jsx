@@ -1,11 +1,12 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 /**
  * CustomDateInput Component
  * ExBOS Signature Date Picker:
  * - Neo-glassmorphism styling (#071644 base with #218DFF electric blue accents)
- * - Spring animated dropdown calendar panel
+ * - Portal-rendered, viewport-clamped dropdown so it is NEVER clipped inside modals or mobile screens
  * - Quick shortcuts ("Today", "Yesterday")
  * - Dispatches standard 'YYYY-MM-DD' ISO strings to onChange
  */
@@ -25,15 +26,16 @@ export default function CustomDateInput({
 }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef(null)
+  const triggerRef = useRef(null)
+  const dropdownRef = useRef(null)
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 288 })
 
-  // Parse current value or default to today for calendar view
   const initialDate = value ? new Date(value) : new Date()
   const validInitial = !isNaN(initialDate.getTime()) ? initialDate : new Date()
 
   const [viewYear, setViewYear] = useState(validInitial.getFullYear())
-  const [viewMonth, setViewMonth] = useState(validInitial.getMonth()) // 0-11
+  const [viewMonth, setViewMonth] = useState(validInitial.getMonth())
 
-  // Keep view aligned if value changes externally
   useEffect(() => {
     if (value) {
       const d = new Date(value)
@@ -44,34 +46,72 @@ export default function CustomDateInput({
     }
   }, [value])
 
-  // Dismiss on click outside or Escape
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current || typeof window === 'undefined') return
+    const rect = triggerRef.current.getBoundingClientRect()
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const panelWidth = Math.min(288, vw - 24)
+    const estimatedHeight = showShortcuts ? 330 : 290
+
+    // Clamp horizontally so calendar never overflows left or right edge
+    let left = rect.left
+    if (left + panelWidth > vw - 12) {
+      left = vw - panelWidth - 12
+    }
+    if (left < 12) {
+      left = 12
+    }
+
+    // Flip upward if not enough room below
+    const spaceBelow = vh - rect.bottom - 12
+    const spaceAbove = rect.top - 12
+    let top
+    if (spaceBelow >= estimatedHeight || spaceBelow >= spaceAbove) {
+      top = Math.min(rect.bottom + 8, Math.max(12, vh - estimatedHeight - 12))
+    } else {
+      top = Math.max(12, rect.top - estimatedHeight - 8)
+    }
+
+    setCoords({ top, left, width: panelWidth })
+  }, [showShortcuts])
+
   useEffect(() => {
+    if (!open) return undefined
+    updatePosition()
+
     const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target)
+      ) {
         setOpen(false)
       }
     }
     const handleEsc = (e) => {
       if (e.key === 'Escape') setOpen(false)
     }
-    if (open) {
-      document.addEventListener('pointerdown', handleClickOutside)
-      document.addEventListener('keydown', handleEsc)
-    }
+
+    document.addEventListener('pointerdown', handleClickOutside)
+    document.addEventListener('keydown', handleEsc)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
     return () => {
       document.removeEventListener('pointerdown', handleClickOutside)
       document.removeEventListener('keydown', handleEsc)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [open])
+  }, [open, updatePosition])
 
-  // Format YYYY-MM-DD
   const formatISO = (y, m, d) => {
     const mm = String(m + 1).padStart(2, '0')
     const dd = String(d).padStart(2, '0')
     return `${y}-${mm}-${dd}`
   }
 
-  // Display string (e.g. "Nov 5, 2026")
   const displayLabel = (() => {
     if (!value) return ''
     const d = new Date(value)
@@ -119,8 +159,7 @@ export default function CustomDateInput({
     setOpen(false)
   }
 
-  // Month Grid Calculations
-  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay() // 0 = Sun
+  const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay()
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
 
   const monthNames = [
@@ -129,6 +168,121 @@ export default function CustomDateInput({
   ]
 
   const todayIso = new Date().toISOString().split('T')[0]
+
+  const calendarPopup =
+    open && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={dropdownRef}
+            style={{
+              position: 'fixed',
+              top: `${coords.top}px`,
+              left: `${coords.left}px`,
+              width: `${coords.width}px`,
+              zIndex: 999999
+            }}
+            className="spring-dropdown-panel rounded-2xl bg-[#06143b] border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.95),0_0_30px_rgba(33,141,255,0.35)] p-3.5 backdrop-blur-xl animate-fadeIn"
+          >
+            {/* Calendar Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Previous Month"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <span className="font-orbitron font-bold text-xs text-white tracking-wide">
+                {monthNames[viewMonth]} {viewYear}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="Next Month"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Weekday Labels */}
+            <div className="grid grid-cols-7 gap-1 text-center py-2 text-[10px] font-semibold text-slate-400 uppercase">
+              <span>Su</span>
+              <span>Mo</span>
+              <span>Tu</span>
+              <span>We</span>
+              <span>Th</span>
+              <span>Fr</span>
+              <span>Sa</span>
+            </div>
+
+            {/* Days Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: firstDayOfWeek }).map((_, i) => (
+                <div key={`blank-${i}`} className="h-7 w-7 mx-auto" />
+              ))}
+
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1
+                const dayIso = formatISO(viewYear, viewMonth, day)
+                const isSelected = value === dayIso
+                const isToday = todayIso === dayIso
+
+                return (
+                  <button
+                    key={`day-${day}`}
+                    type="button"
+                    onClick={() => handleSelectDay(day)}
+                    className={`h-7 w-7 mx-auto rounded-lg text-xs font-medium flex items-center justify-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-[#1045CA] to-[#0A2786] border border-[#9EDCFF] text-white font-bold shadow-[0_0_10px_rgba(33,141,255,0.5)]'
+                        : isToday
+                        ? 'bg-white/10 text-emerald-300 border border-emerald-400/40 font-bold'
+                        : 'text-slate-200 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Quick Shortcuts */}
+            {showShortcuts && (
+              <div className="pt-3 mt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleShortcut('today')}
+                    className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white font-medium cursor-pointer"
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleShortcut('yesterday')}
+                    className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white font-medium cursor-pointer"
+                  >
+                    Yesterday
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-slate-400 hover:text-white font-medium cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>,
+          document.body
+        )
+      : null
 
   return (
     <div ref={containerRef} className={`relative ${className}`}>
@@ -140,6 +294,7 @@ export default function CustomDateInput({
 
       {/* Trigger Button */}
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled || readOnly}
         onClick={() => setOpen((prev) => !prev)}
@@ -177,115 +332,7 @@ export default function CustomDateInput({
         )}
       </button>
 
-      {/* Calendar Dropdown Popup */}
-      {open && (
-        <div className="spring-dropdown-panel absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-72 rounded-2xl bg-[#06143b] border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.95),0_0_30px_rgba(33,141,255,0.35)] z-50 p-3.5 backdrop-blur-xl animate-fadeIn">
-          {/* Calendar Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-white/10">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
-              title="Previous Month"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <span className="font-orbitron font-bold text-xs text-white tracking-wide">
-              {monthNames[viewMonth]} {viewYear}
-            </span>
-
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
-              title="Next Month"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Weekday Labels */}
-          <div className="grid grid-cols-7 gap-1 text-center py-2 text-[10px] font-semibold text-slate-400 uppercase">
-            <span>Su</span>
-            <span>Mo</span>
-            <span>Tu</span>
-            <span>We</span>
-            <span>Th</span>
-            <span>Fr</span>
-            <span>Sa</span>
-          </div>
-
-          {/* Days Grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {/* Blank leading days */}
-            {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-              <div key={`blank-${i}`} className="h-7 w-7" />
-            ))}
-
-            {/* Days of month */}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
-              const day = i + 1
-              const dayIso = formatISO(viewYear, viewMonth, day)
-              const isSelected = value === dayIso
-              const isToday = todayIso === dayIso
-
-              return (
-                <button
-                  key={`day-${day}`}
-                  type="button"
-                  onClick={() => handleSelectDay(day)}
-                  className={`h-7 w-7 rounded-lg text-xs font-medium flex items-center justify-center transition-all ${
-                    isSelected
-                      ? 'bg-gradient-to-r from-[#1045CA] to-[#0A2786] border border-[#9EDCFF] text-white font-bold shadow-[0_0_10px_rgba(33,141,255,0.5)]'
-                      : isToday
-                      ? 'bg-white/10 text-emerald-300 border border-emerald-400/40 font-bold'
-                      : 'text-slate-200 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  {day}
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Quick Shortcuts */}
-          {showShortcuts && (
-            <div className="pt-3 mt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleShortcut('today')}
-                  className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white font-medium"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleShortcut('yesterday')}
-                  className="px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white font-medium"
-                >
-                  Yesterday
-                </button>
-              </div>
-
-              {value && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onChange('')
-                    setOpen(false)
-                  }}
-                  className="text-rose-400 hover:text-rose-300 text-[10px] font-semibold"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {calendarPopup}
     </div>
   )
 }
-

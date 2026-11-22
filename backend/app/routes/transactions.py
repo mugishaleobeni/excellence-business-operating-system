@@ -271,7 +271,10 @@ def delete_transaction(tx_id: str):
         ]
     })
     if not tx_doc:
-        return error_response(f"Transaction '{tx_id}' not found.", status_code=404)
+        return success_response(
+            data={"id": tx_id, "alreadyDeleted": True},
+            message=f"Transaction '{tx_id}' already removed or not present in ledger.",
+        )
 
     # Reverse cashflow impact if workspace exists
     amount = float(tx_doc.get("amountRWF", 0))

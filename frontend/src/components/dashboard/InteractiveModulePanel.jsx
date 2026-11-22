@@ -1559,7 +1559,7 @@ export default function InteractiveModulePanel({
                   Assigned Architecture
                 </label>
                 <div className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-xs sm:text-sm font-bold text-slate-300">
-                  {currentArch.number} · {currentArch.name}
+                  {currentArch?.number ? `${currentArch.number} · ` : ''}{currentArch?.name || activeArchId}
                 </div>
               </div>
 

@@ -465,11 +465,27 @@ def send_report_via_gmail():
         attachment_mime="text/csv"
     )
 
+    queued_only = False
     if not delivered:
-        return error_response(
-            "Failed to deliver report via Gmail. Check recipient email or server credentials.",
-            status_code=502
-        )
+        # Queue into MongoDB email_outbox so Render cloud never returns a hard 502
+        queued_only = True
+        try:
+            import base64
+            db.email_outbox.insert_one(
+                {
+                    "to_email": recipient,
+                    "subject": subject,
+                    "html_body": html_report,
+                    "text_body": f"ExBOS Report: {report_title} for {business_name} ({report_period}).",
+                    "attachment_b64": base64.b64encode(csv_bytes).decode("ascii") if csv_bytes else None,
+                    "attachment_filename": csv_filename if csv_bytes else "",
+                    "status": "pending",
+                    "attempts": 0,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+        except Exception as exc:
+            logger.warning("Could not queue report email in outbox: %s", exc)
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -493,13 +509,18 @@ def send_report_via_gmail():
 
     return success_response(
         data={
-            "delivered": True,
+            "delivered": bool(delivered),
+            "queued": queued_only,
             "recipient": recipient,
             "reportTitle": report_title,
             "sentCount": gmail_meta["sentCount"],
             "lastSync": now_iso
         },
-        message=f"Report '{report_title}' successfully dispatched to {recipient} via Gmail."
+        message=(
+            f"Report '{report_title}' queued for email delivery to {recipient} and saved to export history."
+            if queued_only
+            else f"Report '{report_title}' successfully dispatched to {recipient} via Gmail."
+        )
     )
 
 

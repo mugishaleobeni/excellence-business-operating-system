@@ -391,7 +391,7 @@ export default function SalesTrendsView({
                 Sales Trajectory
               </span>
               <span className="text-xs text-slate-300">
-                {currentArch.number} · {currentArch.name} · Sales Trends
+                {currentArch?.number ? `${currentArch.number} · ` : ''}{currentArch?.name || 'Business'} · Sales Trends
               </span>
             </div>
             <h3 className="font-orbitron text-xl sm:text-2xl font-extrabold text-white mt-1 tracking-tight">
