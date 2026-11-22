@@ -22,10 +22,55 @@ import {
 function usePageMeta(title, description) {
   useEffect(() => {
     document.title = title
-    const metaDesc = document.querySelector('meta[name="description"]')
-    if (metaDesc && description) {
-      metaDesc.setAttribute('content', description)
+    const setMeta = (selector, attr, val) => {
+      const el = document.querySelector(selector)
+      if (el && val) el.setAttribute(attr, val)
     }
+    const cleanPath =
+      typeof window !== 'undefined' ? window.location.pathname || '/' : '/'
+    const canonicalUrl = `https://exbos.pages.dev${cleanPath === '/' ? '/' : cleanPath.replace(/\/+$/, '')}`
+
+    setMeta('meta[name="description"]', 'content', description)
+    setMeta('meta[property="og:title"]', 'content', title)
+    setMeta('meta[property="og:description"]', 'content', description)
+    setMeta('meta[property="og:url"]', 'content', canonicalUrl)
+    setMeta('meta[name="twitter:title"]', 'content', title)
+    setMeta('meta[name="twitter:description"]', 'content', description)
+    setMeta('link[rel="canonical"]', 'href', canonicalUrl)
+
+    // Inject dynamic BreadcrumbList JSON-LD for Google Rich Results
+    const scriptId = 'exbos-dynamic-breadcrumb-ld'
+    let ldEl = document.getElementById(scriptId)
+    if (!ldEl) {
+      ldEl = document.createElement('script')
+      ldEl.id = scriptId
+      ldEl.type = 'application/ld+json'
+      document.head.appendChild(ldEl)
+    }
+    const segments = cleanPath.split('/').filter(Boolean)
+    const items = [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: 'https://exbos.pages.dev/'
+      }
+    ]
+    segments.forEach((seg, idx) => {
+      const pathAcc = '/' + segments.slice(0, idx + 1).join('/')
+      items.push({
+        '@type': 'ListItem',
+        position: idx + 2,
+        name: seg.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        item: `https://exbos.pages.dev${pathAcc}`
+      })
+    })
+    ldEl.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: items
+    })
+
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [title, description])
 }

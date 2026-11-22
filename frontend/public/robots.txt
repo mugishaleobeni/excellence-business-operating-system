@@ -12,6 +12,8 @@ Allow: /business-tools
 Allow: /pricing
 Allow: /about
 Allow: /resources
+Allow: /llms.txt
+Allow: /.well-known/ard.json
 
 Disallow: /dashboard
 Disallow: /super-admin
@@ -19,5 +21,4 @@ Disallow: /login
 Disallow: /register
 Disallow: /forgot-password
 
-Sitemap: https://exbos.pylarix.com/sitemap.xml
-
+Sitemap: https://exbos.pages.dev/sitemap.xml
