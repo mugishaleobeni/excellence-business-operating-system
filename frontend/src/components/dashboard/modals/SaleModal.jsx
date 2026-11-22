@@ -7,6 +7,8 @@ import DocumentPreviewModal from "../documents/DocumentPreviewModal";
 import { downloadDocumentFile } from "../documents/documentUtils";
 import { useExbos } from "../../../context/ExbosContext";
 import BarcodeScannerModal from "../../common/BarcodeScannerModal";
+import { exbosApi } from "../../../utils/apiClient";
+import { computeVatSplit, DEFAULT_RRA_TAX_PROFILE } from "../../../utils/rraTaxUtils";
 
 export default function SaleModal({
   isOpen,
@@ -31,6 +33,31 @@ export default function SaleModal({
   const [saleUpdateCatalogPrice, setSaleUpdateCatalogPrice] = useState(false);
   const [savedSaleDoc, setSavedSaleDoc] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [taxProfile, setTaxProfile] = useState(DEFAULT_RRA_TAX_PROFILE);
+  const [saleCustomerTin, setSaleCustomerTin] = useState("");
+  const [saleEbmNumber, setSaleEbmNumber] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    if (isOpen) {
+      exbosApi
+        .getTaxProfile()
+        .then((res) => {
+          if (mounted && res?.data) {
+            setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...res.data });
+          }
+        })
+        .catch(() => {});
+    }
+    const onUpdated = (e) => {
+      if (e?.detail) setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...e.detail });
+    };
+    window.addEventListener("exbos:tax-profile-updated", onUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener("exbos:tax-profile-updated", onUpdated);
+    };
+  }, [isOpen]);
 
   const handleBarcodeDetectedForSale = (code) => {
     const q = String(code || "").trim().toLowerCase();
@@ -64,6 +91,8 @@ export default function SaleModal({
       setSaleUnitPrice("");
       setSaleCustomerName("");
       setSaleCustomerPhone("");
+      setSaleCustomerTin("");
+      setSaleEbmNumber("");
       setSalePaymentMethod("Cash");
       setSalePaymentStatus("Paid in Full");
       setSaleProductDropdownOpen(false);
@@ -192,6 +221,10 @@ export default function SaleModal({
     const custName = saleCustomerName.trim() || "Walk-in Client";
     const custPhone = saleCustomerPhone.trim();
 
+    const vatSplit = taxProfile.rraEnabled
+      ? computeVatSplit(totalSaleAmount, taxProfile.regime, taxProfile.priceMode, "standard")
+      : { netAmount: totalSaleAmount, vatAmount: 0, totalAmount: totalSaleAmount };
+
     const salePayload = {
       title: `${qtyNum} ${effectiveUnit} × ${selectedSaleProduct.title}`,
       subPage: activePage || "All Sales",
@@ -208,6 +241,15 @@ export default function SaleModal({
       customer: custPhone ? `${custName} (${custPhone})` : custName,
       customerName: custName,
       customerPhone: custPhone,
+      ...(taxProfile.rraEnabled
+        ? {
+            customerTin: saleCustomerTin.trim(),
+            ebmNumber: saleEbmNumber.trim(),
+            netAmount: vatSplit.netAmount,
+            vatAmount: vatSplit.vatAmount,
+            taxCategory: taxProfile.regime === "vat_18" ? "standard" : "non_vat"
+          }
+        : {}),
       paymentMethod: salePaymentMethod,
       status: salePaymentStatus,
       type: "in",
@@ -248,7 +290,23 @@ export default function SaleModal({
           total: totalSaleAmount
         }
       ],
-      notes: `Sale recorded via ${salePaymentMethod}. Payment status: ${salePaymentStatus}.`
+      notes: [
+        `Sale recorded via ${salePaymentMethod}. Payment status: ${salePaymentStatus}.`,
+        taxProfile.rraEnabled && taxProfile.showOnReceipts && taxProfile.tin
+          ? `Seller TIN: ${taxProfile.tin}.`
+          : "",
+        taxProfile.rraEnabled && taxProfile.showOnReceipts && vatSplit.vatAmount > 0
+          ? `Net: ${formatRWF(vatSplit.netAmount)} · VAT 18%: ${formatRWF(vatSplit.vatAmount)}.`
+          : "",
+        taxProfile.rraEnabled && saleCustomerTin.trim()
+          ? `Buyer TIN: ${saleCustomerTin.trim()}.`
+          : "",
+        taxProfile.rraEnabled && saleEbmNumber.trim()
+          ? `EBM Ref: ${saleEbmNumber.trim()}.`
+          : ""
+      ]
+        .filter(Boolean)
+        .join(" ")
     };
 
     if (addDemoRecord) {
@@ -655,6 +713,39 @@ export default function SaleModal({
                     />
                   </div>
                 </div>
+
+                {/* 5b. Optional RRA Tax & EBM Fields (Only shown when user opted in) */}
+                {taxProfile.rraEnabled && taxProfile.trackEbmNumbers && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1 p-3 rounded-2xl bg-[#218DFF]/10 border border-[#218DFF]/25">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-semibold text-[#9EDCFF]">
+                        Customer TIN <span className="text-slate-400 font-normal">(Optional B2B)</span>
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={9}
+                        value={saleCustomerTin}
+                        onChange={(e) => setSaleCustomerTin(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                        placeholder="9-digit Buyer TIN"
+                        style={{ backgroundColor: "#071644", color: "#ffffff" }}
+                        className="w-full px-3 py-2 rounded-xl exbos-modal-input text-xs text-white font-mono placeholder-slate-400 focus:outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-semibold text-[#9EDCFF]">
+                        RRA EBM Receipt # <span className="text-slate-400 font-normal">(Optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={saleEbmNumber}
+                        onChange={(e) => setSaleEbmNumber(e.target.value)}
+                        placeholder="e.g. SDC0012345"
+                        style={{ backgroundColor: "#071644", color: "#ffffff" }}
+                        className="w-full px-3 py-2 rounded-xl exbos-modal-input text-xs text-white font-mono placeholder-slate-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* 6. Payment Method & Status */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">

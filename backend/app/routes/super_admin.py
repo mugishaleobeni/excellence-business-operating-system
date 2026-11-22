@@ -1479,6 +1479,7 @@ def update_editable_plan_limits(plan_key: str):
         "allowBranchFreeze",
         "allowPublicDocLinks",
         "allowAdvancedReports",
+        "allowRraTaxPack",
         "allowTwoFactorSecurity",
     )
     str_keys = ("name", "targetBusiness", "supportSla")

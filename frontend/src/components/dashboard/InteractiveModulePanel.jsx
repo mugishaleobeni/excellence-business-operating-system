@@ -81,6 +81,7 @@ const HybridWorkspace = lazy(() => import("./hybrid/HybridWorkspace"))
 import AlertsAndDeadStockView from "./views/AlertsAndDeadStockView"
 import TeamPermissionsView from "./settings/TeamPermissionsView"
 import SubscriptionBillingView from "./settings/SubscriptionBillingView"
+import TaxProfileSettingsView from "./settings/TaxProfileSettingsView"
 import BusinessActivitiesSettingsView from "./settings/BusinessActivitiesSettingsView"
 import ActiveTradeBadge from "./make-and-sell/components/ActiveTradeBadge"
 import { TRADE_PRESETS } from "./make-and-sell/data/tradePresets"
@@ -1429,6 +1430,10 @@ export default function InteractiveModulePanel({
           addToast={addToast}
         />
       )
+    }
+
+    if (activePage === 'RRA Tax & EBM') {
+      return <TaxProfileSettingsView addToast={addToast} />
     }
 
     if (activePage === 'Business Activities (On/Off)') {

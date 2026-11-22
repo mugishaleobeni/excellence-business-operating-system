@@ -322,7 +322,68 @@ export const exbosApi = {
       body: payload
     }),
   superAdminResetPlanLimits: () =>
-    apiRequest('/super-admin/plan-limits/reset', { method: 'POST' })
+    apiRequest('/super-admin/plan-limits/reset', { method: 'POST' }),
+  getTaxProfile: () => apiRequest(withScope('/tax/profile')),
+  updateTaxProfile: (payload = {}) =>
+    apiRequest(withScope('/tax/profile'), { method: 'PUT', body: payload }),
+  getTaxSummary: (params = {}) => {
+    const qs = new URLSearchParams()
+    if (params.startDate) qs.set('startDate', params.startDate)
+    if (params.endDate) qs.set('endDate', params.endDate)
+    if (params.branchId && params.branchId !== 'all') qs.set('branchId', params.branchId)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    return apiRequest(withScope(`/tax/summary${suffix}`))
+  },
+  downloadTaxExport: async (exportType, params = {}) => {
+    const qs = new URLSearchParams()
+    if (params.startDate) qs.set('startDate', params.startDate)
+    if (params.endDate) qs.set('endDate', params.endDate)
+    if (params.branchId && params.branchId !== 'all') qs.set('branchId', params.branchId)
+    const suffix = qs.toString() ? `?${qs.toString()}` : ''
+    const path = withScope(`/tax/export/${encodeURIComponent(exportType)}${suffix}`)
+    const token = getAuthToken()
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!res.ok) {
+      let data = {}
+      try {
+        data = await res.json()
+      } catch {
+        data = {}
+      }
+      const err = new Error(data?.error || `Export failed (${res.status})`)
+      err.status = res.status
+      err.details = data?.details
+      if (res.status === 402 && typeof window !== 'undefined') {
+        const denial = Array.isArray(data?.details) && data.details[0] ? data.details[0] : data
+        window.dispatchEvent(
+          new CustomEvent('exbos:plan-limit', {
+            detail: {
+              feature: denial?.feature || 'allowRraTaxPack',
+              currentPlan: denial?.currentPlan || 'Free',
+              requiredPlan: denial?.requiredPlan || 'Bronze',
+              message: err.message
+            }
+          })
+        )
+      }
+      throw err
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `rra-${exportType}-${params.startDate || 'period'}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+    return { ok: true }
+  },
+  sendTaxPackToAccountant: (payload = {}) =>
+    apiRequest(withScope('/tax/send-to-accountant'), { method: 'POST', body: payload })
 }
 
 export const apiClient = exbosApi

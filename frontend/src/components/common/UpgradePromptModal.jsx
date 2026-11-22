@@ -191,3 +191,4 @@ export default function UpgradePromptModal() {
     document.body
   )
 }
+

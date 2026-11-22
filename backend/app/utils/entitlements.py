@@ -24,6 +24,7 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": False,
         "allowPublicDocLinks": False,
         "allowAdvancedReports": False,
+        "allowRraTaxPack": False,
         "allowTwoFactorSecurity": True,
     },
     "bronze": {
@@ -45,6 +46,7 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": False,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
     },
     "silver": {
@@ -66,6 +68,7 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
     },
     "gold": {
@@ -87,6 +90,7 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
     },
     "platinum": {
@@ -108,6 +112,7 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowBranchFreeze": True,
         "allowPublicDocLinks": True,
         "allowAdvancedReports": True,
+        "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
     },
 }
@@ -130,6 +135,7 @@ REQUIRED_TIER_FOR_FEATURE: dict[str, str] = {
     "allowBranchFreeze": "Silver",
     "allowPublicDocLinks": "Bronze",
     "allowAdvancedReports": "Bronze",
+    "allowRraTaxPack": "Bronze",
     "allowTwoFactorSecurity": "Free",
 }
 

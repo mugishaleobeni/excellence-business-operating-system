@@ -14,7 +14,8 @@ export const PLAN_ENTITLEMENTS = {
     allowMultiBranchTransfer: false,
     allowBranchFreeze: false,
     allowPublicDocLinks: false,
-    allowAdvancedReports: false
+    allowAdvancedReports: false,
+    allowRraTaxPack: false
   },
   bronze: {
     id: 'Bronze',
@@ -31,7 +32,8 @@ export const PLAN_ENTITLEMENTS = {
     allowMultiBranchTransfer: false,
     allowBranchFreeze: false,
     allowPublicDocLinks: true,
-    allowAdvancedReports: true
+    allowAdvancedReports: true,
+    allowRraTaxPack: true
   },
   silver: {
     id: 'Silver',
@@ -48,7 +50,8 @@ export const PLAN_ENTITLEMENTS = {
     allowMultiBranchTransfer: true,
     allowBranchFreeze: true,
     allowPublicDocLinks: true,
-    allowAdvancedReports: true
+    allowAdvancedReports: true,
+    allowRraTaxPack: true
   },
   gold: {
     id: 'Gold',
@@ -65,7 +68,8 @@ export const PLAN_ENTITLEMENTS = {
     allowMultiBranchTransfer: true,
     allowBranchFreeze: true,
     allowPublicDocLinks: true,
-    allowAdvancedReports: true
+    allowAdvancedReports: true,
+    allowRraTaxPack: true
   },
   platinum: {
     id: 'Platinum',
@@ -82,7 +86,8 @@ export const PLAN_ENTITLEMENTS = {
     allowMultiBranchTransfer: true,
     allowBranchFreeze: true,
     allowPublicDocLinks: true,
-    allowAdvancedReports: true
+    allowAdvancedReports: true,
+    allowRraTaxPack: true
   }
 }
 
@@ -191,6 +196,7 @@ export function buildDisplayPlansFromLimits(liveLimitsMap, fallbackPlans = []) {
       { name: 'Inter-Branch Stock Transfers', included: Boolean(cfg.allowMultiBranchTransfer) },
       { name: 'Branch Freeze & Owner Lock', included: Boolean(cfg.allowBranchFreeze) },
       { name: 'Full P&L & Branch Analytics', included: Boolean(cfg.allowAdvancedReports) },
+      { name: 'RRA Tax-Ready Export Pack (VAT & EBM)', included: Boolean(cfg.allowRraTaxPack) },
       { name: '2-Step Email Verification & Audit Log', included: Boolean(cfg.allowTwoFactorSecurity) },
       { name: `Support: ${cfg.supportSla || 'Standard Support'}`, included: true }
     ]

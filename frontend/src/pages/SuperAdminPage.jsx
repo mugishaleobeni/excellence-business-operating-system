@@ -1835,6 +1835,7 @@ export default function SuperAdminPage() {
                       { key: 'allowMultiBranchTransfer', label: 'Inter-Branch Stock Transfer' },
                       { key: 'allowBranchFreeze', label: 'Branch Freeze & Owner Lock' },
                       { key: 'allowAdvancedReports', label: 'Full P&L & Branch Analytics' },
+                      { key: 'allowRraTaxPack', label: 'RRA Tax-Ready Export Pack' },
                       { key: 'allowTwoFactorSecurity', label: '2-Step Security & Audit Log' }
                     ].map((feat) => {
                       const enabled = Boolean(planLimitsMap[editingTierKey][feat.key])

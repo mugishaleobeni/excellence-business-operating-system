@@ -12,6 +12,7 @@ import CashMovementReportView from './reports/CashMovementReportView'
 import CustomerDebtsReportView from './reports/CustomerDebtsReportView'
 import SupplierDebtsReportView from './reports/SupplierDebtsReportView'
 import ProductionReportView from './reports/ProductionReportView'
+import RraTaxCenterView from './reports/RraTaxCenterView'
 import ExportDrawer from './make-and-sell/ExportDrawer'
 
 export default function UniversalReportPanel({
@@ -124,6 +125,9 @@ export default function UniversalReportPanel({
   // Normalize active report page to support both standard 7 names and any legacy aliases
   const normalizedPage = useMemo(() => {
     const p = (activePage || '').toLowerCase()
+    if (p.includes('rra') || p.includes('tax') || p.includes('vat') || p.includes('ebm')) {
+      return 'RRA Tax Center'
+    }
     if (p.includes('production') || p.includes('yield') || p.includes('batch')) {
       return 'Production Report'
     }
@@ -282,6 +286,15 @@ export default function UniversalReportPanel({
           orders={records['Production'] || []}
           businessName={businessName}
           hideFinancials={hideFinancials}
+        />
+      )}
+
+      {normalizedPage === 'RRA Tax Center' && (
+        <RraTaxCenterView
+          user={user}
+          businessName={businessName}
+          hideFinancials={hideFinancials}
+          addToast={({ message, title }) => showToast(message || title || '')}
         />
       )}
 
