@@ -91,6 +91,18 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
       }
     }
     const data = await response.json().catch(() => null)
+    if (response.status >= 500 && !String(endpoint || '').includes('/health/report-error')) {
+      import('./errorReporter')
+        .then(({ reportSystemError }) =>
+          reportSystemError({
+            source: 'api-5xx',
+            message: data?.error || data?.message || `HTTP ${response.status} on ${endpoint}`,
+            statusCode: response.status,
+            endpoint
+          })
+        )
+        .catch(() => {})
+    }
     return {
       ok: response.ok,
       status: response.status,
@@ -269,7 +281,17 @@ export const exbosApi = {
     apiRequest('/super-admin/broadcast', {
       method: 'POST',
       body: payload
-    })
+    }),
+  superAdminGetSystemHealth: () => apiRequest('/super-admin/system-health'),
+  superAdminRunDiagnostics: () =>
+    apiRequest('/super-admin/system-health/run-diagnostics', { method: 'POST' }),
+  superAdminResolveErrorReport: (reportId, status = 'resolved') =>
+    apiRequest(`/super-admin/error-reports/${encodeURIComponent(reportId)}`, {
+      method: 'PATCH',
+      body: { status }
+    }),
+  superAdminClearResolvedErrors: () =>
+    apiRequest('/super-admin/error-reports/clear-resolved', { method: 'DELETE' })
 }
 
 export const apiClient = exbosApi

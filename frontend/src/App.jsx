@@ -1,7 +1,9 @@
-import React, { useState, lazy, Suspense } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ExbosProvider, useExbos } from './context/ExbosContext'
 import { isTokenValid } from './utils/apiClient'
+import { installGlobalErrorReporter } from './utils/errorReporter'
+import GlobalErrorBoundary from './components/common/GlobalErrorBoundary'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
@@ -69,8 +71,13 @@ function SuperAdminRoute({ children }) {
 export default function App() {
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    installGlobalErrorReporter()
+  }, [])
+
   return (
-    <ExbosProvider>
+    <GlobalErrorBoundary>
+      <ExbosProvider>
       {loading && <PreloaderScreen onComplete={() => setLoading(false)} />}
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Suspense fallback={<RouteFallback />}>
@@ -121,5 +128,6 @@ export default function App() {
         <GlobalKinyarwandaTranslator />
       </BrowserRouter>
     </ExbosProvider>
+    </GlobalErrorBoundary>
   )
 }

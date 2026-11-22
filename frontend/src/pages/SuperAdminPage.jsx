@@ -30,7 +30,11 @@ import {
   Clock,
   Sparkles,
   ArrowUpRight,
-  Flame
+  Flame,
+  HeartPulse,
+  Play,
+  Bug,
+  CheckCheck
 } from 'lucide-react'
 
 const ARCH_LABELS = {
@@ -96,6 +100,12 @@ export default function SuperAdminPage() {
   // Audit Logs
   const [auditLogs, setAuditLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
+
+  // System Health, Quick Diagnostics & Auto-Reported Errors
+  const [systemHealth, setSystemHealth] = useState(null)
+  const [loadingHealth, setLoadingHealth] = useState(false)
+  const [diagResults, setDiagResults] = useState(null)
+  const [runningDiag, setRunningDiag] = useState(false)
 
   // Subscription / Complimentary Access Form
   const [selectedUserEmail, setSelectedUserEmail] = useState('')
@@ -167,16 +177,61 @@ export default function SuperAdminPage() {
     setLoadingLogs(false)
   }, [])
 
+  const fetchSystemHealth = useCallback(async () => {
+    setLoadingHealth(true)
+    const res = await apiClient.superAdminGetSystemHealth()
+    if (res.ok && res.data?.data) {
+      setSystemHealth(res.data.data)
+    }
+    setLoadingHealth(false)
+  }, [])
+
+  const handleRunDiagnostics = async () => {
+    setRunningDiag(true)
+    const res = await apiClient.superAdminRunDiagnostics()
+    setRunningDiag(false)
+    if (!res.ok) {
+      showError(res.error || 'Could not run quick system diagnostics.')
+      return
+    }
+    setDiagResults(res.data?.data || null)
+    showNotice(res.data?.message || 'Quick system diagnostics completed.')
+    fetchSystemHealth()
+    fetchAuditLogs()
+  }
+
+  const handleResolveError = async (reportId, nextStatus = 'resolved') => {
+    const res = await apiClient.superAdminResolveErrorReport(reportId, nextStatus)
+    if (!res.ok) {
+      showError(res.error || 'Could not update error report status.')
+      return
+    }
+    showNotice(res.data?.message || `Error ${reportId} marked ${nextStatus}.`)
+    fetchSystemHealth()
+  }
+
+  const handleClearResolvedErrors = async () => {
+    const res = await apiClient.superAdminClearResolvedErrors()
+    if (!res.ok) {
+      showError(res.error || 'Could not clear resolved errors.')
+      return
+    }
+    showNotice(res.data?.message || 'Cleared resolved error reports.')
+    fetchSystemHealth()
+  }
+
   const refreshAll = useCallback(() => {
     fetchAnalytics()
     fetchUsers()
     fetchAuditLogs()
-  }, [fetchAnalytics, fetchUsers, fetchAuditLogs])
+    fetchSystemHealth()
+  }, [fetchAnalytics, fetchUsers, fetchAuditLogs, fetchSystemHealth])
 
   useEffect(() => {
     fetchAnalytics()
     fetchAuditLogs()
-  }, [fetchAnalytics, fetchAuditLogs])
+    fetchSystemHealth()
+  }, [fetchAnalytics, fetchAuditLogs, fetchSystemHealth])
 
   useEffect(() => {
     fetchUsers()
@@ -480,6 +535,12 @@ export default function SuperAdminPage() {
         <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-[#071544]/70 border border-white/10">
           {[
             { id: 'overview', label: 'Executive Overview & Top Users', icon: Trophy },
+            {
+              id: 'health',
+              label: 'System Health & Error Monitor',
+              icon: HeartPulse,
+              badge: systemHealth?.errorSummary?.openCount || 0
+            },
             { id: 'users', label: 'Users & Access', icon: Users },
             { id: 'subscriptions', label: 'Subscriptions & Grants', icon: CreditCard },
             { id: 'pricing', label: 'Pricing & Platinum', icon: Crown },
@@ -501,6 +562,11 @@ export default function SuperAdminPage() {
               >
                 <Icon className="w-3.5 h-3.5" />
                 <span>{t.label}</span>
+                {t.badge > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black leading-none">
+                    {t.badge}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -764,6 +830,288 @@ export default function SuperAdminPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SYSTEM HEALTH, QUICK FEATURE DIAGNOSTICS & AUTO-REPORTED USER ERRORS */}
+        {activeTab === 'health' && (
+          <div className="space-y-6">
+            {/* Top Health Score + Run Quick Feature Test Bar */}
+            <div className="rounded-3xl p-6 bg-gradient-to-r from-[#071544] via-[#0A2786]/80 to-[#040D29] border border-[#9EDCFF]/30 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center font-orbitron border ${
+                    (systemHealth?.healthScore ?? 100) >= 85
+                      ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
+                      : (systemHealth?.healthScore ?? 100) >= 60
+                      ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                      : 'bg-rose-500/20 border-rose-400/50 text-rose-300'
+                  }`}
+                >
+                  <span className="text-xl font-black">{systemHealth?.healthScore ?? '—'}</span>
+                  <span className="text-[9px] uppercase">Score</span>
+                </div>
+                <div>
+                  <h2 className="font-orbitron text-lg font-extrabold text-white flex items-center gap-2">
+                    <HeartPulse className="w-5 h-5 text-emerald-400" />
+                    <span>Live System Health &amp; Quick Diagnostics</span>
+                  </h2>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Test all core ExBOS features in 1 click and monitor automatic error reports from every user session.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={fetchSystemHealth}
+                  className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-[#9EDCFF] inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingHealth ? 'animate-spin' : ''}`} />
+                  <span>Check Pulse</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={runningDiag}
+                  onClick={handleRunDiagnostics}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-orbitron text-xs font-extrabold inline-flex items-center gap-2 cursor-pointer disabled:opacity-60 shadow-lg"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>{runningDiag ? 'Testing Features...' : 'Run Quick Feature Test'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Live Subsystem Cards */}
+            {systemHealth?.subsystems && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-2xl p-4 bg-[#071544]/80 border border-white/12 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-orbitron font-bold text-[#9EDCFF]">MongoDB Atlas</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        systemHealth.subsystems.database.status === 'healthy'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {systemHealth.subsystems.database.status}
+                    </span>
+                  </div>
+                  <div className="font-orbitron text-xl font-black text-white">
+                    {systemHealth.subsystems.database.latencyMs} ms
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {systemHealth.subsystems.database.collections?.workspaces ?? 0} workspaces ·{' '}
+                    {systemHealth.subsystems.database.collections?.transactions ?? 0} transactions
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-[#071544]/80 border border-white/12 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-orbitron font-bold text-[#9EDCFF]">Email &amp; 2FA</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        systemHealth.subsystems.email.status === 'healthy'
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-amber-500/20 text-amber-300'
+                      }`}
+                    >
+                      {systemHealth.subsystems.email.status}
+                    </span>
+                  </div>
+                  <div className="font-orbitron text-sm font-extrabold text-white">
+                    {systemHealth.subsystems.email.httpsMailerConfigured
+                      ? '24/7 HTTPS Mailer'
+                      : systemHealth.subsystems.email.relayOnline
+                      ? 'Outbox Relay Online'
+                      : 'Relay Offline'}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Pending: {systemHealth.subsystems.email.pendingOutbox} · Failed:{' '}
+                    {systemHealth.subsystems.email.failedOutbox}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-[#071544]/80 border border-white/12 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-orbitron font-bold text-[#9EDCFF]">WhatsApp API</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        systemHealth.subsystems.whatsapp.configured
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-amber-500/20 text-amber-300'
+                      }`}
+                    >
+                      {systemHealth.subsystems.whatsapp.configured ? 'ready' : 'setup'}
+                    </span>
+                  </div>
+                  <div className="font-orbitron text-sm font-extrabold text-white">
+                    {systemHealth.subsystems.whatsapp.officialNumber}
+                  </div>
+                  <div className="text-[11px] text-slate-400">Meta Cloud API token &amp; Phone ID</div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-[#071544]/80 border border-white/12 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-orbitron font-bold text-[#9EDCFF]">User Errors</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                        (systemHealth.errorSummary?.openCount || 0) === 0
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                      }`}
+                    >
+                      {systemHealth.errorSummary?.openCount || 0} open
+                    </span>
+                  </div>
+                  <div className="font-orbitron text-xl font-black text-white">
+                    {systemHealth.errorSummary?.openCount || 0}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {systemHealth.errorSummary?.resolvedCount || 0} resolved auto-reports
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Quick System Feature Diagnostics Results */}
+            {diagResults?.checks && (
+              <div className="rounded-3xl p-6 bg-[#071544]/80 border border-emerald-400/30 shadow-xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="font-orbitron text-base font-extrabold text-white">
+                    Quick Feature Test Results ({diagResults.summary.passed}/{diagResults.summary.total} Passed)
+                  </h3>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    Ran at {String(diagResults.ranAt || '').slice(0, 19).replace('T', ' ')} UTC
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {diagResults.checks.map((c) => (
+                    <div
+                      key={c.id}
+                      className="p-3.5 rounded-2xl bg-[#03091F]/80 border border-white/10 flex items-start justify-between gap-3 text-xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-white">{c.name}</div>
+                        <div className="text-[11px] text-slate-300">{c.detail}</div>
+                      </div>
+                      <div className="text-right shrink-0 space-y-1">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-orbitron font-bold uppercase ${
+                            c.status === 'pass'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                              : c.status === 'warn'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-400/40'
+                              : 'bg-rose-500/20 text-rose-300 border border-rose-400/40'
+                          }`}
+                        >
+                          {c.status}
+                        </span>
+                        <div className="text-[10px] font-mono text-slate-400">{c.latencyMs} ms</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Auto-Reported User Errors Inbox */}
+            <div className="rounded-3xl p-6 bg-[#071544]/80 border border-white/12 shadow-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-orbitron text-base font-extrabold text-white flex items-center gap-2">
+                    <Bug className="w-5 h-5 text-rose-400" />
+                    <span>Auto-Reported User Errors Inbox</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Whenever any user encounters a JS crash, React error, or 5xx API failure, ExBOS automatically logs it here.
+                  </p>
+                </div>
+                {(systemHealth?.errorSummary?.resolvedCount || 0) > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearResolvedErrors}
+                    className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-bold text-slate-200 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-300" />
+                    <span>Clear Resolved</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2.5">
+                {(systemHealth?.errorReports || []).map((err) => (
+                  <div
+                    key={err.id}
+                    className={`p-4 rounded-2xl border text-xs space-y-2 ${
+                      err.status === 'open'
+                        ? 'bg-rose-950/25 border-rose-400/35'
+                        : 'bg-[#03091F]/60 border-white/10 opacity-75'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-orbitron font-bold uppercase ${
+                            err.status === 'open'
+                              ? 'bg-rose-500/25 text-rose-200'
+                              : 'bg-emerald-500/20 text-emerald-300'
+                          }`}
+                        >
+                          {err.status}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#9EDCFF] text-[10px] font-mono">
+                          {err.source}
+                        </span>
+                        {err.occurrences > 1 && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-[10px] font-bold">
+                            ×{err.occurrences}
+                          </span>
+                        )}
+                        <span className="text-slate-300 font-semibold">{err.userEmail}</span>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {String(err.lastSeenAt || err.createdAt || '').slice(0, 19).replace('T', ' ')} UTC
+                        </span>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleResolveError(err.id, err.status === 'open' ? 'resolved' : 'open')
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold text-white inline-flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{err.status === 'open' ? 'Mark Resolved' : 'Reopen'}</span>
+                      </button>
+                    </div>
+
+                    <div className="font-mono text-rose-200 break-words">{err.message}</div>
+                    {err.url && (
+                      <div className="text-[10px] text-slate-400 truncate">Page: {err.url}</div>
+                    )}
+                    {err.stack && (
+                      <details className="text-[10px] text-slate-400">
+                        <summary className="cursor-pointer text-[#9EDCFF] font-semibold">
+                          View stack trace
+                        </summary>
+                        <pre className="mt-1.5 p-2.5 rounded-xl bg-black/40 overflow-x-auto text-[10px] text-slate-300 whitespace-pre-wrap">
+                          {err.stack}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                ))}
+                {(systemHealth?.errorReports || []).length === 0 && (
+                  <div className="py-10 text-center text-xs text-emerald-300 flex flex-col items-center gap-2">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                    <span>Zero user errors reported — all systems running clean!</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
