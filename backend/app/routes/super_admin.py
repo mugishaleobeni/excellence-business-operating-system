@@ -661,9 +661,19 @@ def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
             break
 
     if updated_plan is None:
-        return error_response(
-            error=f"Pricing plan '{plan_id}' not found.", status_code=404
-        )
+        # Upsert plan cleanly if DB still held legacy tier IDs (e.g. starter/growth/enterprise)
+        new_plan = {
+            "id": str(plan_id),
+            "tier": str(patch_fields.get("tier") or str(plan_id).title()),
+            "name": str(patch_fields.get("name") or f"{str(plan_id).title()} Plan"),
+            **patch_fields,
+        }
+        if "priceRWF" in patch_fields and "monthlyPriceRWF" not in new_plan:
+            new_plan["monthlyPriceRWF"] = patch_fields["priceRWF"]
+        elif "monthlyPriceRWF" in patch_fields and "priceRWF" not in new_plan:
+            new_plan["priceRWF"] = patch_fields["monthlyPriceRWF"]
+        plans.append(new_plan)
+        updated_plan = new_plan
 
     db.platform_config.update_one(
         {"key": "pricing_plans"},
