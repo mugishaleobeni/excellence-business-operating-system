@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import exbosLogo from '../../../logo/exboslogo.png'
+import { OPTIMIZED_IMAGES } from '../../assets/optimized/imageManifest'
+const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 import { Sparkles, CheckCircle2 } from 'lucide-react'
 
 export default function PreloaderScreen({ onComplete }) {
@@ -104,6 +105,8 @@ export default function PreloaderScreen({ onComplete }) {
             <img
               src={exbosLogo}
               alt="Excellence BOS Logo"
+              width={96}
+              height={96}
               className="w-full h-full object-contain filter drop-shadow-[0_4px_16px_rgba(33,141,255,0.45)]"
             />
           </div>

@@ -8,32 +8,48 @@
     "url": "https://pylarix.com"
   },
   "documentation": "https://exbos.pages.dev/llms.txt",
-  "resources": [
+  "entries": [
     {
-      "name": "Landing & Platform Overview",
+      "id": "exbos-home",
+      "name": "ExBOS Landing & Platform Overview",
+      "description": "Overview of Excellence Business Operations System and its 6 business architectures.",
       "url": "https://exbos.pages.dev/",
       "type": "webpage"
     },
     {
-      "name": "Features",
+      "id": "exbos-features",
+      "name": "Core Platform Features",
+      "description": "Sales, inventory, WhatsApp-assisted entry, multi-branch control, and profit & loss reports.",
       "url": "https://exbos.pages.dev/features",
       "type": "webpage"
     },
     {
-      "name": "Business Models",
+      "id": "exbos-models",
+      "name": "Six Business Architectures",
+      "description": "Make & Sell, Buy & Sell, Service-Based, Agriculture & Livestock, Food & Hospitality, and Hybrid.",
       "url": "https://exbos.pages.dev/business-models",
       "type": "webpage"
     },
     {
-      "name": "Pricing",
+      "id": "exbos-pricing",
+      "name": "Pricing Plans (RWF)",
+      "description": "Forever Free, Bronze, Silver, Gold, and Platinum referral plans.",
       "url": "https://exbos.pages.dev/pricing",
       "type": "webpage"
     },
     {
-      "name": "Backend API Health",
+      "id": "exbos-llms",
+      "name": "LLMs Documentation Index",
+      "description": "Machine-readable platform documentation for AI assistants and agents.",
+      "url": "https://exbos.pages.dev/llms.txt",
+      "type": "documentation"
+    },
+    {
+      "id": "exbos-api-health",
+      "name": "ExBOS Backend Health Endpoint",
+      "description": "Live health status for the ExBOS REST API.",
       "url": "https://exbos.onrender.com/api/v1/health",
       "type": "api"
     }
   ]
 }
-

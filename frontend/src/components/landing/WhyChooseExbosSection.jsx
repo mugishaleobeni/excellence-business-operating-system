@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import womanImage from '../../../logo/why-choose-woman.png'
+import { OPTIMIZED_IMAGES } from '../../assets/optimized/imageManifest'
+import OptimizedImage from '../common/OptimizedImage'
 
 const SIX_EXBOS_FEATURES = [
   {
@@ -201,12 +202,12 @@ export default function WhyChooseExbosSection() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.85, delay: 0.12, ease: 'easeOut' }}
             >
-              <img
-                src={womanImage}
+              <OptimizedImage
+                imageSet={OPTIMIZED_IMAGES.whyChooseWoman}
+                sizes="(max-width: 640px) 320px, (max-width: 1024px) 400px, 440px"
                 alt="Confident entrepreneur managing her business on ExBOS with her smartphone"
-                width={1247}
-                height={1261}
-                className="w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[440px] h-auto object-contain select-none pointer-events-none drop-shadow-[0_22px_40px_rgba(3,9,31,0.65)]"
+                wrapperClassName="w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[440px]"
+                className="w-full h-auto object-contain select-none pointer-events-none drop-shadow-[0_22px_40px_rgba(3,9,31,0.65)]"
                 draggable={false}
               />
             </motion.div>

@@ -10,8 +10,11 @@ import ArchitectureShowcase from '../components/landing/ArchitectureShowcase'
 import FinancialToolsSection from '../components/landing/FinancialToolsSection'
 import PricingSection from '../components/landing/PricingSection'
 import { FAQ_ITEMS } from '../data/architectures'
-import heroVideo from '../../logo/Man_interacting_with_ExBOS_app_2b61917c_1080p.mp4'
-import heroEndImage from '../../logo/Smiling Professional in Blue Tech Suit.png'
+import heroVideo from '../assets/optimized/hero-exbos-720p.mp4'
+import { OPTIMIZED_IMAGES } from '../assets/optimized/imageManifest'
+import OptimizedImage from '../components/common/OptimizedImage'
+
+const heroEndImg = OPTIMIZED_IMAGES.heroEnd
 import {
   ArrowRight,
   Calculator,
@@ -27,8 +30,21 @@ export default function LandingPage() {
   const isAuthenticated = Boolean(user && token && isTokenValid(token))
 
   const [heroVideoEnded, setHeroVideoEnded] = useState(false)
+  const [heroVideoReady, setHeroVideoReady] = useState(false)
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false)
   const heroVideoRef = useRef(null)
   const [openFaq, setOpenFaq] = useState(0)
+
+  // Defer downloading the 1.3MB hero video until after initial LCP paint completes
+  useEffect(() => {
+    const startLoad = () => setShouldLoadVideo(true)
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(startLoad, { timeout: 1200 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const timer = setTimeout(startLoad, 600)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Continuously alternate between the Hero Video and the Hero Image:
   // Video plays -> crossfades to Image onEnded -> holds Image for 4.5s -> replays Video -> repeats forever
@@ -67,36 +83,42 @@ export default function LandingPage() {
         >
           {/* Full-screen Muted Hero Video & Ended Fallback Image (Smiling Professional in Blue Tech Suit) */}
           <div className="absolute inset-0 z-0">
-            {/* Image shown when video ends (and as poster) */}
-            <img
-              src={heroEndImage}
+            {/* Instant LCP WebP Hero Image (loads in <50KB on mobile, <95KB on desktop) */}
+            <OptimizedImage
+              imageSet={heroEndImg}
+              sizes="100vw"
+              priority
               alt="Smiling Professional in Blue Tech Suit interacting with ExBOS"
+              wrapperClassName="w-full h-full"
               className="w-full h-full hero-bg-media"
             />
 
-            {/* Muted Hero Video that plays first and fades into the image when it ends */}
-            <video
-              ref={heroVideoRef}
-              src={heroVideo}
-              poster={heroEndImage}
-              autoPlay
-              muted
-              playsInline
-              onEnded={() => {
-                setHeroVideoEnded(true)
-              }}
-              className={`absolute inset-0 w-full h-full hero-bg-media transition-opacity duration-700 ${
-                heroVideoEnded ? 'opacity-0 pointer-events-none' : 'opacity-100'
-              }`}
-            >
-              <track
-                kind="captions"
-                src="/captions/hero-en.vtt"
-                srcLang="en"
-                label="English"
-                default
-              />
-            </video>
+            {/* Muted Hero Video deferred until after first paint; no 'default' on track to avoid CLS */}
+            {shouldLoadVideo && (
+              <video
+                ref={heroVideoRef}
+                src={heroVideo}
+                poster={heroEndImg.src}
+                preload="none"
+                autoPlay
+                muted
+                playsInline
+                onCanPlay={() => setHeroVideoReady(true)}
+                onEnded={() => {
+                  setHeroVideoEnded(true)
+                }}
+                className={`absolute inset-0 w-full h-full hero-bg-media transition-opacity duration-700 ${
+                  heroVideoEnded || !heroVideoReady ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                }`}
+              >
+                <track
+                  kind="captions"
+                  src="/captions/hero-en.vtt"
+                  srcLang="en"
+                  label="English"
+                />
+              </video>
+            )}
 
             {/* Directional Sapphire Shadow Overlay so video/image & text remain clear */}
             <div

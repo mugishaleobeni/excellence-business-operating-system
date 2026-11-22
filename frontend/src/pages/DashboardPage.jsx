@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useExbos } from '../context/ExbosContext'
 import { useDashboardPrefs } from '../components/dashboard/DashboardCustomizer'
-import exbosLogo from '../../logo/exboslogo.png'
+import { OPTIMIZED_IMAGES } from '../assets/optimized/imageManifest'
+const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 import RailNavigation from '../components/dashboard/layout/RailNavigation'
 import ContextualSidebar from '../components/dashboard/layout/ContextualSidebar'
 import DashboardTopNav from '../components/dashboard/layout/DashboardTopNav'

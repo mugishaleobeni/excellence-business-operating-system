@@ -21,7 +21,8 @@ import {
   Minus,
   Check
 } from 'lucide-react'
-import exbosLogo from '../../../../logo/exboslogo.png'
+import { OPTIMIZED_IMAGES } from '../../../assets/optimized/imageManifest'
+const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 import { formatRWF } from '../../../utils/currencyWords'
 import { useExbos } from '../../../context/ExbosContext'
 import TradeSelectionModal from '../make-and-sell/modals/TradeSelectionModal'

@@ -2,7 +2,8 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { SIX_ARCHITECTURES } from '../../data/architectures'
 import { Shield, Globe2, ArrowUpRight, CheckCircle2 } from 'lucide-react'
-import exbosLogo from '../../../logo/exboslogo.png'
+import { OPTIMIZED_IMAGES } from '../../assets/optimized/imageManifest'
+const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 
 export default function PublicFooter() {
   return (

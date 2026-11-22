@@ -1,8 +1,10 @@
-import makeAndSellImage from '../../logo/Make & Sell_ Smart Bakery Dashboard (1).png'
-import buyAndSellImage from '../../logo/replace Workers_managing_grocery_store_i…_56acc433_1080p.mp4 to Excellence BOS Buy & Sell Store Dashboard.png'
-import servicesImage from '../../logo/replace this Barber_cutting_customer_hair_a529696a_1080p.mp4 toExcellence BOS Salon Management Dashboard.png'
-import agricultureImage from '../../logo/replace this Farmers_working_on_vibrant_farm_72b1adbf_1080p to that Agriculture and Livestock Dashboard.png'
-import foodHospitalityImage from '../../logo/ExBOS Food & Hospitality Dashboard.png'
+import { OPTIMIZED_IMAGES } from '../assets/optimized/imageManifest'
+
+const makeAndSellImg = OPTIMIZED_IMAGES.archMakeAndSell
+const buyAndSellImg = OPTIMIZED_IMAGES.archBuyAndSell
+const servicesImg = OPTIMIZED_IMAGES.archServices
+const agricultureImg = OPTIMIZED_IMAGES.archAgriculture
+const foodHospitalityImg = OPTIMIZED_IMAGES.archFoodHospitality
 
 export const SIX_ARCHITECTURES = [
   {
@@ -15,8 +17,9 @@ export const SIX_ARCHITECTURES = [
     description:
       'From raw materials to finished products, ExBOS helps manufacturers manage production, calculate costs, track inventory, and monitor sales.',
     capabilities: ['Production', 'Raw Materials', 'Finished Goods', 'Sales', 'Profitability'],
-    image: makeAndSellImage,
-    thumb: makeAndSellImage,
+    image: makeAndSellImg.src,
+    thumb: makeAndSellImg.small,
+    imageSet: makeAndSellImg,
     videoUrl: '',
     examples: ['Bakeries & Confectioneries', 'Tailoring & Garment Workshops', 'Furniture & Carpentry Studios', 'Soap & Cosmetics Producers', 'Food Processing Units'],
     workflows: [
@@ -58,8 +61,9 @@ export const SIX_ARCHITECTURES = [
     description:
       'Keep your purchases, suppliers, products, inventory, sales, and customer balances organized in one place.',
     capabilities: ['Purchases', 'Inventory', 'Sales', 'Suppliers', 'Profits'],
-    image: buyAndSellImage,
-    thumb: buyAndSellImage,
+    image: buyAndSellImg.src,
+    thumb: buyAndSellImg.small,
+    imageSet: buyAndSellImg,
     videoUrl: '',
     examples: ['Retail Shops & Mini-Markets', 'Pharmacies & Cosmetics Stores', 'Hardware & Building Materials', 'Electronics & Phone Boutiques', 'Wholesale Distributors'],
     workflows: [
@@ -101,8 +105,9 @@ export const SIX_ARCHITECTURES = [
     description:
       'Manage services, bookings, customers, invoices, and payments while staying focused on delivering excellent service.',
     capabilities: ['Services', 'Appointments', 'Jobs', 'Customers', 'Payments'],
-    image: servicesImage,
-    thumb: servicesImage,
+    image: servicesImg.src,
+    thumb: servicesImg.small,
+    imageSet: servicesImg,
     videoUrl: '',
     examples: ['Salons, Spas & Barbershops', 'Auto & Electronics Repair Workshops', 'Consultancies & Creative Agencies', 'Cleaning & Maintenance Services', 'Construction & Installation Projects'],
     workflows: [
@@ -143,8 +148,9 @@ export const SIX_ARCHITECTURES = [
     description:
       'Organize livestock herds and flocks, feed depletion, breeding cycles, veterinary care, and real profit per head with Six-Month Survival Intelligence.',
     capabilities: ['Livestock', 'Animal Health', 'Feed Management', 'Breeding', 'Production Costs', 'Sales'],
-    image: agricultureImage,
-    thumb: agricultureImage,
+    image: agricultureImg.src,
+    thumb: agricultureImg.small,
+    imageSet: agricultureImg,
     videoUrl: '',
     examples: ['Pig Farming & Livestock Breeding', 'Poultry (Layers & Broilers)', 'Dairy Farming & Milk Production', 'Goats & Sheep Husbandry', 'Integrated Multi-Livestock Farms (AGUKA Model)'],
     workflows: [
@@ -184,8 +190,9 @@ export const SIX_ARCHITECTURES = [
     description:
       'Manage restaurant menus, recipes, ingredients, orders, expenses, and hospitality operations with greater clarity.',
     capabilities: ['Menus', 'Recipes', 'Orders', 'Ingredient Stock', 'Accommodation'],
-    image: foodHospitalityImage,
-    thumb: foodHospitalityImage,
+    image: foodHospitalityImg.src,
+    thumb: foodHospitalityImg.small,
+    imageSet: foodHospitalityImg,
     videoUrl: '',
     examples: ['Restaurants, Cafes & Bistros', 'Boutique Hotels & Guest Houses', 'Catering & Event Kitchens', 'Fast Food & Cloud Kitchens', 'Lodges & Resort Operations'],
     workflows: [
@@ -228,9 +235,9 @@ export const SIX_ARCHITECTURES = [
       'Combine product sales, services, production, and other business activities in one connected workspace.',
     capabilities: ['Multiple Workflows', 'Shared Inventory', 'Finance', 'Consolidated Reports'],
     image:
-      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1400&q=80',
+      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=960&q=75&fm=webp',
     thumb:
-      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=360&q=80',
+      'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=120&q=75&fm=webp',
     videoUrl: '',
     examples: ['Electronics Shop + Repair Workshop', 'Bakery + Retail Mini-Market + Catering', 'Agro-Vet Shop + Farm Operations', 'Salon + Cosmetics Retail Boutique', 'Multi-Branch Trading & Contracting Group'],
     workflows: [

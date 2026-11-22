@@ -378,7 +378,7 @@ export default function CardNav({
             aria-label={logoAlt}
           >
             {typeof logo === 'string' ? (
-              <img src={logo} alt={logoAlt} draggable={false} />
+              <img src={logo} alt={logoAlt} width={40} height={40} draggable={false} />
             ) : (
               logo
             )}

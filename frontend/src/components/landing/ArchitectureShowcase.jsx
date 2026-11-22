@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useExbos } from '../../context/ExbosContext'
+import OptimizedImage from '../common/OptimizedImage'
 import {
   ArrowRight,
   ChevronLeft,
@@ -83,15 +84,23 @@ export default function ArchitectureShowcase() {
     return () => observer.disconnect()
   }, [])
 
-  // Preload adjacent images for smooth crossfade
+  // Smart idle prefetching: only prefetch the NEXT slide (never all 6 upfront)
   useEffect(() => {
-    architectures.forEach((arch) => {
-      if (arch.image) {
-        const img = new Image()
-        img.src = arch.image
-      }
-    })
-  }, [architectures])
+    if (!architectures.length) return undefined
+    const nextArch = architectures[(activeIndex + 1) % architectures.length]
+    if (!nextArch?.image) return undefined
+    const prefetch = () => {
+      const img = new Image()
+      img.decoding = 'async'
+      img.src = nextArch.image
+    }
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(prefetch, { timeout: 2000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const timer = setTimeout(prefetch, 800)
+    return () => clearTimeout(timer)
+  }, [architectures, activeIndex])
 
   // Animate text reveal whenever activeIndex changes
   useEffect(() => {
@@ -238,10 +247,13 @@ export default function ArchitectureShowcase() {
                   className="w-full h-full object-cover"
                 />
               ) : (
-                <img
+                <OptimizedImage
+                  imageSet={arch.imageSet}
                   src={arch.image}
+                  sizes="100vw"
+                  priority={idx === 0}
                   alt={`${arch.name} — ${arch.headline}`}
-                  loading={idx <= 1 ? 'eager' : 'lazy'}
+                  wrapperClassName="w-full h-full"
                   className="w-full h-full object-cover"
                 />
               )}
