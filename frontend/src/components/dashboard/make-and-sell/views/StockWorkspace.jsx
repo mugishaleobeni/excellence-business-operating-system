@@ -454,7 +454,8 @@ export default function StockWorkspace({
       costPerUnitRWF: prodCostPerUnit !== '' ? Number(prodCostPerUnit) : (editItem?.costPerUnitRWF || Math.round((Number(prodSellingPrice) || 0) * 0.6)),
       shelfLifeDays: Number(prodShelfLifeDays) || 4,
       minimumStockLevel: Number(prodReorderLevel) || 20,
-      currentStock: editItem ? editItem.currentStock : Number(prodOpeningStock) || 0,
+      currentStock: Number(prodOpeningStock) || 0,
+      stock: Number(prodOpeningStock) || 0,
       batchCode: prodBatchCode,
       bestBeforeDate: new Date(Date.now() + (Number(prodShelfLifeDays) || 4) * 86400000).toISOString().slice(0, 10)
     }
@@ -1009,6 +1010,7 @@ export default function StockWorkspace({
                                     new Date(Date.now() + (item.shelfLifeDays || 4) * 86400000).toISOString().slice(0, 10)
                                   )
                                   setProdReorderLevel(item.minimumStockLevel || 20)
+                                  setProdOpeningStock(item.currentStock ?? item.stock ?? 0)
                                   setDrawerType('product')
                                   setDrawerOpen(true)
                                 }}
@@ -1878,14 +1880,28 @@ export default function StockWorkspace({
                     </div>
                   )}
 
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Reorder Level Threshold</label>
-                    <input
-                      type="number"
-                      value={prodReorderLevel}
-                      onChange={(e) => setProdReorderLevel(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Product Quantity (In Stock) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={prodOpeningStock}
+                        onChange={(e) => setProdOpeningStock(e.target.value)}
+                        placeholder="e.g. 50"
+                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Reorder Level Threshold</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={prodReorderLevel}
+                        onChange={(e) => setProdReorderLevel(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
                   </div>
 
                   {/* More Options Toggle */}
@@ -1895,21 +1911,12 @@ export default function StockWorkspace({
                       onClick={() => setShowMoreOptions(!showMoreOptions)}
                       className="text-[11px] text-[#9EDCFF] hover:underline font-semibold cursor-pointer"
                     >
-                      {showMoreOptions ? '− Hide advanced options' : '+ More options (Opening stock & batch code)'}
+                      {showMoreOptions ? '− Hide advanced options' : '+ More options (Initial batch code)'}
                     </button>
                   </div>
 
                   {showMoreOptions && (
                     <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-3">
-                      <div>
-                        <label className="block text-slate-400 text-[11px] mb-1">Opening Stock Quantity</label>
-                        <input
-                          type="number"
-                          value={prodOpeningStock}
-                          onChange={(e) => setProdOpeningStock(e.target.value)}
-                          className="w-full px-2.5 py-1.5 rounded-lg bg-[#040C26] border border-white/15 text-white text-xs"
-                        />
-                      </div>
                       <div>
                         <label className="block text-slate-400 text-[11px] mb-1">Initial Batch Code</label>
                         <input
