@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
 import { formatRWF } from '../utils/currencyWords'
 import MoneyInput from '../components/common/MoneyInput'
-import PublicNavbar from '../components/layout/PublicNavbar'
 import { apiClient } from '../utils/apiClient'
 import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
 import {
@@ -35,7 +34,12 @@ import {
   HeartPulse,
   Play,
   Bug,
-  CheckCheck
+  CheckCheck,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Home
 } from 'lucide-react'
 
 const ARCH_LABELS = {
@@ -67,6 +71,8 @@ export default function SuperAdminPage() {
   } = useExbos()
 
   const [activeTab, setActiveTab] = useState('overview')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [savedToast, setSavedToast] = useState(null)
   const [errorToast, setErrorToast] = useState(null)
 
@@ -562,62 +568,359 @@ export default function SuperAdminPage() {
     Object.values(archBreakdown).reduce((a, b) => a + Number(b || 0), 0)
   )
 
+  const navGroups = [
+    {
+      title: 'Command Center',
+      items: [
+        { id: 'overview', label: 'Executive Overview', shortLabel: 'Overview', icon: Trophy },
+        {
+          id: 'health',
+          label: 'System Health & Errors',
+          shortLabel: 'Health',
+          icon: HeartPulse,
+          badge: systemHealth?.errorSummary?.openCount || 0,
+          badgeTone: 'rose'
+        }
+      ]
+    },
+    {
+      title: 'Accounts & Revenue',
+      items: [
+        {
+          id: 'users',
+          label: 'Users & Access',
+          shortLabel: 'Users',
+          icon: Users,
+          count: summary.totalUsers || 0
+        },
+        {
+          id: 'subscriptions',
+          label: 'Subscriptions & Grants',
+          shortLabel: 'Billing',
+          icon: CreditCard,
+          badge: pendingUpgradesCount,
+          badgeTone: 'amber'
+        },
+        { id: 'pricing', label: 'Pricing & Platinum', shortLabel: 'Pricing', icon: Crown }
+      ]
+    },
+    {
+      title: 'Governance',
+      items: [
+        { id: 'broadcast', label: 'Broadcasts', shortLabel: 'Broadcast', icon: Megaphone },
+        { id: 'audit', label: 'Audit Trail', shortLabel: 'Audit', icon: ScrollText }
+      ]
+    }
+  ]
+
+  const allNavItems = navGroups.flatMap((g) => g.items)
+  const activeNavMeta = allNavItems.find((item) => item.id === activeTab) || allNavItems[0]
+
+  const handleSelectNav = (tabId) => {
+    setActiveTab(tabId)
+    setMobileMenuOpen(false)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   return (
-    <div className="min-h-screen flex flex-col bg-[#03091F] text-white">
-      <PublicNavbar />
-
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-10 pt-24 sm:pt-28 pb-20 space-y-6">
-        {/* Executive Super Admin Hero Command Bar */}
-        <div className="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-gradient-to-br from-[#071544] via-[#0A2786] to-[#040D29] border border-[#9EDCFF]/35 shadow-[0_24px_70px_rgba(0,0,0,0.65),0_0_40px_rgba(33,141,255,0.2)]">
-          <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-[#218DFF]/20 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-amber-400/10 blur-3xl" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-[11px] font-orbitron font-bold text-amber-200 tracking-wider">
-                  <Crown className="w-3.5 h-3.5 text-amber-300" />
-                  <span>EXBOS SUPER ADMIN COMMAND</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-[11px] font-semibold text-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>MongoDB Live</span>
-                </span>
-                <span className="text-xs text-[#9EDCFF]/80 font-mono">
-                  {currentUser?.email}
-                </span>
+    <div className="min-h-screen flex bg-[#03091F] text-white">
+      {/* ==================== DESKTOP SIDEBAR MENU ==================== */}
+      <aside
+        className={`hidden lg:flex flex-col shrink-0 sticky top-0 h-screen bg-[#050D2B] border-r border-white/10 transition-all duration-200 z-30 ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        }`}
+      >
+        {/* Brand & Collapse Toggle */}
+        <div className="flex items-center justify-between gap-2 px-4 py-4 border-b border-white/10">
+          <Link to="/" className="flex items-center gap-2.5 min-w-0 no-underline">
+            <img
+              src="/logo/exboslogo.png"
+              alt="ExBOS Logo"
+              className="w-9 h-9 rounded-xl border border-[#9EDCFF]/40 bg-[#03091F] object-contain shrink-0"
+            />
+            {!sidebarCollapsed && (
+              <div className="min-w-0">
+                <div className="font-orbitron text-xs font-black tracking-wider text-white truncate">
+                  EXBOS ADMIN
+                </div>
+                <div className="text-[10px] font-semibold text-[#9EDCFF] uppercase tracking-widest truncate">
+                  Super Command
+                </div>
               </div>
+            )}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            title={sidebarCollapsed ? 'Expand Menu' : 'Collapse Menu'}
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white cursor-pointer transition shrink-0"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </div>
 
-              <h1 className="font-orbitron text-2xl sm:text-4xl font-black tracking-tight text-white">
-                Platform Intelligence &amp; Control Center
-              </h1>
-              <p className="text-xs sm:text-sm text-slate-200/90 max-w-2xl">
-                Monitor top-performing businesses in real time, control user access &amp; subscriptions with strict MRR isolation, broadcast notices, and audit every administrative action.
-              </p>
+        {/* Navigation Groups */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+          {navGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              {!sidebarCollapsed && (
+                <div className="px-3 pb-1 text-[10px] font-orbitron font-bold uppercase tracking-widest text-slate-400">
+                  {group.title}
+                </div>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon
+                const active = activeTab === item.id
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleSelectNav(item.id)}
+                    title={sidebarCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center ${
+                      sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'
+                    } py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                      active
+                        ? 'bg-gradient-to-r from-[#218DFF] to-[#1045CA] text-white shadow-[0_6px_18px_rgba(33,141,255,0.4)]'
+                        : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      <Icon className="w-4 h-4 shrink-0" />
+                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    </span>
+                    {!sidebarCollapsed && item.badge > 0 && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                          item.badgeTone === 'amber'
+                            ? 'bg-amber-400 text-slate-950'
+                            : 'bg-rose-500 text-white'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                    {!sidebarCollapsed && !item.badge && item.count > 0 && (
+                      <span className="text-[10px] font-mono text-slate-400">{item.count}</span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
+          ))}
+        </nav>
 
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        {/* Sidebar Footer Actions */}
+        <div className="p-3 border-t border-white/10 space-y-2 bg-[#040A24]">
+          <Link
+            to="/dashboard"
+            title="Manage My Business"
+            className={`w-full flex items-center ${
+              sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-3'
+            } py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-orbitron font-extrabold no-underline shadow transition`}
+          >
+            <span className="flex items-center gap-2 truncate">
+              <Building2 className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span>My Business</span>}
+            </span>
+            {!sidebarCollapsed && <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />}
+          </Link>
+
+          <Link
+            to="/"
+            title="Public Home"
+            className={`w-full flex items-center ${
+              sidebarCollapsed ? 'justify-center px-2' : 'gap-2 px-3'
+            } py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white no-underline transition`}
+          >
+            <Home className="w-3.5 h-3.5 shrink-0" />
+            {!sidebarCollapsed && <span>ExBOS Home</span>}
+          </Link>
+
+          {!sidebarCollapsed && (
+            <div className="px-2 pt-1 flex items-center justify-between text-[10px] text-slate-400">
+              <span className="truncate font-mono">{currentUser?.email}</span>
+              <span className="inline-flex items-center gap-1 text-emerald-300 shrink-0 ml-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live
+              </span>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* ==================== MOBILE SLIDE-OUT MENU DRAWER ==================== */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div className="relative z-10 w-72 max-w-[85vw] h-full bg-[#050D2B] border-r border-white/15 flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <img
+                  src="/logo/exboslogo.png"
+                  alt="ExBOS Logo"
+                  className="w-8 h-8 rounded-lg border border-[#9EDCFF]/40 bg-[#03091F] object-contain"
+                />
+                <div>
+                  <div className="font-orbitron text-xs font-black text-white">EXBOS ADMIN</div>
+                  <div className="text-[10px] font-semibold text-[#9EDCFF] uppercase tracking-wider">
+                    Super Admin Menu
+                  </div>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={refreshAll}
-                className="px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/20 text-xs font-bold text-[#9EDCFF] hover:text-white inline-flex items-center gap-2 cursor-pointer transition"
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 rounded-xl bg-white/10 text-slate-200 hover:text-white cursor-pointer"
+                aria-label="Close menu"
               >
-                <RefreshCw
-                  className={`w-3.5 h-3.5 ${loadingAnalytics || loadingUsers ? 'animate-spin' : ''}`}
-                />
-                <span>Refresh Live</span>
+                <X className="w-4 h-4" />
               </button>
+            </div>
+
+            <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+              {navGroups.map((group) => (
+                <div key={group.title} className="space-y-1">
+                  <div className="px-3 pb-1 text-[10px] font-orbitron font-bold uppercase tracking-widest text-slate-400">
+                    {group.title}
+                  </div>
+                  {group.items.map((item) => {
+                    const Icon = item.icon
+                    const active = activeTab === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSelectNav(item.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold cursor-pointer transition ${
+                          active
+                            ? 'bg-gradient-to-r from-[#218DFF] to-[#1045CA] text-white shadow'
+                            : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <Icon className="w-4 h-4 shrink-0" />
+                          <span>{item.label}</span>
+                        </span>
+                        {item.badge > 0 && (
+                          <span
+                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none ${
+                              item.badgeTone === 'amber'
+                                ? 'bg-amber-400 text-slate-950'
+                                : 'bg-rose-500 text-white'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </nav>
+
+            <div className="p-3 border-t border-white/10 space-y-2 bg-[#040A24]">
               <Link
                 to="/dashboard"
-                className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-orbitron font-extrabold inline-flex items-center gap-1.5 no-underline shadow-lg transition"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 text-xs font-orbitron font-extrabold no-underline"
               >
-                <span>Manage My Business</span>
+                <span className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4" />
+                  <span>Manage My Business</span>
+                </span>
                 <ArrowUpRight className="w-4 h-4" />
+              </Link>
+              <Link
+                to="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-slate-300 no-underline"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span>ExBOS Home</span>
               </Link>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* 6 Live Executive KPI Cards */}
+      {/* ==================== MAIN CONTENT COLUMN ==================== */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Top Command Header (Sticky on Desktop & Mobile) */}
+        <header className="sticky top-0 z-20 flex items-center justify-between gap-3 px-4 sm:px-6 lg:px-8 py-3 bg-[#050D2B]/90 backdrop-blur-md border-b border-white/10">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white cursor-pointer shrink-0"
+              aria-label="Open Super Admin Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="min-w-0">
+              <div className="text-[10px] font-orbitron uppercase tracking-widest text-[#9EDCFF] truncate">
+                Super Admin Console
+              </div>
+              <div className="font-orbitron text-sm sm:text-base font-extrabold text-white truncate">
+                {activeNavMeta.label}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-[11px] font-semibold text-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>MongoDB Live</span>
+            </span>
+            <button
+              type="button"
+              onClick={refreshAll}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-bold text-[#9EDCFF] hover:text-white inline-flex items-center gap-1.5 cursor-pointer transition"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${loadingAnalytics || loadingUsers ? 'animate-spin' : ''}`}
+              />
+              <span className="hidden sm:inline">Refresh Live</span>
+            </button>
+          </div>
+        </header>
+
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24 lg:pb-16 space-y-6">
+          {/* Executive Super Admin Hero Command Bar */}
+          <div className="relative overflow-hidden rounded-3xl p-5 sm:p-7 bg-gradient-to-br from-[#071544] via-[#0A2786] to-[#040D29] border border-[#9EDCFF]/35 shadow-[0_24px_70px_rgba(0,0,0,0.65),0_0_40px_rgba(33,141,255,0.2)]">
+            <div className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full bg-[#218DFF]/20 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-16 w-72 h-72 rounded-full bg-amber-400/10 blur-3xl" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-300/40 text-[11px] font-orbitron font-bold text-amber-200 tracking-wider">
+                    <Crown className="w-3.5 h-3.5 text-amber-300" />
+                    <span>EXBOS SUPER ADMIN COMMAND</span>
+                  </span>
+                  <span className="text-xs text-[#9EDCFF]/80 font-mono">
+                    {currentUser?.email}
+                  </span>
+                </div>
+
+                <h1 className="font-orbitron text-xl sm:text-3xl font-black tracking-tight text-white">
+                  Platform Intelligence &amp; Control Center
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-200/90 max-w-2xl">
+                  Monitor top-performing businesses in real time, control user access &amp; subscriptions with strict MRR isolation, broadcast notices, and audit every administrative action.
+                </p>
+              </div>
+            </div>
+
+            {/* 6 Live Executive KPI Cards */}
           <div className="relative z-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-white/15">
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-white/10">
               <div className="text-[10px] font-orbitron uppercase text-[#9EDCFF]/80">Total Users</div>
@@ -688,52 +991,6 @@ export default function SuperAdminPage() {
             <span>{errorToast}</span>
           </div>
         )}
-
-        {/* Executive Navigation Pill Bar */}
-        <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-[#071544]/70 border border-white/10">
-          {[
-            { id: 'overview', label: 'Executive Overview & Top Users', icon: Trophy },
-            {
-              id: 'health',
-              label: 'System Health & Error Monitor',
-              icon: HeartPulse,
-              badge: systemHealth?.errorSummary?.openCount || 0
-            },
-            { id: 'users', label: 'Users & Access', icon: Users },
-            {
-              id: 'subscriptions',
-              label: 'Subscriptions & Grants',
-              icon: CreditCard,
-              badge: pendingUpgradesCount
-            },
-            { id: 'pricing', label: 'Pricing & Platinum', icon: Crown },
-            { id: 'broadcast', label: 'Broadcast', icon: Megaphone },
-            { id: 'audit', label: 'Audit Trail', icon: ScrollText }
-          ].map((t) => {
-            const Icon = t.icon
-            const active = activeTab === t.id
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setActiveTab(t.id)}
-                className={`px-4 py-2.5 rounded-xl font-orbitron text-xs font-bold flex items-center gap-2 cursor-pointer transition-all ${
-                  active
-                    ? 'bg-gradient-to-r from-[#218DFF] to-[#1045CA] text-white shadow-[0_6px_20px_rgba(33,141,255,0.45)]'
-                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5" />
-                <span>{t.label}</span>
-                {t.badge > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black leading-none">
-                    {t.badge}
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </div>
 
         {/* TAB 0: EXECUTIVE OVERVIEW & TOP WORKING USERS */}
         {activeTab === 'overview' && (
@@ -2352,7 +2609,54 @@ export default function SuperAdminPage() {
             </div>
           </div>
         )}
-      </main>
+        </main>
+
+        {/* ==================== MOBILE BOTTOM QUICK MENU ==================== */}
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[#050D2B]/95 backdrop-blur-md border-t border-white/15 px-2 py-1.5 grid grid-cols-5 gap-1">
+          {[
+            { id: 'overview', label: 'Overview', icon: Trophy },
+            { id: 'users', label: 'Users', icon: Users },
+            { id: 'subscriptions', label: 'Billing', icon: CreditCard, badge: pendingUpgradesCount },
+            {
+              id: 'health',
+              label: 'Health',
+              icon: HeartPulse,
+              badge: systemHealth?.errorSummary?.openCount || 0
+            }
+          ].map((item) => {
+            const Icon = item.icon
+            const active = activeTab === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSelectNav(item.id)}
+                className={`relative flex flex-col items-center justify-center py-1.5 rounded-xl text-[10px] font-semibold cursor-pointer transition ${
+                  active
+                    ? 'bg-[#218DFF]/20 text-[#9EDCFF] border border-[#218DFF]/40'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Icon className="w-4 h-4 mb-0.5" />
+                <span className="truncate">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="absolute top-1 right-2 px-1 min-w-[14px] h-[14px] rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center leading-none">
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex flex-col items-center justify-center py-1.5 rounded-xl text-[10px] font-semibold text-slate-400 hover:text-white cursor-pointer transition"
+          >
+            <Menu className="w-4 h-4 mb-0.5" />
+            <span>Menu</span>
+          </button>
+        </nav>
+      </div>
     </div>
   )
 }
