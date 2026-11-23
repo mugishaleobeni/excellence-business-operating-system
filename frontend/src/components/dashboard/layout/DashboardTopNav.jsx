@@ -363,117 +363,21 @@ export default function DashboardTopNav({
           <div ref={notifRef} className="relative">
             <button
               type="button"
-              onClick={() => setNotifOpen(!notifOpen)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setNotifOpen(!notifOpen)
+              }}
               className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:bg-white/20 active:scale-95 transition-all flex items-center justify-center cursor-pointer relative"
               title="Business & Platform Alerts"
               aria-label="Notifications"
             >
               <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               {activeBusinessAlerts.length > 0 && (
-                <span className="w-2 h-2 rounded-full bg-[#218DFF] absolute top-1 right-1 animate-pulse" />
+                <span className="min-w-[14px] h-[14px] px-1 rounded-full bg-amber-400 text-slate-950 font-orbitron font-black text-[8px] flex items-center justify-center absolute -top-1 -right-1 shadow" >
+                  {activeBusinessAlerts.length}
+                </span>
               )}
             </button>
-            {notifOpen && (
-              <div className="spring-dropdown-panel absolute right-0 mt-2 w-80 sm:w-84 rounded-2xl bg-[#071544] border border-[#9EDCFF]/40 text-white p-3.5 sm:p-4 shadow-sapphire-dark z-50 space-y-3 text-xs">
-                <div className="font-orbitron font-bold text-[#9EDCFF] flex items-center justify-between border-b border-white/10 pb-2">
-                  <span className="flex items-center gap-1.5">
-                    <Bell className="w-3.5 h-3.5 text-[#218DFF]" />
-                    <span>Business Alerts</span>
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {activeBusinessAlerts.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const allIds = activeBusinessAlerts.map((a) => a.id)
-                          setDismissedAlertIds((prev) => {
-                            const next = [...prev, ...allIds]
-                            try {
-                              localStorage.setItem(
-                                'exbos_dismissed_alert_ids',
-                                JSON.stringify(next)
-                              )
-                            } catch (e) {}
-                            return next
-                          })
-                        }}
-                        className="text-[10px] text-slate-300 hover:text-white bg-transparent border-0 cursor-pointer p-0"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setNotifOpen(false)}
-                      className="p-1 rounded-lg hover:bg-white/15 text-slate-300 hover:text-white bg-transparent border-0 cursor-pointer transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                {activeBusinessAlerts.length > 0 ? (
-                  <div className="space-y-2">
-                    {activeBusinessAlerts.map((alert, idx) => (
-                      <div
-                        key={alert.id}
-                        style={{ animationDelay: `${(idx + 1) * 70}ms` }}
-                        className={`spring-dropdown-item p-2.5 rounded-xl border flex items-start justify-between gap-2 transition-all ${alert.bg}`}
-                      >
-                        <div className="space-y-1 min-w-0 flex-1">
-                          <strong className="text-white text-xs block truncate">
-                            {alert.title}
-                          </strong>
-                          <p className="text-[11px] leading-relaxed opacity-95">
-                            {alert.message}
-                          </p>
-                          {alert.onAction && (
-                            <button
-                              type="button"
-                              onClick={alert.onAction}
-                              className="text-[10px] font-bold text-[#9EDCFF] hover:underline cursor-pointer bg-transparent border-0 p-0 flex items-center gap-1 mt-1"
-                            >
-                              <span>{alert.actionLabel}</span>
-                              <ArrowUpRight className="w-3 h-3" />
-                            </button>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDismissedAlertIds((prev) => {
-                              const next = [...prev, alert.id]
-                              try {
-                                localStorage.setItem(
-                                  'exbos_dismissed_alert_ids',
-                                  JSON.stringify(next)
-                                )
-                              } catch (err) {}
-                              return next
-                            })
-                          }}
-                          title="Dismiss alert"
-                          className="p-1 rounded-md hover:bg-white/20 text-slate-300 hover:text-white bg-transparent border-0 cursor-pointer shrink-0 transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 text-center space-y-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 mx-auto" />
-                    <p className="text-xs font-semibold text-white">
-                      All Reconciled &amp; Clear
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      No overdue customer debts or pending alerts.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Super Admin Console Switcher (Visible ONLY to verified Super Admins) */}

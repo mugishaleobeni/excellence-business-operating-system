@@ -243,18 +243,22 @@ export default function MobileFintechDashboardHeader({
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={() => setNotifOpen(!notifOpen)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setNotifOpen(!notifOpen)
+            }}
             className="w-10 h-10 rounded-2xl bg-white/10 border border-white/20 text-[#9EDCFF] hover:text-white flex items-center justify-center relative cursor-pointer active:scale-95 transition-all shadow-md"
             title="Notifications"
+            aria-label="Open notifications"
           >
             <Bell className="w-4 h-4 text-white" />
-            <span
-              className={`w-2.5 h-2.5 rounded-full absolute top-2 right-2 ring-2 ring-[#071544] ${
-                activeBusinessAlerts.length > 0
-                  ? 'bg-amber-400 animate-pulse'
-                  : 'bg-amber-400/90 shadow-sm'
-              }`}
-            />
+            {activeBusinessAlerts.length > 0 ? (
+              <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-amber-400 text-slate-950 font-orbitron font-black text-[9px] flex items-center justify-center absolute -top-1 -right-1 ring-2 ring-[#071544] shadow">
+                {activeBusinessAlerts.length}
+              </span>
+            ) : (
+              <span className="w-2.5 h-2.5 rounded-full absolute top-2 right-2 ring-2 ring-[#071544] bg-emerald-400/90 shadow-sm" />
+            )}
           </button>
 
           <div className="h-10 px-2.5 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shadow-md">

@@ -13,6 +13,7 @@ import {
   MODULE_ICONS,
   MODULE_SHORT_LABELS
 } from '../components/dashboard/data/dashboardConstants'
+import { Bell, X, CheckCircle2, ArrowUpRight } from 'lucide-react'
 import { getAvailableWidgets } from '../components/dashboard/data/availableWidgets'
 import { useBusinessAlerts } from '../components/dashboard/hooks/useBusinessAlerts'
 import { useDashboardNavigation } from '../components/dashboard/hooks/useDashboardNavigation'
@@ -84,16 +85,14 @@ export default function DashboardPage() {
     }
   })
 
-  // Auto-hide notification dropdown when clicking outside
+  // Close notification panel on Escape key
   useEffect(() => {
     if (!notifOpen) return
-    const handleClickOutside = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotifOpen(false)
-      }
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') setNotifOpen(false)
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
   }, [notifOpen])
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -431,6 +430,110 @@ export default function DashboardPage() {
         }}
         isFirstTimePrompt={true}
       />
+
+      {/* Unified Responsive Notifications Drawer / Popover (Works on Mobile Overview, Mobile Modules & Desktop) */}
+      {notifOpen && (
+        <div className="fixed inset-0 z-[200]" onClick={() => setNotifOpen(false)}>
+          <div className="absolute inset-0 bg-black/40 sm:bg-transparent backdrop-blur-[2px] sm:backdrop-blur-none" />
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="spring-dropdown-panel fixed top-14 left-3 right-3 sm:left-auto sm:right-6 sm:w-96 max-h-[78dvh] flex flex-col rounded-2xl bg-[#071544]/98 border border-[#9EDCFF]/45 text-white p-4 shadow-2xl backdrop-blur-2xl z-[201] space-y-3 text-xs"
+          >
+            <div className="font-orbitron font-bold text-[#9EDCFF] flex items-center justify-between border-b border-white/15 pb-2.5 shrink-0">
+              <span className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-[#218DFF]" />
+                <span>Business Alerts</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-[#218DFF]/25 text-white border border-[#218DFF]/40">
+                  {activeBusinessAlerts.length}
+                </span>
+              </span>
+              <div className="flex items-center gap-2.5">
+                {activeBusinessAlerts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allIds = activeBusinessAlerts.map((a) => a.id)
+                      setDismissedAlertIds((prev) => {
+                        const next = [...prev, ...allIds]
+                        try {
+                          localStorage.setItem('exbos_dismissed_alert_ids', JSON.stringify(next))
+                        } catch (e) {}
+                        return next
+                      })
+                    }}
+                    className="text-[11px] font-semibold text-slate-300 hover:text-white bg-transparent border-0 cursor-pointer p-0"
+                  >
+                    Clear All
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen(false)}
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white border-0 cursor-pointer transition-colors"
+                  aria-label="Close notifications"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto space-y-2.5 pr-0.5">
+              {activeBusinessAlerts.length > 0 ? (
+                activeBusinessAlerts.map((alert, idx) => (
+                  <div
+                    key={alert.id}
+                    style={{ animationDelay: `${(idx + 1) * 50}ms` }}
+                    className={`spring-dropdown-item p-3 rounded-xl border flex items-start justify-between gap-2.5 transition-all ${alert.bg}`}
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <strong className="text-white text-xs block">{alert.title}</strong>
+                      <p className="text-[11px] text-slate-200 leading-relaxed">{alert.message}</p>
+                      {alert.onAction && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            alert.onAction()
+                            setNotifOpen(false)
+                          }}
+                          className="text-[11px] font-bold text-[#9EDCFF] hover:underline cursor-pointer bg-transparent border-0 p-0 flex items-center gap-1 mt-1.5"
+                        >
+                          <span>{alert.actionLabel || 'Open'}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDismissedAlertIds((prev) => {
+                          const next = [...prev, alert.id]
+                          try {
+                            localStorage.setItem('exbos_dismissed_alert_ids', JSON.stringify(next))
+                          } catch (err) {}
+                          return next
+                        })
+                      }}
+                      title="Dismiss alert"
+                      className="p-1 rounded-lg hover:bg-white/20 text-slate-300 hover:text-white bg-transparent border-0 cursor-pointer shrink-0 transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="p-5 rounded-xl bg-white/5 border border-white/10 text-center space-y-2">
+                  <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
+                  <p className="text-xs font-bold text-white">All Reconciled &amp; Clear</p>
+                  <p className="text-[11px] text-slate-300">
+                    No overdue customer debts, low-stock warnings, or pending alerts right now.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Floating Dock Navigation (Matching Video Style) */}
       <MobileFloatingDock
