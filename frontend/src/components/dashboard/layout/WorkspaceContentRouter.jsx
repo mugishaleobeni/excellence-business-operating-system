@@ -1,12 +1,13 @@
-import React, { lazy, Suspense } from 'react'
+import React, { Suspense } from 'react'
 import OverviewDashboardView from '../overview/OverviewDashboardView'
+import { lazyWithRetry } from '../../../utils/lazyWithRetry'
 
-const WhereIsMyMoneyPanel = lazy(() => import('../WhereIsMyMoneyPanel'))
-const FarmingEnhancementsPanel = lazy(() => import('../FarmingEnhancementsPanel'))
-const DocumentsAndIntegrationsPanel = lazy(() => import('../DocumentsAndIntegrationsPanel'))
-const DocumentsAndSharingPanel = lazy(() => import('../documents/DocumentsAndSharingPanel'))
-const UniversalReportPanel = lazy(() => import('../UniversalReportPanel'))
-const InteractiveModulePanel = lazy(() => import('../InteractiveModulePanel'))
+const WhereIsMyMoneyPanel = lazyWithRetry(() => import('../WhereIsMyMoneyPanel'))
+const FarmingEnhancementsPanel = lazyWithRetry(() => import('../FarmingEnhancementsPanel'))
+const DocumentsAndIntegrationsPanel = lazyWithRetry(() => import('../DocumentsAndIntegrationsPanel'))
+const DocumentsAndSharingPanel = lazyWithRetry(() => import('../documents/DocumentsAndSharingPanel'))
+const UniversalReportPanel = lazyWithRetry(() => import('../UniversalReportPanel'))
+const InteractiveModulePanel = lazyWithRetry(() => import('../InteractiveModulePanel'))
 
 function PanelFallback() {
   return (

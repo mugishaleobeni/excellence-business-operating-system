@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exbos-pwa-v5'
+const CACHE_NAME = 'exbos-pwa-v6'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo/exboslogo.png']
 
 self.addEventListener('install', (event) => {
@@ -30,20 +30,25 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Content-hashed static assets (/assets/*): Cache-First for instant offline loads
+  // Content-hashed static assets (/assets/*): Cache-First for instant offline loads,
+  // but NEVER cache HTML fallback responses (text/html) as JS/CSS chunks!
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((resp) => {
-            if (resp && resp.status === 200) {
-              const copy = resp.clone()
-              caches.open(CACHE_NAME).then((c) => c.put(request, copy)).catch(() => {})
-            }
-            return resp
-          })
-      )
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((resp) => {
+          const ct = (resp.headers.get('content-type') || '').toLowerCase()
+          const isValidAsset =
+            resp &&
+            resp.status === 200 &&
+            !ct.includes('text/html')
+          if (isValidAsset) {
+            const copy = resp.clone()
+            caches.open(CACHE_NAME).then((c) => c.put(request, copy)).catch(() => {})
+          }
+          return resp
+        })
+      })
     )
     return
   }

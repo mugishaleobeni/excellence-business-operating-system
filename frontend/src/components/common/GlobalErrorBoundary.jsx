@@ -1,21 +1,46 @@
 import React from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { reportSystemError } from '../../utils/errorReporter'
+import { isChunkLoadError } from '../../utils/lazyWithRetry'
 
 export default class GlobalErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false, errorMessage: '' }
+    this.state = { hasError: false, errorMessage: '', isUpdating: false }
   }
 
   static getDerivedStateFromError(error) {
+    const chunkErr = isChunkLoadError(error)
     return {
       hasError: true,
+      isUpdating: chunkErr,
       errorMessage: error?.message || 'An unexpected UI error occurred.'
     }
   }
 
   componentDidCatch(error, info) {
+    // If a new deployment replaced old hashed JS chunks, silently clear caches and reload once
+    if (isChunkLoadError(error) && typeof window !== 'undefined') {
+      try {
+        const lastReload = Number(sessionStorage.getItem('exbos_chunk_reload_ts') || 0)
+        if (Date.now() - lastReload > 20000) {
+          sessionStorage.setItem('exbos_chunk_reload_ts', String(Date.now()))
+          if ('caches' in window) {
+            caches
+              .keys()
+              .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+              .finally(() => window.location.reload())
+          } else {
+            window.location.reload()
+          }
+          return
+        }
+      } catch {
+        window.location.reload()
+        return
+      }
+    }
+
     reportSystemError({
       source: 'react-boundary',
       message: error?.message || 'React render crash',

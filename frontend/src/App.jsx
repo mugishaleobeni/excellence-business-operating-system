@@ -1,7 +1,8 @@
-import React, { useState, useEffect, lazy, Suspense } from 'react'
+import React, { useState, useEffect, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { ExbosProvider, useExbos } from './context/ExbosContext'
 import { isTokenValid } from './utils/apiClient'
+import { lazyWithRetry } from './utils/lazyWithRetry'
 import { installGlobalErrorReporter } from './utils/errorReporter'
 import GlobalErrorBoundary from './components/common/GlobalErrorBoundary'
 import LandingPage from './pages/LandingPage'
@@ -22,9 +23,9 @@ import {
   ResourcesPage
 } from './pages/SeoPublicPages'
 
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
-const SuperAdminPage = lazy(() => import('./pages/SuperAdminPage'))
-const PublicDocumentPage = lazy(() => import('./pages/PublicDocumentPage'))
+const DashboardPage = lazyWithRetry(() => import('./pages/DashboardPage'))
+const SuperAdminPage = lazyWithRetry(() => import('./pages/SuperAdminPage'))
+const PublicDocumentPage = lazyWithRetry(() => import('./pages/PublicDocumentPage'))
 
 function RouteFallback() {
   return (
