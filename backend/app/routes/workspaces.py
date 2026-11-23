@@ -19,6 +19,11 @@ from app.seed_defaults import (
     get_default_workspaces,
 )
 from app.utils.responses import error_response, success_response, validate_json
+from app.services.financial_intelligence import (
+    calculate_financial_intelligence,
+    assess_purchase_decision,
+    _extract_purchase_financials,
+)
 
 logger = logging.getLogger("app.persistence")
 workspaces_bp = Blueprint("workspaces", __name__, url_prefix="/api/v1/workspaces")
@@ -236,6 +241,55 @@ def get_workspace(arch_id: str):
     return success_response(data=ws)
 
 
+@workspaces_bp.route("/<string:arch_id>/financial-intelligence", methods=["GET"])
+def get_workspace_financial_intelligence(arch_id: str):
+    """
+    Return the centralized, reconciled financial intelligence snapshot for an architecture:
+    - Total sales revenue, Actual payments received, Outstanding customer debts
+    - Operating expenses, Cost of goods sold, Gross profit, Net profit
+    - Current Cash, Mobile Money & Bank balances
+    - Outstanding supplier debts, Open purchase commitments, Reserved operational funds
+    - Available purchasing budget
+    """
+    if arch_id not in ARCHITECTURE_IDS:
+        return error_response(
+            error=f"Unknown architecture '{arch_id}'. Valid IDs: {ARCHITECTURE_IDS}",
+            status_code=404,
+        )
+    db = get_db()
+    scope_key = _resolve_scope_key(db)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
+    tx_cursor = db.transactions.find(
+        {"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0}
+    )
+    tx_list = list(tx_cursor)
+    intel = calculate_financial_intelligence(ws, tx_list, arch_id)
+    return success_response(data=intel)
+
+
+@workspaces_bp.route("/<string:arch_id>/purchases/assess", methods=["POST"])
+def assess_workspace_purchase(arch_id: str):
+    """
+    Evaluate a draft or edited purchase payload against current inventory, open POs,
+    historical sales velocity, supplier price history, and available purchasing budget.
+    """
+    if arch_id not in ARCHITECTURE_IDS:
+        return error_response(
+            error=f"Unknown architecture '{arch_id}'. Valid IDs: {ARCHITECTURE_IDS}",
+            status_code=404,
+        )
+    db = get_db()
+    scope_key = _resolve_scope_key(db)
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
+    tx_cursor = db.transactions.find(
+        {"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0}
+    )
+    tx_list = list(tx_cursor)
+    payload = request.get_json(silent=True) or {}
+    assessment = assess_purchase_decision(payload, ws, tx_list, arch_id)
+    return success_response(data=assessment)
+
+
 @workspaces_bp.route("/<string:arch_id>", methods=["PATCH"])
 @validate_json(WorkspacePatchSchema)
 def update_workspace(arch_id: str, validated_data: WorkspacePatchSchema):
@@ -436,6 +490,38 @@ def create_module_record(
     title = _extract_record_title(raw_dump, module_name)
     amount = _extract_record_amount(raw_dump)
     status = str(raw_dump.get("status") or "Completed")
+    actor_email = (actor_doc or {}).get("email") if isinstance(locals().get("actor_doc"), dict) else "owner@exbos.rw"
+    actor_role = (actor_doc or {}).get("role") if isinstance(locals().get("actor_doc"), dict) else "Owner"
+
+    # Normalize Purchases fields (deliveryStatus, orderedQuantity, receivedQuantity, paidAmountRWF, remainingAmountRWF, auditTrail)
+    if module_name == "Purchases":
+        pf = _extract_purchase_financials({**raw_dump, "amountRWF": amount, "status": status})
+        amount = pf["total"]
+        raw_dump["amountRWF"] = pf["total"]
+        raw_dump["totalAmountRWF"] = pf["total"]
+        raw_dump["paidAmountRWF"] = pf["paid"]
+        raw_dump["remainingAmountRWF"] = pf["remaining"]
+        raw_dump["deliveryStatus"] = pf["deliveryStatus"]
+        raw_dump["orderedQuantity"] = pf["orderedQty"]
+        raw_dump["receivedQuantity"] = pf["receivedQty"]
+        existing_audit = raw_dump.get("auditTrail") if isinstance(raw_dump.get("auditTrail"), list) else []
+        existing_audit.append(
+            {
+                "timestamp": now_iso,
+                "action": "PURCHASE_CREATED",
+                "actorEmail": actor_email or "owner@exbos.rw",
+                "actorRole": actor_role or "Owner",
+                "branchId": effective_branch_id,
+                "deliveryStatus": pf["deliveryStatus"],
+                "orderedQuantity": pf["orderedQty"],
+                "receivedQuantity": pf["receivedQty"],
+                "totalAmountRWF": pf["total"],
+                "paidAmountRWF": pf["paid"],
+                "remainingAmountRWF": pf["remaining"],
+                "sideMoneyAddedRWF": float(raw_dump.get("sideMoneyAddedRWF") or 0),
+            }
+        )
+        raw_dump["auditTrail"] = existing_audit
 
     record_doc = {
         **raw_dump,
@@ -484,9 +570,9 @@ def create_module_record(
     if module_name in PRODUCT_BUCKETS:
         _mirror_product(db, scope_key, arch_id, record_doc, now_iso)
 
-    # Automatic server-side stock deduction on Sales and restock on Purchases
-    target_prod_id = str(raw_dump.get("productId") or "").strip()
-    target_prod_title = str(raw_dump.get("productTitle") or "").strip().lower()
+    # Automatic server-side stock deduction on Sales and restock on Purchases (ONLY when goods are received!)
+    target_prod_id = str(raw_dump.get("productId") or raw_dump.get("materialId") or "").strip()
+    target_prod_title = str(raw_dump.get("productTitle") or raw_dump.get("materialName") or "").strip().lower()
     delta_qty = float(raw_dump.get("quantity") or 0)
 
     if module_name == "Sales" and delta_qty > 0 and (target_prod_id or target_prod_title):
@@ -522,42 +608,45 @@ def create_module_record(
                     )
                     _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
 
-    elif module_name == "Purchases" and delta_qty > 0 and (target_prod_id or target_prod_title):
-        for stock_bucket in ("Inventory", "Products", "RawMaterials"):
-            s_list = records_map.get(stock_bucket, [])
-            for idx, prod in enumerate(s_list):
-                p_id = str(prod.get("id") or "").strip()
-                p_title = str(prod.get("title") or prod.get("name") or "").strip().lower()
-                if (target_prod_id and p_id == target_prod_id) or (not target_prod_id and target_prod_title and p_title == target_prod_title):
-                    cur_stock = float(prod.get("quantity") if prod.get("quantity") is not None else (prod.get("currentStock") or 0))
-                    if raw_dump.get("remainingStockAfterPurchase") is not None:
-                        new_stock = max(0.0, float(raw_dump["remainingStockAfterPurchase"]))
-                    else:
-                        new_stock = cur_stock + delta_qty
-                    new_stock_val = int(new_stock) if new_stock.is_integer() else new_stock
-                    low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
-                    buy_cost = float(raw_dump.get("unitPriceRWF") or prod.get("purchasePriceRWF") or prod.get("unitCostRWF") or 0)
-                    sell_p = float(prod.get("sellingPriceRWF") or buy_cost)
-                    new_status = "Low Stock" if new_stock <= low_alert else "Active"
-                    updated_prod = {
-                        **prod,
-                        "quantity": new_stock_val,
-                        "currentStock": new_stock_val,
-                        "purchasePriceRWF": buy_cost or prod.get("purchasePriceRWF", 0),
-                        "unitCostRWF": buy_cost or prod.get("unitCostRWF", 0),
-                        "amountRWF": new_stock_val * sell_p,
-                        "status": new_status,
-                        "updatedAt": now_iso,
-                    }
-                    s_list[idx] = updated_prod
-                    records_map[stock_bucket] = s_list
-                    db.module_records.update_one(
-                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "id": p_id},
-                        {"$set": {**updated_prod, "scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "updated_at": now_iso}},
-                        upsert=True,
-                    )
-                    if stock_bucket in PRODUCT_BUCKETS:
-                        _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
+    elif module_name == "Purchases" and (target_prod_id or target_prod_title):
+        # Increase stock ONLY by the quantity actually received (0 for open Purchase Orders)
+        received_delta = float(raw_dump.get("receivedQuantity") if raw_dump.get("receivedQuantity") is not None else delta_qty)
+        if received_delta > 0:
+            for stock_bucket in ("Inventory", "Products", "RawMaterials", "Ingredients", "Consumables", "Feeds"):
+                s_list = records_map.get(stock_bucket, [])
+                for idx, prod in enumerate(s_list):
+                    p_id = str(prod.get("id") or "").strip()
+                    p_title = str(prod.get("title") or prod.get("name") or prod.get("feedName") or "").strip().lower()
+                    if (target_prod_id and p_id == target_prod_id) or (not target_prod_id and target_prod_title and p_title == target_prod_title):
+                        cur_stock = float(prod.get("quantity") if prod.get("quantity") is not None else (prod.get("currentStock") or prod.get("quantityKg") or 0))
+                        if raw_dump.get("remainingStockAfterPurchase") is not None and received_delta == delta_qty:
+                            new_stock = max(0.0, float(raw_dump["remainingStockAfterPurchase"]))
+                        else:
+                            new_stock = cur_stock + received_delta
+                        new_stock_val = int(new_stock) if new_stock.is_integer() else new_stock
+                        low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
+                        buy_cost = float(raw_dump.get("unitPriceRWF") or prod.get("purchasePriceRWF") or prod.get("unitCostRWF") or 0)
+                        sell_p = float(prod.get("sellingPriceRWF") or buy_cost)
+                        new_status = "Low Stock" if new_stock <= low_alert else "Active"
+                        updated_prod = {
+                            **prod,
+                            "quantity": new_stock_val,
+                            "currentStock": new_stock_val,
+                            "purchasePriceRWF": buy_cost or prod.get("purchasePriceRWF", 0),
+                            "unitCostRWF": buy_cost or prod.get("unitCostRWF", 0),
+                            "amountRWF": new_stock_val * sell_p,
+                            "status": new_status,
+                            "updatedAt": now_iso,
+                        }
+                        s_list[idx] = updated_prod
+                        records_map[stock_bucket] = s_list
+                        db.module_records.update_one(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "id": p_id},
+                            {"$set": {**updated_prod, "scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "updated_at": now_iso}},
+                            upsert=True,
+                        )
+                        if stock_bucket in PRODUCT_BUCKETS:
+                            _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
 
     elif module_name == "MixedSales":
         # Hybrid: deduct HybridItems stock for tracked physical items in line items or direct productId
@@ -661,6 +750,134 @@ def create_module_record(
             {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
         )
 
+    elif module_name == "Purchases" and amount > 0:
+        pf = _extract_purchase_financials(record_doc)
+        paid_now = pf["paid"]
+        rem_owed = pf["remaining"]
+        side_money_added = float(raw_dump.get("sideMoneyAddedRWF") or 0)
+
+        # If owner added external/side money to afford this purchase, record capital injection inflow
+        if side_money_added > 0:
+            spendable += side_money_added
+            today_in += side_money_added
+            side_tx = {
+                "id": f"TX-SIDE-{rec_id}",
+                "recordId": rec_id,
+                "sourceModule": "Purchases",
+                "isCapitalInjection": True,
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "type": "INFLOW",
+                "category": "Owner Side Money / Capital Top-Up",
+                "title": str(raw_dump.get("sideMoneySource") or f"Side Money Top-Up for {title}"),
+                "amountRWF": side_money_added,
+                "account": record_doc.get("paymentMethod", "Cash / MoMo"),
+                "paymentMethod": record_doc.get("paymentMethod", "Cash / MoMo"),
+                "status": "Completed",
+                "timestamp": now_iso,
+                "editHistory": [],
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            db.transactions.update_one(
+                {"id": side_tx["id"]}, {"$set": side_tx}, upsert=True
+            )
+
+        # Deduct ONLY actual cash paid now from spendable
+        if paid_now > 0:
+            spendable = max(0.0, spendable - paid_now)
+            today_costs += paid_now
+
+        # Add ONLY remaining unpaid balance on received goods to supplier payables
+        if rem_owed > 0 and not pf["isOpenPo"]:
+            i_owe += rem_owed
+            # Sync supplier balance in Suppliers bucket if supplierName is present
+            sup_name = str(raw_dump.get("supplierName") or raw_dump.get("supplier") or "").strip()
+            if sup_name:
+                sup_list = records_map.get("Suppliers", [])
+                matched_sup_idx = next(
+                    (
+                        i
+                        for i, s in enumerate(sup_list)
+                        if isinstance(s, dict)
+                        and str(s.get("name") or s.get("supplierName") or s.get("title") or "").strip().lower()
+                        == sup_name.lower()
+                    ),
+                    None,
+                )
+                if matched_sup_idx is not None:
+                    cur_owed = float(
+                        sup_list[matched_sup_idx].get("balanceOwedRWF")
+                        if sup_list[matched_sup_idx].get("balanceOwedRWF") is not None
+                        else (sup_list[matched_sup_idx].get("amountRWF") or 0)
+                    )
+                    new_sup_owed = cur_owed + rem_owed
+                    sup_list[matched_sup_idx] = {
+                        **sup_list[matched_sup_idx],
+                        "balanceOwedRWF": new_sup_owed,
+                        "amountRWF": new_sup_owed,
+                        "status": f"Owed {new_sup_owed:,.0f} RWF",
+                        "updatedAt": now_iso,
+                    }
+                    sup_id = str(sup_list[matched_sup_idx].get("id"))
+                    db.module_records.update_one(
+                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "id": sup_id},
+                        {"$set": {**sup_list[matched_sup_idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "updated_at": now_iso}},
+                        upsert=True,
+                    )
+                else:
+                    new_sup = {
+                        "id": f"SUP-{now_ms}",
+                        "title": sup_name,
+                        "name": sup_name,
+                        "supplierName": sup_name,
+                        "phone": raw_dump.get("supplierPhone") or "",
+                        "location": raw_dump.get("supplierLocation") or "",
+                        "balanceOwedRWF": rem_owed,
+                        "amountRWF": rem_owed,
+                        "status": f"Owed {rem_owed:,.0f} RWF",
+                        "createdAt": now_iso,
+                        "updatedAt": now_iso,
+                    }
+                    sup_list.insert(0, new_sup)
+                    db.module_records.update_one(
+                        {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "id": new_sup["id"]},
+                        {"$set": {**new_sup, "scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "updated_at": now_iso}},
+                        upsert=True,
+                    )
+                records_map["Suppliers"] = sup_list
+
+        # Increase stock value ONLY when inventory is actually received
+        if pf["receivedQty"] > 0 and pf["orderedQty"] > 0:
+            received_ratio = min(1.0, pf["receivedQty"] / pf["orderedQty"])
+            stock_val += round(pf["total"] * received_ratio)
+
+        # Record cash outflow transaction ONLY for actual paid amount (never deduct unpaid credit from cash)
+        if paid_now > 0:
+            created_tx = {
+                "id": f"TX-{rec_id}",
+                "recordId": rec_id,
+                "sourceModule": "Purchases",
+                "scopeKey": scope_key,
+                "architectureId": arch_id,
+                "type": "OUTFLOW",
+                "category": "Purchases",
+                "title": title,
+                "amountRWF": paid_now,
+                "totalInvoiceAmountRWF": pf["total"],
+                "remainingBalanceRWF": rem_owed,
+                "account": record_doc.get("paymentMethod", "Cash / MoMo"),
+                "paymentMethod": record_doc.get("paymentMethod", "Cash / MoMo"),
+                "status": status,
+                "timestamp": now_iso,
+                "editHistory": [],
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            db.transactions.update_one(
+                {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
+            )
+
     elif module_name in outflow_buckets and amount > 0:
         is_credit = status.lower() in {"credit", "unpaid", "owed"}
         if is_credit:
@@ -670,11 +887,13 @@ def create_module_record(
             today_costs += amount
         net_profit -= amount
         today_profit -= amount
-        if module_name in {"Purchases", "Feeds"}:
+        if module_name == "Feeds":
             stock_val += amount
 
         created_tx = {
             "id": f"TX-{rec_id}",
+            "recordId": rec_id,
+            "sourceModule": module_name,
             "scopeKey": scope_key,
             "architectureId": arch_id,
             "type": "OUTFLOW",
@@ -762,8 +981,10 @@ def update_module_record(
 
     patch_fields = validated_data.model_dump(exclude_none=True)
     updated_item = None
+    previous_item = None
     for idx, item in enumerate(bucket_list):
         if str(item.get("id")) == str(record_id):
+            previous_item = dict(item)
             bucket_list[idx] = {**item, **patch_fields, "updatedAt": now_iso}
             updated_item = bucket_list[idx]
             break
@@ -791,10 +1012,144 @@ def update_module_record(
         }
         bucket_list.insert(0, updated_item)
 
+    ws_extra_updates: dict = {}
+
+    # Transaction Integrity for Purchases PATCH (partial/full delivery receipt & partial/full payment settlement)
+    if module_name == "Purchases" and previous_item is not None and updated_item is not None:
+        prev_pf = _extract_purchase_financials(previous_item)
+        new_pf = _extract_purchase_financials(updated_item)
+
+        # 1. Check if additional goods were received on a Purchase Order
+        newly_received_qty = max(0.0, new_pf["receivedQty"] - prev_pf["receivedQty"])
+        if newly_received_qty > 0:
+            t_pid = str(updated_item.get("productId") or updated_item.get("materialId") or "").strip()
+            t_title = str(updated_item.get("productTitle") or updated_item.get("materialName") or "").strip().lower()
+            for stock_bucket in ("Inventory", "Products", "RawMaterials", "Ingredients", "Consumables", "Feeds"):
+                s_list = records_map.get(stock_bucket, [])
+                bucket_modified = False
+                for s_idx, prod in enumerate(s_list):
+                    p_id = str(prod.get("id") or "").strip()
+                    p_title = str(prod.get("title") or prod.get("name") or prod.get("feedName") or "").strip().lower()
+                    if (t_pid and p_id == t_pid) or (not t_pid and t_title and p_title == t_title):
+                        cur_stock = float(
+                            prod.get("quantity")
+                            if prod.get("quantity") is not None
+                            else (prod.get("currentStock") or prod.get("quantityKg") or 0)
+                        )
+                        new_stock = cur_stock + newly_received_qty
+                        new_stock_val = int(new_stock) if new_stock.is_integer() else new_stock
+                        low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
+                        buy_cost = float(
+                            updated_item.get("unitPriceRWF")
+                            or prod.get("purchasePriceRWF")
+                            or prod.get("unitCostRWF")
+                            or 0
+                        )
+                        sell_p = float(prod.get("sellingPriceRWF") or buy_cost)
+                        updated_prod = {
+                            **prod,
+                            "quantity": new_stock_val,
+                            "currentStock": new_stock_val,
+                            "purchasePriceRWF": buy_cost or prod.get("purchasePriceRWF", 0),
+                            "unitCostRWF": buy_cost or prod.get("unitCostRWF", 0),
+                            "amountRWF": new_stock_val * sell_p,
+                            "status": "Low Stock" if new_stock <= low_alert else "Active",
+                            "updatedAt": now_iso,
+                        }
+                        s_list[s_idx] = updated_prod
+                        bucket_modified = True
+                        db.module_records.update_one(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "id": p_id},
+                            {"$set": {**updated_prod, "scopeKey": scope_key, "architectureId": arch_id, "bucket": stock_bucket, "updated_at": now_iso}},
+                            upsert=True,
+                        )
+                        if stock_bucket in PRODUCT_BUCKETS:
+                            _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
+                if bucket_modified:
+                    records_map[stock_bucket] = s_list
+                    ws_extra_updates[f"records.{stock_bucket}"] = s_list
+
+        # 2. Check if additional supplier payment was made (without double-deducting prior payment)
+        newly_paid_rwf = max(0.0, new_pf["paid"] - prev_pf["paid"])
+        if newly_paid_rwf > 0:
+            ws_extra_updates["spendableRWF"] = max(0.0, float(ws.get("spendableRWF", 0)) - newly_paid_rwf)
+            ws_extra_updates["iOweSuppliersRWF"] = max(0.0, float(ws.get("iOweSuppliersRWF", 0)) - newly_paid_rwf)
+            # Update primary transaction record TX-<record_id> so total paid matches new_pf["paid"]
+            db.transactions.update_one(
+                {"id": f"TX-{record_id}"},
+                {
+                    "$set": {
+                        "id": f"TX-{record_id}",
+                        "recordId": str(record_id),
+                        "sourceModule": "Purchases",
+                        "scopeKey": scope_key,
+                        "architectureId": arch_id,
+                        "type": "OUTFLOW",
+                        "category": "Purchases",
+                        "title": updated_item.get("title") or "Purchase Settlement",
+                        "amountRWF": new_pf["paid"],
+                        "totalInvoiceAmountRWF": new_pf["total"],
+                        "remainingBalanceRWF": new_pf["remaining"],
+                        "paymentMethod": updated_item.get("paymentMethod", "Cash / MoMo"),
+                        "status": updated_item.get("status", "Completed"),
+                        "updated_at": now_iso,
+                    },
+                    "$setOnInsert": {"timestamp": now_iso, "created_at": now_iso, "editHistory": []},
+                },
+                upsert=True,
+            )
+            # Also decrement supplier debt in Suppliers bucket
+            sup_name = str(updated_item.get("supplierName") or updated_item.get("supplier") or "").strip()
+            if sup_name:
+                sup_list = records_map.get("Suppliers", [])
+                for s_idx, s in enumerate(sup_list):
+                    if isinstance(s, dict) and str(s.get("name") or s.get("supplierName") or s.get("title") or "").strip().lower() == sup_name.lower():
+                        cur_owed = float(s.get("balanceOwedRWF") if s.get("balanceOwedRWF") is not None else (s.get("amountRWF") or 0))
+                        rem_sup = max(0.0, cur_owed - newly_paid_rwf)
+                        sup_list[s_idx] = {
+                            **s,
+                            "balanceOwedRWF": rem_sup,
+                            "amountRWF": rem_sup,
+                            "status": "Paid / Active" if rem_sup <= 0 else f"Owed {rem_sup:,.0f} RWF",
+                            "updatedAt": now_iso,
+                        }
+                        db.module_records.update_one(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "id": str(s.get("id"))},
+                            {"$set": {**sup_list[s_idx], "scopeKey": scope_key, "architectureId": arch_id, "bucket": "Suppliers", "updated_at": now_iso}},
+                            upsert=True,
+                        )
+                        records_map["Suppliers"] = sup_list
+                        ws_extra_updates["records.Suppliers"] = sup_list
+                        break
+
+        # 3. Append audit trail entry
+        audit_list = list(updated_item.get("auditTrail") or []) if isinstance(updated_item.get("auditTrail"), list) else []
+        audit_list.append(
+            {
+                "timestamp": now_iso,
+                "action": "PURCHASE_UPDATED",
+                "newlyReceivedQty": newly_received_qty,
+                "newlyPaidRWF": newly_paid_rwf,
+                "deliveryStatus": new_pf["deliveryStatus"],
+                "paidAmountRWF": new_pf["paid"],
+                "remainingAmountRWF": new_pf["remaining"],
+            }
+        )
+        updated_item["auditTrail"] = audit_list
+        updated_item["paidAmountRWF"] = new_pf["paid"]
+        updated_item["remainingAmountRWF"] = new_pf["remaining"]
+        updated_item["deliveryStatus"] = new_pf["deliveryStatus"]
+        updated_item["orderedQuantity"] = new_pf["orderedQty"]
+        updated_item["receivedQuantity"] = new_pf["receivedQty"]
+        for idx, item in enumerate(bucket_list):
+            if str(item.get("id")) == str(record_id):
+                bucket_list[idx] = updated_item
+                break
+
     records_map[module_name] = bucket_list
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
-        {"$set": {f"records.{module_name}": bucket_list, "updated_at": now_iso}},
+        {"$set": {f"records.{module_name}": bucket_list, **ws_extra_updates, "updated_at": now_iso}},
         upsert=True,
     )
     db.module_records.update_one(

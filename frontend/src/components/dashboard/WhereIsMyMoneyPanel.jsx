@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, amountToWords } from '../../utils/currencyWords'
+import { calculateFinancialIntelligence } from '../../utils/financialIntelligenceEngine'
 import MoneyInput from '../common/MoneyInput'
 import {
   Wallet,
@@ -41,33 +42,22 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
     )
   }, [transactions, activeArchId])
 
-  // Dynamically calculate isolated balances per business architecture
-  const dynamicBalances = useMemo(() => {
-    let cashIn = 0, cashOut = 0
-    let momoIn = 0, momoOut = 0
-    let bankIn = 0, bankOut = 0
-
-    archTransactions.forEach((tx) => {
-      const amt = Number(tx.amountRWF) || 0
-      const acc = String(tx.account || '').toLowerCase()
-      if (acc.includes('momo') || acc.includes('mtn') || acc.includes('airtel')) {
-        if (tx.type === 'in') momoIn += amt
-        else momoOut += amt
-      } else if (acc.includes('bank') || acc.includes('bk') || acc.includes('equity')) {
-        if (tx.type === 'in') bankIn += amt
-        else bankOut += amt
-      } else {
-        if (tx.type === 'in') cashIn += amt
-        else cashOut += amt
-      }
+  // Dynamically calculate isolated balances per business architecture using centralized Financial Intelligence
+  const finIntel = useMemo(() => {
+    return calculateFinancialIntelligence({
+      workspace,
+      transactions: archTransactions,
+      archId: activeArchId
     })
+  }, [workspace, archTransactions, activeArchId])
 
-    const cashCounted = Math.max(0, cashIn - cashOut)
-    const momoTotal = Math.max(0, momoIn - momoOut)
-    const bankTotal = Math.max(0, bankIn - bankOut)
-    const stockAndMaterials = Number(metrics.stockValueRWF) || 0
-    const owedToMe = Number(metrics.owedToMeRWF) || 0
-    const iOwe = Number(metrics.iOweSuppliersRWF) || 0
+  const dynamicBalances = useMemo(() => {
+    const cashCounted = finIntel.cashInHandRWF
+    const momoTotal = finIntel.mobileMoneyBalanceRWF
+    const bankTotal = finIntel.bankBalanceRWF
+    const stockAndMaterials = finIntel.stockValueRWF || Number(metrics.stockValueRWF) || 0
+    const owedToMe = finIntel.outstandingCustomerDebtsRWF
+    const iOwe = finIntel.outstandingSupplierDebtsRWF
 
     return {
       cashCounted,
@@ -86,7 +76,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
       personalTaken: 0,
       personalLimit: 200000
     }
-  }, [archTransactions, metrics])
+  }, [finIntel, metrics])
 
   const totalCash = dynamicBalances.cashCounted
   const totalMomo = dynamicBalances.totalMomo
@@ -259,6 +249,73 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
               Shown next to your real money—not added in—because stock value is sleeping on the shelf and is not spendable until sold.
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Centralized Financial & Purchasing Awareness Strip (Section 6 Integration) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="p-4 rounded-2xl bg-[#071544]/85 border border-[#218DFF]/35 space-y-1">
+          <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF] block">
+            Total Sales vs Received
+          </span>
+          <div className="font-orbitron text-base sm:text-lg font-extrabold text-white">
+            {formatRWF(finIntel.totalSalesRevenueRWF, hideFinancials)}
+          </div>
+          <span className="text-[11px] text-emerald-300 block">
+            Received: {formatRWF(finIntel.actualPaymentsReceivedRWF, hideFinancials)}
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#071544]/85 border border-[#218DFF]/35 space-y-1">
+          <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF] block">
+            Gross Profit &amp; COGS
+          </span>
+          <div className="font-orbitron text-base sm:text-lg font-extrabold text-emerald-400">
+            {formatRWF(finIntel.grossProfitRWF, hideFinancials)}
+          </div>
+          <span className="text-[11px] text-slate-300 block">
+            COGS: {formatRWF(finIntel.costOfGoodsSoldRWF, hideFinancials)}
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#071544]/85 border border-[#218DFF]/35 space-y-1">
+          <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF] block">
+            Net Profit &amp; Expenses
+          </span>
+          <div
+            className={`font-orbitron text-base sm:text-lg font-extrabold ${
+              finIntel.netProfitRWF >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {formatRWF(finIntel.netProfitRWF, hideFinancials)}
+          </div>
+          <span className="text-[11px] text-slate-300 block">
+            OpEx: {formatRWF(finIntel.operatingExpensesRWF, hideFinancials)}
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[#071544]/85 border border-[#218DFF]/35 space-y-1">
+          <span className="text-[10px] font-orbitron uppercase text-amber-300 block">
+            PO Commitments &amp; Reserves
+          </span>
+          <div className="font-orbitron text-base sm:text-lg font-extrabold text-amber-300">
+            {formatRWF(finIntel.purchaseCommitmentsRWF, hideFinancials)}
+          </div>
+          <span className="text-[11px] text-slate-300 block">
+            Ops Reserve: {formatRWF(finIntel.reservedOperationalFundsRWF, hideFinancials)}
+          </span>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0A2786] to-[#1045CA] border border-[#9EDCFF]/50 space-y-1 col-span-2 sm:col-span-1">
+          <span className="text-[10px] font-orbitron uppercase text-[#9EDCFF] font-bold block">
+            Available Purchasing Budget
+          </span>
+          <div className="font-orbitron text-base sm:text-lg font-black text-white">
+            {formatRWF(finIntel.availablePurchasingBudgetRWF, hideFinancials)}
+          </div>
+          <span className="text-[11px] text-[#9EDCFF] block">
+            Cash: {formatRWF(finIntel.availableBusinessCashRWF, hideFinancials)}
+          </span>
         </div>
       </div>
 

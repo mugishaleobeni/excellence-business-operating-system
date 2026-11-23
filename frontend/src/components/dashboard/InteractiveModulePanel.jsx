@@ -2685,18 +2685,56 @@ export default function InteractiveModulePanel({
         activeArchId={activeArchId}
         currentArch={currentArch}
         activePage={activePage}
+        editRow={editRow}
         onSavePurchase={(purchasePayload, selectedProd, remaining) => {
+          const isEdit = Boolean(editRow && editRow.id)
+          const recId = purchasePayload.id || `PUR-${Date.now()}`
+          const finalPayload = { ...purchasePayload, id: recId }
+
+          // 1. If owner added side money / external capital to fund this purchase, record capital inflow
+          if (Number(finalPayload.sideMoneyAddedRWF) > 0 && !isEdit) {
+            addTransaction({
+              id: `TX-SIDE-${recId}`,
+              recordId: recId,
+              sourceModule: "Purchases",
+              isCapitalInjection: true,
+              architectureId: activeArchId,
+              title: finalPayload.sideMoneySource || `Owner Side Money Top-Up for ${finalPayload.productTitle || finalPayload.title}`,
+              amountRWF: Number(finalPayload.sideMoneyAddedRWF),
+              amount: Number(finalPayload.sideMoneyAddedRWF),
+              type: "in",
+              account: finalPayload.paymentMethod === "Supplier Credit Account" ? "Cash in Hand (Main Till)" : (finalPayload.paymentMethod || "MTN MoMo Business"),
+              channel: finalPayload.paymentMethod,
+              category: "Owner Side Money / Capital Top-Up",
+              subPage: activePage || "Purchases"
+            })
+          }
+
+          // 2. Calculate actual newly received stock quantity (0 if Purchase Order / Ordered)
+          const prevReceived = isEdit ? (Number(editRow.receivedQuantity ?? (editRow.deliveryStatus === 'Ordered' ? 0 : editRow.quantity)) || 0) : 0
+          const nextReceived = finalPayload.deliveryStatus === 'Ordered'
+            ? 0
+            : (Number(finalPayload.receivedQuantity ?? finalPayload.quantity) || 0)
+          const receivedDelta = Math.max(0, nextReceived - prevReceived)
+
           const curStock = selectedProd ? (Number(selectedProd.quantity ?? selectedProd.currentStock) || 0) : 0
-          const newStock = selectedProd ? curStock + (Number(purchasePayload.quantity) || 0) : 0
-          addDemoRecord(activeArchId, "Purchases", selectedProd ? { ...purchasePayload, remainingStockAfterPurchase: newStock } : purchasePayload)
-          if (selectedProd) {
+          const newStock = selectedProd ? curStock + receivedDelta : 0
+
+          if (isEdit) {
+            updateDemoRecord(activeArchId, "Purchases", recId, selectedProd ? { ...finalPayload, remainingStockAfterPurchase: newStock } : finalPayload)
+          } else {
+            addDemoRecord(activeArchId, "Purchases", selectedProd ? { ...finalPayload, remainingStockAfterPurchase: newStock } : finalPayload)
+          }
+
+          // 3. Only increment product inventory when goods are actually received (receivedDelta > 0)
+          if (selectedProd && receivedDelta > 0) {
             const lowThreshold = Number(selectedProd.lowStockAlert) || 5
             const purchaseUpdates = {
               quantity: newStock,
               currentStock: newStock,
-              purchasePriceRWF: purchasePayload.unitPriceRWF,
-              unitCostRWF: purchasePayload.unitPriceRWF,
-              amountRWF: newStock * (Number(selectedProd.sellingPriceRWF) || purchasePayload.unitPriceRWF),
+              purchasePriceRWF: finalPayload.unitPriceRWF,
+              unitCostRWF: finalPayload.unitPriceRWF,
+              amountRWF: newStock * (Number(selectedProd.sellingPriceRWF) || finalPayload.unitPriceRWF),
               status: newStock <= 0 ? "Out of Stock" : (newStock <= lowThreshold ? "Low Stock" : "Active")
             }
             updateDemoRecord(activeArchId, "Inventory", selectedProd.id, purchaseUpdates)
@@ -2705,12 +2743,15 @@ export default function InteractiveModulePanel({
               updateDemoRecord(activeArchId, "RawMaterials", selectedProd.id, purchaseUpdates)
             }
           }
+
           setModalOpen(false)
           setEditRow(null)
           addToast && addToast({
-            type: remaining > 0 ? "warning" : "success",
-            title: "Purchase Recorded",
-            message: `Purchase recorded: ${purchasePayload.title}.`
+            type: finalPayload.deliveryStatus === 'Ordered' ? "info" : (remaining > 0 ? "warning" : "success"),
+            title: finalPayload.deliveryStatus === 'Ordered' ? "Purchase Order Created" : (isEdit ? "Purchase Updated" : "Purchase Recorded"),
+            message: finalPayload.deliveryStatus === 'Ordered'
+              ? `Open PO recorded for ${finalPayload.title}. Stock will increase upon delivery receipt.`
+              : `Purchase recorded: ${finalPayload.title}.`
           })
         }}
       />
@@ -2816,6 +2857,10 @@ export default function InteractiveModulePanel({
           })
 
           addTransaction({
+            id: `TX-SETTLE-${purchaseItem.id}-${Date.now()}`,
+            recordId: purchaseItem.id,
+            sourceModule: "Purchases",
+            isSettlement: true,
             architectureId: activeArchId,
             title: `Supplier Payment: ${purchaseItem.supplierName || purchaseItem.supplier || 'Vendor'}`,
             amountRWF: actualPayment,

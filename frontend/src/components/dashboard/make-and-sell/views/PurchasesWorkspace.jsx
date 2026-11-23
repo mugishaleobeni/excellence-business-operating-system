@@ -24,6 +24,8 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { formatRWF } from '../../../../utils/currencyWords'
+import { assessPurchaseDecision } from '../../../../utils/financialIntelligenceEngine'
+import { useExbos } from '../../../../context/ExbosContext'
 import ExportDrawer from '../ExportDrawer'
 import CustomSelect from '../../../common/CustomSelect'
 
@@ -55,6 +57,9 @@ export default function PurchasesWorkspace({
   const [returnReason, setReturnReason] = useState('Damaged packaging / quality issue')
   const [returnOutcome, setReturnOutcome] = useState('Credit Note')
 
+  const { demoWorkspaces = {}, transactions = [], addTransaction } = useExbos()
+  const activeWorkspace = demoWorkspaces?.['make-and-sell'] || {}
+
   // New Purchase Form State (lists ONLY Raw Materials)
   const [purchSupplierName, setPurchSupplierName] = useState(suppliers[0]?.name || 'Bakhresa Grain Milling')
   const [purchMaterialId, setPurchMaterialId] = useState(rawMaterials[0]?.id || '')
@@ -63,9 +68,12 @@ export default function PurchasesWorkspace({
   const [purchExpiryDate, setPurchExpiryDate] = useState('')
   const [purchAmountPaid, setPurchAmountPaid] = useState('')
   const [purchPaymentMethod, setPurchPaymentMethod] = useState('MTN MoMo Business')
+  const [purchDeliveryStatus, setPurchDeliveryStatus] = useState('Received')
   const [purchDueDate, setPurchDueDate] = useState('')
   const [purchInvoicePhoto, setPurchInvoicePhoto] = useState(null)
   const [showMoreOptions, setShowMoreOptions] = useState(false)
+  const [sideMoneyAdded, setSideMoneyAdded] = useState(0)
+  const [showSideMoneyInput, setShowSideMoneyInput] = useState(false)
 
   // Sync unit price when raw material selection changes
   const handleMaterialChange = (matId) => {
@@ -92,6 +100,51 @@ export default function PurchasesWorkspace({
     const price = Number(purchUnitPrice) || 0
     return qty * price
   }, [purchQuantity, purchUnitPrice])
+
+  // Live Financial & Stock Assessment for Make & Sell Raw Materials
+  const liveAssessment = useMemo(() => {
+    const paidVal =
+      purchPaymentMethod === 'Supplier Credit'
+        ? Number(purchAmountPaid) || 0
+        : totalPurchaseCost
+    return assessPurchaseDecision({
+      draftPurchase: {
+        productId: selectedMaterial?.id,
+        productTitle: selectedMaterial?.name || selectedMaterial?.title || '',
+        quantity: Number(purchQuantity) || 0,
+        unit: selectedMaterial?.unit || 'kg',
+        unitPriceRWF: Number(purchUnitPrice) || 0,
+        paymentMethod: purchPaymentMethod,
+        paymentStatus:
+          paidVal <= 0
+            ? 'Unpaid'
+            : paidVal < totalPurchaseCost
+            ? 'Part-paid'
+            : 'Paid in Full',
+        paidAmountRWF: paidVal,
+        deliveryStatus: purchDeliveryStatus,
+        supplierName: purchSupplierName,
+        sideMoneyAddedRWF: Number(sideMoneyAdded) || 0
+      },
+      workspace: activeWorkspace,
+      transactions,
+      archId: 'make-and-sell',
+      catalogProducts: rawMaterials
+    })
+  }, [
+    selectedMaterial,
+    purchQuantity,
+    purchUnitPrice,
+    purchPaymentMethod,
+    purchAmountPaid,
+    totalPurchaseCost,
+    purchDeliveryStatus,
+    purchSupplierName,
+    sideMoneyAdded,
+    activeWorkspace,
+    transactions,
+    rawMaterials
+  ])
 
   // 3-Number Summary Strip
   const summary = useMemo(() => {
@@ -149,13 +202,16 @@ export default function PurchasesWorkspace({
     setPurchExpiryDate(new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10))
     setPurchAmountPaid(defMat ? (defMat.purchasePriceRWF || 1200) * 50 : 60000)
     setPurchPaymentMethod('MTN MoMo Business')
+    setPurchDeliveryStatus('Received')
     setPurchDueDate('')
     setPurchInvoicePhoto(null)
     setShowMoreOptions(false)
+    setSideMoneyAdded(0)
+    setShowSideMoneyInput(false)
     setNewPurchaseDrawerOpen(true)
   }
 
-  // Submit Purchase (Increases Raw Materials stock & updates Amounts Owed)
+  // Submit Purchase (Increases Raw Materials stock ONLY when received & updates Amounts Owed)
   const handleSavePurchase = (keepOpen = false) => {
     if (!selectedMaterial) {
       addToast?.({ type: 'warning', title: 'No Material Selected', message: 'Please select a raw material before saving.' })
@@ -165,13 +221,34 @@ export default function PurchasesWorkspace({
     const qty = Number(purchQuantity) || 1
     const price = Number(purchUnitPrice) || 0
     const total = totalPurchaseCost
-    const paid = Number(purchAmountPaid) !== undefined ? Number(purchAmountPaid) : total
+    const paid =
+      purchPaymentMethod === 'Supplier Credit'
+        ? Math.min(total, Math.max(0, Number(purchAmountPaid) || 0))
+        : total
     const balance = Math.max(0, total - paid)
-    const status = balance === 0 ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid'
+    const isOrderedPo = purchDeliveryStatus === 'Ordered'
+    const status = isOrderedPo && paid === 0 ? 'PO Ordered' : balance === 0 ? 'Paid' : paid > 0 ? 'Partial' : 'Unpaid'
     const newLotCode = `LOT-${Math.floor(1000 + Math.random() * 9000)}`
+    const recId = `PURCH-${Date.now().toString().slice(-6)}`
 
-    // Increase Raw Materials stock
-    if (onUpdateRawMaterials) {
+    // If user added side money to afford this purchase, record capital top-up inflow
+    if (Number(sideMoneyAdded) > 0 && addTransaction) {
+      addTransaction({
+        id: `TX-SIDE-${recId}`,
+        recordId: recId,
+        sourceModule: 'Purchases',
+        isCapitalInjection: true,
+        architectureId: 'make-and-sell',
+        title: `Owner Side Money Top-Up for ${selectedMaterial.name}`,
+        amountRWF: Number(sideMoneyAdded),
+        type: 'in',
+        account: purchPaymentMethod === 'Supplier Credit' ? 'Cash' : purchPaymentMethod,
+        category: 'Owner Side Money / Capital Top-Up'
+      })
+    }
+
+    // Increase Raw Materials stock ONLY when goods are actually received (not on open PO)
+    if (!isOrderedPo && onUpdateRawMaterials) {
       const updated = rawMaterials.map((m) => {
         if (m.id === selectedMaterial.id) {
           return {
@@ -187,8 +264,8 @@ export default function PurchasesWorkspace({
       onUpdateRawMaterials(updated)
     }
 
-    // Update Supplier debt if unpaid
-    if (balance > 0 && onUpdateSuppliers) {
+    // Update Supplier debt if unpaid and received
+    if (balance > 0 && !isOrderedPo && onUpdateSuppliers) {
       const existingSup = suppliers.find((s) => s.name === purchSupplierName)
       if (existingSup) {
         onUpdateSuppliers(
@@ -212,18 +289,28 @@ export default function PurchasesWorkspace({
 
     // New Purchase Record
     const newPurchase = {
-      id: `PURCH-${Date.now().toString().slice(-6)}`,
+      id: recId,
       date: new Date().toISOString().slice(0, 10),
       supplier: purchSupplierName,
+      supplierName: purchSupplierName,
       materialId: selectedMaterial.id,
+      productId: selectedMaterial.id,
       materialName: selectedMaterial.name,
+      productTitle: selectedMaterial.name,
       lotCode: newLotCode,
       quantity: qty,
+      orderedQuantity: qty,
+      receivedQuantity: isOrderedPo ? 0 : qty,
+      deliveryStatus: purchDeliveryStatus,
       unit: selectedMaterial.unit || 'kg',
       unitPriceRWF: price,
+      amountRWF: total,
       totalAmountRWF: total,
+      paidAmountRWF: paid,
       amountPaidRWF: paid,
+      remainingAmountRWF: balance,
       balanceRWF: balance,
+      sideMoneyAddedRWF: Number(sideMoneyAdded) || 0,
       paymentMethod: purchPaymentMethod,
       dueDate: balance > 0 ? purchDueDate : null,
       status,
@@ -571,6 +658,19 @@ export default function PurchasesWorkspace({
                   </strong>
                 </div>
 
+                {/* 4b. Delivery Mode (Received vs Open Purchase Order) */}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Delivery / Receipt Mode</label>
+                  <select
+                    value={purchDeliveryStatus}
+                    onChange={(e) => setPurchDeliveryStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white text-xs focus:outline-none focus:border-[#218DFF]"
+                  >
+                    <option value="Received">Received Immediately (Add to Raw Stock Now)</option>
+                    <option value="Ordered">Purchase Order / In Transit (Add Stock on Delivery)</option>
+                  </select>
+                </div>
+
                 {/* 5. Payment Details */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -603,6 +703,122 @@ export default function PurchasesWorkspace({
                       className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white font-mono focus:outline-none focus:border-[#218DFF]"
                     />
                   </div>
+                </div>
+
+                {/* 6. Live Purchasing Intelligence & Affordability Card */}
+                <div
+                  className={`p-3.5 rounded-xl border space-y-2.5 ${
+                    liveAssessment.affordability.isAffordable
+                      ? 'bg-[#040C26]/90 border-[#218DFF]/40'
+                      : 'bg-rose-950/35 border-rose-500/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-orbitron text-[10px] font-bold uppercase tracking-wider text-[#9EDCFF]">
+                      Financial &amp; Stock Assessment
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        liveAssessment.affordability.isAffordable
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/25 text-rose-300'
+                      }`}
+                    >
+                      {liveAssessment.affordability.isAffordable
+                        ? 'Affordable'
+                        : `Shortfall: ${formatRWF(liveAssessment.affordability.purchaseShortfallRWF)}`}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] bg-black/25 p-2 rounded-lg">
+                    <div>
+                      <span className="text-slate-400 block">Purchasing Budget:</span>
+                      <strong className="font-mono text-white">
+                        {formatRWF(liveAssessment.affordability.effectivePurchasingBudgetRWF)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Available Cash:</span>
+                      <strong className="font-mono text-[#9EDCFF]">
+                        {formatRWF(liveAssessment.affordability.availableBusinessCashRWF)}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {liveAssessment.recommendations.map((rec, i) => (
+                    <div
+                      key={rec.code || i}
+                      className="text-[11px] text-slate-200 flex items-start gap-1.5 leading-snug"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-[#9EDCFF] shrink-0 mt-0.5" />
+                      <span>{rec.message}</span>
+                    </div>
+                  ))}
+
+                  {liveAssessment.alternatives.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {liveAssessment.alternatives.map((alt) => (
+                        <button
+                          key={alt.action}
+                          type="button"
+                          onClick={() => {
+                            if (alt.action === 'REDUCE_QUANTITY' && alt.suggestedQuantity > 0) {
+                              setPurchQuantity(alt.suggestedQuantity)
+                            } else if (alt.action === 'ADD_SIDE_MONEY') {
+                              setShowSideMoneyInput(true)
+                              setSideMoneyAdded(alt.suggestedSideMoneyRWF || liveAssessment.affordability.purchaseShortfallRWF)
+                            } else if (alt.action === 'PARTIAL_CREDIT') {
+                              setPurchPaymentMethod('Supplier Credit')
+                              setPurchAmountPaid(String(alt.suggestedPaidAmountRWF || 0))
+                            } else if (alt.action === 'SAVE_AS_PO') {
+                              setPurchDeliveryStatus('Ordered')
+                              setPurchPaymentMethod('Supplier Credit')
+                              setPurchAmountPaid('0')
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-[10px] font-bold text-white cursor-pointer"
+                        >
+                          {alt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {!showSideMoneyInput && liveAssessment.alternatives.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSideMoneyInput(true)}
+                      className="text-[10px] text-emerald-300 hover:underline font-semibold cursor-pointer block"
+                    >
+                      + I have other side money I can add to fund this purchase
+                    </button>
+                  )}
+
+                  {showSideMoneyInput && (
+                    <div className="p-2.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-emerald-300">
+                          Owner Side Money / Capital Top-Up (RWF)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSideMoneyInput(false)
+                            setSideMoneyAdded(0)
+                          }}
+                          className="text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        value={sideMoneyAdded}
+                        onChange={(e) => setSideMoneyAdded(Math.max(0, Number(e.target.value) || 0))}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-[#040C26] border border-emerald-400/50 text-white font-mono text-xs"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* More Options Toggle */}

@@ -9,6 +9,8 @@ import {
   Eye
 } from 'lucide-react'
 import { formatRWF } from '../../../utils/currencyWords'
+import { calculateFinancialIntelligence } from '../../../utils/financialIntelligenceEngine'
+import { useExbos } from '../../../context/ExbosContext'
 import ReportControls from './ReportControls'
 import ReportSummaryCards from './ReportSummaryCards'
 import ReportPerformanceChart from './ReportPerformanceChart'
@@ -116,13 +118,22 @@ export default function PurchasesReportView({
     }
   }, [filteredPurchases])
 
+  const { demoWorkspaces = {}, transactions = [] } = useExbos()
+  const finIntel = useMemo(() => {
+    return calculateFinancialIntelligence({
+      workspace: demoWorkspaces?.[activeArchId] || {},
+      transactions,
+      archId: activeArchId
+    })
+  }, [demoWorkspaces, transactions, activeArchId])
+
   // 4 Summary Cards for Section 1
   const summaryCards = [
     {
       id: 'total-purchases',
       title: 'Total Purchases',
       value: formatRWF(metrics.totalPurchases, hideFinancials),
-      subtitle: `${metrics.orderCount} purchase orders`,
+      subtitle: `${metrics.orderCount} purchase orders (${finIntel.openPurchaseOrdersCount} open POs)`,
       meaning: 'Total gross value of goods and supplies purchased in this period.',
       icon: ShoppingBag,
       colorScheme: 'sapphire',
@@ -133,30 +144,35 @@ export default function PurchasesReportView({
       title: 'Amount Paid',
       value: formatRWF(metrics.amountPaid, hideFinancials),
       subtitle: metrics.totalPurchases > 0 ? `${Math.round((metrics.amountPaid / metrics.totalPurchases) * 100)}% settled` : '100% settled',
-      meaning: 'Total cash and bank transfers disbursed to suppliers.',
+      meaning: 'Total cash, MoMo, and bank transfers disbursed to suppliers.',
       icon: CheckCircle2,
       colorScheme: 'emerald',
       isCurrency: true
     },
     {
       id: 'supplier-debt',
-      title: 'Supplier Debt',
+      title: 'Supplier Debt & PO Commitments',
       value: formatRWF(metrics.supplierDebt, hideFinancials),
-      subtitle: metrics.supplierDebt > 0 ? 'Pending payment obligations' : 'No supplier balances due',
-      meaning: 'Total unpaid balances owed to vendors and inventory suppliers.',
+      subtitle:
+        finIntel.purchaseCommitmentsRWF > 0
+          ? `Open PO Commitments: ${formatRWF(finIntel.purchaseCommitmentsRWF, hideFinancials)}`
+          : metrics.supplierDebt > 0
+          ? 'Pending payment obligations'
+          : 'No supplier balances due',
+      meaning: 'Total unpaid balances owed to vendors and open purchase order commitments.',
       icon: AlertTriangle,
       colorScheme: metrics.supplierDebt > 0 ? 'rose' : 'sapphire',
       isCurrency: true
     },
     {
-      id: 'purchase-orders',
-      title: 'Purchase Orders',
-      value: metrics.orderCount,
-      subtitle: 'Fulfilled orders',
-      meaning: 'Count of completed procurement receipts and purchase orders.',
+      id: 'purchasing-budget',
+      title: 'Available Purchasing Budget',
+      value: formatRWF(finIntel.availablePurchasingBudgetRWF, hideFinancials),
+      subtitle: `Liquid Cash: ${formatRWF(finIntel.availableBusinessCashRWF, hideFinancials)}`,
+      meaning: 'Safe spendable purchasing budget after operational reserves and existing purchase commitments.',
       icon: CreditCard,
       colorScheme: 'purple',
-      isCurrency: false
+      isCurrency: true
     }
   ]
 
