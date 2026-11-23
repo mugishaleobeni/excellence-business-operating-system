@@ -928,3 +928,4 @@ def assess_purchase_decision(
         "recommendations": recommendations,
         "alternatives": alternatives,
     }
+

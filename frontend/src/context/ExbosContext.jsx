@@ -901,8 +901,21 @@ export function ExbosProvider({ children }) {
     const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
     const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
 
+    // Reset in-memory state when the authenticated user scope changes so one user's records/transactions
+    // never bleed into another user's dashboard or get posted under the new user's scopeKey.
+    isHydratedRef.current = false
+    setWorkspaces(createCleanWorkspaces())
+    setTransactions([])
+    setSavedAnalyses([])
+    setExportHistory([])
+
     const fetchAndSyncCloud = (isInitial = false) => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      // Do not fetch tenant workspaces or transactions when no authenticated user scope is active
+      if (!effectiveScope) {
+        isHydratedRef.current = false
+        return
+      }
       // Avoid racing right in the middle of a local mutation (within 2.5s)
       if (!isInitial && Date.now() - lastMutationTsRef.current < 2500) return
 
@@ -916,15 +929,23 @@ export function ExbosProvider({ children }) {
           if (!isMounted || !serverData) return
           if (serverData.workspaces && typeof serverData.workspaces === 'object') {
             const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
-            setWorkspaces((prev) => mergeServerWorkspacesWithLocal(sanitized, prev))
+            setWorkspaces((prev) =>
+              isInitial ? sanitized : mergeServerWorkspacesWithLocal(sanitized, prev)
+            )
           }
           if (Array.isArray(serverData.transactions)) {
-            const serverTxs = sanitizeUserTransactions(serverData.transactions)
+            const serverTxs = sanitizeUserTransactions(
+              serverData.transactions.filter(
+                (t) => !t?.scopeKey || String(t.scopeKey).toLowerCase() === effectiveScope
+              )
+            )
             setTransactions((prev) => {
+              if (isInitial) return serverTxs
               const seen = new Set()
               const out = []
               for (const tx of [...prev, ...serverTxs]) {
                 if (!tx || !tx.id) continue
+                if (tx.scopeKey && String(tx.scopeKey).toLowerCase() !== effectiveScope) continue
                 const tid = String(tx.id)
                 if (seen.has(tid) || recentlyDeletedIdsRef.current.has(tid)) continue
                 seen.add(tid)
@@ -2096,7 +2117,10 @@ export function ExbosProvider({ children }) {
     if (backendWorkspaces && typeof backendWorkspaces === 'object') {
       isHydratedRef.current = true
       setWorkspaces(sanitizeUserWorkspaces(backendWorkspaces))
+    } else {
+      setWorkspaces(createCleanWorkspaces())
     }
+    setTransactions([])
 
     setUser(backendUser)
     return backendUser
@@ -2178,7 +2202,12 @@ export function ExbosProvider({ children }) {
     if (createdWorkspaces && typeof createdWorkspaces === 'object') {
       isHydratedRef.current = true
       setWorkspaces(sanitizeUserWorkspaces(createdWorkspaces))
+    } else {
+      setWorkspaces(createCleanWorkspaces())
     }
+    setTransactions([])
+    setSavedAnalyses([])
+    setExportHistory([])
 
     setUser(createdUser)
     if (payload.language) {
@@ -2188,12 +2217,22 @@ export function ExbosProvider({ children }) {
   }
 
   const logout = () => {
+    isHydratedRef.current = false
     setUser(null)
+    setWorkspaces(createCleanWorkspaces())
+    setTransactions([])
+    setSavedAnalyses([])
+    setExportHistory([])
+    setBranches([])
+    setActiveBranchId('main')
     try {
       localStorage.removeItem('exbos_access_token')
       localStorage.removeItem('exbos_user')
       localStorage.removeItem('exbos_workspaces_v2')
+      localStorage.removeItem('exbos_transactions')
+      localStorage.removeItem('exbos_saved_analyses')
       localStorage.removeItem('exbos_active_arch')
+      localStorage.removeItem('exbos_active_branch')
     } catch {}
   }
 

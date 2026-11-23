@@ -51,8 +51,8 @@ export default function AnimalProfileModal({
         {/* Header Hero */}
         <div className="p-6 bg-gradient-to-r from-white/10 via-white/5 to-transparent border-b border-white/10 flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-[#218DFF]/25 border border-[#218DFF]/50 flex items-center justify-center text-3xl shadow-lg shrink-0">
-              {categoryInfo.icon || '🐾'}
+            <div className="w-16 h-16 rounded-2xl bg-[#218DFF]/25 border border-[#218DFF]/50 flex items-center justify-center text-lg font-orbitron font-bold text-[#9EDCFF] shadow-lg shrink-0">
+              {categoryInfo.icon || 'LV'}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">

@@ -503,7 +503,7 @@ export default function LoginPage({ isForgotPassword = false }) {
                             onClick={() => handleCopyOtp(twoFactorCode)}
                             className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
                           >
-                            {copiedCodeBadge ? '✓ Code Copied' : `📋 Copy Code (${twoFactorCode})`}
+                            {copiedCodeBadge ? 'Code Copied' : `Copy Code (${twoFactorCode})`}
                           </button>
                         </div>
                       )}
@@ -601,7 +601,7 @@ export default function LoginPage({ isForgotPassword = false }) {
                             onClick={() => handleCopyOtp(resetCode)}
                             className="px-2.5 py-0.5 rounded-lg bg-white/10 hover:bg-white/20 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
                           >
-                            {copiedCodeBadge ? '✓ Copied' : `📋 Copy (${resetCode})`}
+                            {copiedCodeBadge ? 'Copied' : `Copy (${resetCode})`}
                           </button>
                         )}
                       </div>

@@ -1510,7 +1510,7 @@ export default function SuperAdminPage() {
                         </div>
                         {req.paymentMessageCopy && (
                           <div className="mt-1 p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200 font-mono whitespace-pre-wrap">
-                            📩 SMS Copy: {req.paymentMessageCopy}
+                            SMS Copy: {req.paymentMessageCopy}
                           </div>
                         )}
                         {req.paymentScreenshot && (
@@ -1614,7 +1614,7 @@ export default function SuperAdminPage() {
                       )}
                       {biz.paymentMessageCopy && (
                         <div className="p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200 font-mono whitespace-pre-wrap">
-                          📩 Payment Message Copy: {biz.paymentMessageCopy}
+                          Payment Message Copy: {biz.paymentMessageCopy}
                         </div>
                       )}
                       {biz.auditNote && (

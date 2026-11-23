@@ -884,7 +884,7 @@ export default function RegisterPage() {
                         onClick={() => handleCopyCode(form.verificationCode)}
                         className="px-3 py-1 rounded-lg bg-emerald-400/20 hover:bg-emerald-400/30 border border-emerald-300/40 text-emerald-100 text-[11px] font-bold cursor-pointer"
                       >
-                        {codeCopied ? '✓ Code Copied' : `📋 Copy Code (${form.verificationCode})`}
+                        {codeCopied ? 'Code Copied' : `Copy Code (${form.verificationCode})`}
                       </button>
                     )}
                   </div>
@@ -1261,13 +1261,13 @@ export default function RegisterPage() {
                         }}
                         className="px-3.5 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold cursor-pointer transition"
                       >
-                        📋 Copy Payment Number (0781 963 981)
+                        Copy Payment Number (0781 963 981)
                       </button>
                       <a
                         href="tel:*182*1*1*0781963981%23"
                         className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold no-underline"
                       >
-                        📞 Dial MoMo on Phone
+                        Dial MoMo on Phone
                       </a>
                       <a
                         href={`https://wa.me/250781963981?text=${encodeURIComponent(
@@ -1277,7 +1277,7 @@ export default function RegisterPage() {
                         rel="noreferrer"
                         className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold no-underline"
                       >
-                        💬 WhatsApp Billing (+250 781 963 981)
+                        WhatsApp Billing (+250 781 963 981)
                       </a>
                     </div>
 
@@ -1307,7 +1307,7 @@ export default function RegisterPage() {
                             }}
                             className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
                           >
-                            📋 Paste SMS from Clipboard
+                            Paste SMS from Clipboard
                           </button>
                         </div>
 

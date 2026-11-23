@@ -597,7 +597,7 @@ export default function SaleModal({
                     </div>
                     {selectedSaleProduct && saleQtyNum > saleAvailableStock && (
                       <p className="text-[10px] text-amber-400 font-medium">
-                        ⚠️ Note: {saleQtyNum} exceeds current stock ({saleAvailableStock} {saleUnit}).
+                        Note: {saleQtyNum} exceeds current stock ({saleAvailableStock} {saleUnit}).
                       </p>
                     )}
                   </div>

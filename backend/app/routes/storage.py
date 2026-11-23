@@ -87,14 +87,16 @@ def get_storage_snapshot():
                 if not any(str(x.get("id") or "") == m_id for x in b_list if isinstance(x, dict)):
                     b_list.insert(0, clean_m)
 
-    # 2. Load recent financial ledger transactions
-    tx_query = {"scopeKey": scope_key} if scope_key != "default" else {}
-    tx_cursor = db.transactions.find(tx_query).sort("timestamp", -1).limit(500)
-    transactions = []
-    for tx in tx_cursor:
-        clean_tx = serialize_doc(tx)
-        clean_tx.pop("_id", None)
-        transactions.append(clean_tx)
+    # 2. Load recent financial ledger transactions (STRICTLY isolated to authenticated tenant scope_key; never return all users' transactions when scope_key is default!)
+    if scope_key and scope_key != "default":
+        tx_cursor = db.transactions.find({"scopeKey": scope_key}).sort("timestamp", -1).limit(500)
+        transactions = []
+        for tx in tx_cursor:
+            clean_tx = serialize_doc(tx)
+            clean_tx.pop("_id", None)
+            transactions.append(clean_tx)
+    else:
+        transactions = []
 
     # 3. Load tenant businesses
     biz_cursor = db.businesses.find({}).sort("created_at", -1)
@@ -268,7 +270,7 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
             }
             tx_payload.pop("_id", None)
             db.transactions.update_one(
-                {"id": tx_id},
+                {"scopeKey": scope_key, "id": tx_id},
                 {"$set": tx_payload},
                 upsert=True,
             )

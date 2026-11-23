@@ -248,13 +248,13 @@ export default function SubscriptionBillingView({
               onClick={handleCopyPaymentNumber}
               className="px-3.5 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold cursor-pointer transition"
             >
-              {copiedMoMo ? '✓ Number Copied (0781 963 981)' : '📋 Copy Number (0781 963 981)'}
+              {copiedMoMo ? 'Number Copied (0781 963 981)' : 'Copy Number (0781 963 981)'}
             </button>
             <a
               href="tel:*182*1*1*0781963981%23"
               className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold no-underline"
             >
-              📞 Dial MoMo
+              Dial MoMo
             </a>
             <a
               href="https://wa.me/250781963981"
@@ -262,7 +262,7 @@ export default function SubscriptionBillingView({
               rel="noreferrer"
               className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold no-underline"
             >
-              💬 WhatsApp Proof
+              WhatsApp Proof
             </a>
           </div>
         </div>
@@ -423,13 +423,13 @@ export default function SubscriptionBillingView({
                       onClick={handleCopyPaymentNumber}
                       className="px-3 py-1.5 rounded-lg bg-[#218DFF]/25 hover:bg-[#218DFF]/40 border border-[#9EDCFF]/40 text-white text-[11px] font-bold cursor-pointer"
                     >
-                      {copiedMoMo ? '✓ Copied 0781 963 981' : '📋 Copy 0781 963 981'}
+                      {copiedMoMo ? 'Copied 0781 963 981' : 'Copy 0781 963 981'}
                     </button>
                     <a
                       href="tel:*182*1*1*0781963981%23"
                       className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 text-[11px] font-bold no-underline"
                     >
-                      📞 Dial *182*1*1*0781963981#
+                      Dial *182*1*1*0781963981#
                     </a>
                   </div>
                 </div>
@@ -469,7 +469,7 @@ export default function SubscriptionBillingView({
                     }}
                     className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-bold text-[#9EDCFF] cursor-pointer"
                   >
-                    📋 Paste SMS
+                    Paste SMS
                   </button>
                 </div>
                 <textarea

@@ -7,7 +7,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Pigs',
     types: ['Pig'],
-    icon: '🐷',
+    icon: 'PG',
     defaultBreeds: [
       'Large White',
       'Landrace',
@@ -25,7 +25,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Cattle',
     types: ['Cow', 'Bull', 'Calf'],
-    icon: '🐄',
+    icon: 'CT',
     defaultBreeds: [
       'Ankole',
       'Friesian',
@@ -41,7 +41,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Goats',
     types: ['Goat'],
-    icon: '🐐',
+    icon: 'GT',
     defaultBreeds: [
       'Boer',
       'Saanen',
@@ -56,7 +56,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Sheep',
     types: ['Sheep'],
-    icon: '🐑',
+    icon: 'SH',
     defaultBreeds: [
       'Dorper',
       'Merino',
@@ -71,7 +71,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Chickens',
     types: ['Hen', 'Rooster', 'Chick'],
-    icon: '🐔',
+    icon: 'CK',
     defaultBreeds: [
       'Sasso',
       'Kuroiler',
@@ -89,7 +89,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Ducks',
     types: ['Duck'],
-    icon: '🦆',
+    icon: 'DK',
     defaultBreeds: [
       'Pekin',
       'Muscovy',
@@ -105,7 +105,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Turkeys',
     types: ['Turkey'],
-    icon: '🦃',
+    icon: 'TK',
     defaultBreeds: [
       'Broad Breasted White',
       'Bronze',
@@ -120,7 +120,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Geese',
     types: ['Goose'],
-    icon: '🪿',
+    icon: 'GS',
     defaultBreeds: [
       'Toulouse',
       'Emden',
@@ -135,7 +135,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Rabbits',
     types: ['Rabbit'],
-    icon: '🐇',
+    icon: 'RB',
     defaultBreeds: [
       'New Zealand White',
       'California',
@@ -152,7 +152,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Guinea Fowl',
     types: ['Guinea Fowl'],
-    icon: '🪶',
+    icon: 'GF',
     defaultBreeds: [
       'Helmeted Guinea Fowl',
       'Pearl',
@@ -167,7 +167,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Quails',
     types: ['Quail'],
-    icon: '🐦',
+    icon: 'QL',
     defaultBreeds: [
       'Japanese Quail',
       'Bobwhite',
@@ -181,7 +181,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Pigeons',
     types: ['Pigeon'],
-    icon: '🕊️',
+    icon: 'PG',
     defaultBreeds: [
       'Homing Pigeon',
       'King',
@@ -195,7 +195,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Horses',
     types: ['Horse'],
-    icon: '🐎',
+    icon: 'HR',
     defaultBreeds: [
       'Thoroughbred',
       'Arabian',
@@ -209,7 +209,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Donkeys',
     types: ['Donkey'],
-    icon: '🫏',
+    icon: 'DN',
     defaultBreeds: [
       'Standard Donkey',
       'Miniature',
@@ -223,7 +223,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Camels',
     types: ['Camel'],
-    icon: '🐫',
+    icon: 'CM',
     defaultBreeds: [
       'Dromedary (One-hump)',
       'Bactrian (Two-hump)',
@@ -236,7 +236,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Fish',
     types: ['Tilapia', 'Catfish', 'Other Fish'],
-    icon: '🐟',
+    icon: 'FS',
     defaultBreeds: [
       'Nile Tilapia (Oreochromis niloticus)',
       'African Sharptooth Catfish (Clarias gariepinus)',
@@ -250,7 +250,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Bees',
     types: ['Honeybee Colony'],
-    icon: '🐝',
+    icon: 'BE',
     defaultBreeds: [
       'African Honeybee (Apis mellifera scutellata)',
       'Italian Bee',
@@ -264,7 +264,7 @@ export const ANIMAL_CATEGORIES = [
   {
     category: 'Other Animals',
     types: ['Custom Animal Type'],
-    icon: '🐾',
+    icon: 'LV',
     defaultBreeds: ['Standard Breed', 'Local Breed', 'Crossbreed', 'Other'],
     gestationDays: 0,
     gestationTerm: 'Birth'

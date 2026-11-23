@@ -39,9 +39,10 @@ def list_transactions():
     tx_type = request.args.get("type")
     limit = min(int(request.args.get("limit", "200")), 1000)
 
-    query: dict = {}
-    if scope_key != "default":
-        query["scopeKey"] = scope_key
+    if not scope_key or scope_key == "default":
+        return success_response(data=[])
+
+    query: dict = {"scopeKey": scope_key}
     if arch_id:
         query["architectureId"] = arch_id
     if tx_type:
@@ -96,7 +97,7 @@ def create_transaction(validated_data: TransactionCreateSchema):
         "created_at": now_iso,
         "updated_at": now_iso,
     }
-    db.transactions.update_one({"id": tx_id}, {"$set": tx_doc}, upsert=True)
+    db.transactions.update_one({"scopeKey": scope_key, "id": tx_id}, {"$set": tx_doc}, upsert=True)
     logger.info(
         "SAVED TRANSACTION -> id=%s | arch=%s | type=%s | title='%s' | amountRWF=%s | scopeKey=%s",
         tx_id,
@@ -170,7 +171,7 @@ def edit_transaction_with_audit(
     now_iso = datetime.now(timezone.utc).isoformat()
     scope_key = _resolve_scope_key(db)
 
-    tx_doc = db.transactions.find_one({"id": tx_id})
+    tx_doc = db.transactions.find_one({"scopeKey": scope_key, "id": tx_id})
     if not tx_doc:
         return error_response(
             error=f"Transaction '{tx_id}' not found.", status_code=404
@@ -264,11 +265,8 @@ def delete_transaction(tx_id: str):
     now_iso = datetime.now(timezone.utc).isoformat()
 
     tx_doc = db.transactions.find_one({
-        "$or": [
-            {"id": tx_id, "scopeKey": scope_key},
-            {"id": tx_id},
-            {"_id": tx_id}
-        ]
+        "id": tx_id,
+        "scopeKey": scope_key,
     })
     if not tx_doc:
         return success_response(

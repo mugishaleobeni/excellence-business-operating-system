@@ -137,13 +137,13 @@ export default function UpgradePromptModal() {
                   }}
                   className="px-2.5 py-1 rounded-lg bg-[#218DFF]/25 hover:bg-[#218DFF]/40 border border-[#9EDCFF]/40 text-white text-[10px] font-bold cursor-pointer"
                 >
-                  📋 Copy Number (0781 963 981)
+                  Copy Number (0781 963 981)
                 </button>
                 <a
                   href="tel:*182*1*1*0781963981%23"
                   className="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 text-[10px] font-bold no-underline"
                 >
-                  📞 Dial MoMo
+                  Dial MoMo
                 </a>
               </div>
             </div>
@@ -181,7 +181,7 @@ export default function UpgradePromptModal() {
                   }}
                   className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-bold text-[#9EDCFF] cursor-pointer"
                 >
-                  📋 Paste SMS
+                  Paste SMS
                 </button>
               </div>
               <textarea

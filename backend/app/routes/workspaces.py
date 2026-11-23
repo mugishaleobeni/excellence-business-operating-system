@@ -747,7 +747,7 @@ def create_module_record(
             "updated_at": now_iso,
         }
         db.transactions.update_one(
-            {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
+            {"scopeKey": scope_key, "id": created_tx["id"]}, {"$set": created_tx}, upsert=True
         )
 
     elif module_name == "Purchases" and amount > 0:
@@ -780,7 +780,7 @@ def create_module_record(
                 "updated_at": now_iso,
             }
             db.transactions.update_one(
-                {"id": side_tx["id"]}, {"$set": side_tx}, upsert=True
+                {"scopeKey": scope_key, "id": side_tx["id"]}, {"$set": side_tx}, upsert=True
             )
 
         # Deduct ONLY actual cash paid now from spendable
@@ -908,7 +908,7 @@ def create_module_record(
             "updated_at": now_iso,
         }
         db.transactions.update_one(
-            {"id": created_tx["id"]}, {"$set": created_tx}, upsert=True
+            {"scopeKey": scope_key, "id": created_tx["id"]}, {"$set": created_tx}, upsert=True
         )
 
     elif module_name in stock_buckets and amount > 0:
@@ -1076,7 +1076,7 @@ def update_module_record(
             ws_extra_updates["iOweSuppliersRWF"] = max(0.0, float(ws.get("iOweSuppliersRWF", 0)) - newly_paid_rwf)
             # Update primary transaction record TX-<record_id> so total paid matches new_pf["paid"]
             db.transactions.update_one(
-                {"id": f"TX-{record_id}"},
+                {"scopeKey": scope_key, "id": f"TX-{record_id}"},
                 {
                     "$set": {
                         "id": f"TX-{record_id}",

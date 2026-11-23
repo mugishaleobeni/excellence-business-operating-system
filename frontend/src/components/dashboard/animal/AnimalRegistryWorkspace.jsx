@@ -210,8 +210,8 @@ export default function AnimalRegistryWorkspace({
               Across {animalMetrics.totalRecords} registered records
             </span>
           </div>
-          <div className="w-10 h-10 rounded-2xl bg-[#218DFF]/20 border border-[#218DFF]/40 flex items-center justify-center text-xl">
-            🐾
+          <div className="w-10 h-10 rounded-2xl bg-[#218DFF]/20 border border-[#218DFF]/40 flex items-center justify-center text-xs font-orbitron font-bold text-[#9EDCFF]">
+            LV
           </div>
         </div>
 
@@ -386,8 +386,8 @@ export default function AnimalRegistryWorkspace({
                 <tr>
                   <td colSpan={12} className="py-12 px-4 text-center text-slate-400 text-xs">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
-                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl">
-                        🐾
+                      <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-sm font-orbitron font-bold text-[#9EDCFF]">
+                        LV
                       </div>
                       <strong className="text-white text-sm font-orbitron">No Animals Found</strong>
                       <p className="text-xs text-slate-400">
@@ -427,7 +427,7 @@ export default function AnimalRegistryWorkspace({
                       {/* 2. Photo / Type & Breed */}
                       <td className="py-3 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg shrink-0">{catInfo.icon || '🐾'}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-[#218DFF]/20 text-[#9EDCFF] text-[10px] font-orbitron font-bold shrink-0">{catInfo.icon || 'LV'}</span>
                           <div>
                             <strong className="block text-xs text-white">
                               {row.animalType || 'Livestock'}
@@ -454,7 +454,7 @@ export default function AnimalRegistryWorkspace({
                       {/* 4. Sex */}
                       <td className="py-3 px-2 text-center whitespace-nowrap">
                         <span className="text-xs">
-                          {row.sex === 'Female' ? '♀ Female' : row.sex === 'Male' ? '♂ Male' : row.sex || '—'}
+                          {row.sex === 'Female' ? 'Female' : row.sex === 'Male' ? 'Male' : row.sex || '—'}
                         </span>
                       </td>
 

@@ -2312,7 +2312,7 @@ export default function InteractiveModulePanel({
                     </span>
                   </div>
                   <div className="text-[11px] text-amber-200/90 pt-1 border-t border-amber-400/20 flex items-center gap-1">
-                    <span>💡 Recommendation: Reorder stock soon to avoid lost sales and stockout.</span>
+                    <span>Recommendation: Reorder stock soon to avoid lost sales and stockout.</span>
                   </div>
                 </div>
               )}

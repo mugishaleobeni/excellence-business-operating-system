@@ -876,7 +876,7 @@ export default function ProductionWorkspace({
 
                   {hasShortages && (
                     <p className="text-[10px] text-rose-300">
-                      ⚠️ Batches cannot start when raw materials are short. Purchase missing ingredients to unlock production.
+                      Note: Batches cannot start when raw materials are short. Purchase missing ingredients to unlock production.
                     </p>
                   )}
                 </div>

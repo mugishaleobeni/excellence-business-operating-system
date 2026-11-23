@@ -50,7 +50,7 @@ export function formatWhatsAppMessage(doc, businessInfo, secureLink) {
     if (doc.dueDate) text += `• *Due Date*: ${doc.dueDate}\n`
   }
 
-  text += `\n📄 View, verify, or download your official document here:\n${secureLink}\n\n`
+  text += `\nView, verify, or download your official document here:\n${secureLink}\n\n`
   text += `_Payment Instructions:_ ${businessInfo?.paymentInstructions || 'Direct Cash / MTN MoMo Business / Bank Transfer'}\n\n`
   text += `Thank you for partnering with *${bName}*.`
 
@@ -72,7 +72,7 @@ export function formatPaymentReminderMessage(invoice, businessInfo, secureLink) 
   text += `• *Outstanding Balance*: *${outstandingStr}*\n`
   if (invoice.dueDate) text += `• *Payment Due Date*: ${invoice.dueDate}\n`
 
-  text += `\n🔗 View invoice statement online:\n${secureLink}\n\n`
+  text += `\nView invoice statement online:\n${secureLink}\n\n`
   text += `_Payment Channels:_ ${businessInfo?.paymentInstructions || 'MTN MoMo Business / Bank Transfer'}\n\n`
   text += `If payment has already been sent, please kindly ignore this reminder.\n\n`
   text += `Best regards,\n*${bName}*`

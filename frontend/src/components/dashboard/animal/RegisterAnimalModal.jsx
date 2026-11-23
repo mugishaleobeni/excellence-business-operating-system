@@ -433,8 +433,8 @@ export default function RegisterAnimalModal({
         {/* Header Bar */}
         <div className="flex items-center justify-between border-b border-white/15 p-5 sm:p-6 shrink-0 bg-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#218DFF]/20 border border-[#218DFF]/40 flex items-center justify-center text-xl">
-              {activeCategoryInfo.icon || '🐾'}
+            <div className="w-10 h-10 rounded-2xl bg-[#218DFF]/20 border border-[#218DFF]/40 flex items-center justify-center text-xs font-orbitron font-bold text-[#9EDCFF]">
+              {activeCategoryInfo.icon || 'LV'}
             </div>
             <div>
               <span className="text-[10px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider block">

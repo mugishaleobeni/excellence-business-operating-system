@@ -324,14 +324,14 @@ export default function CashFlowCurveChart({
     const totalExp = currentChartData.reduce((sum, d) => sum + (d.expense || 0), 0)
     const netTakeHome = totalInc - totalExp
     const margin = totalInc > 0 ? Math.round((netTakeHome / totalInc) * 100) : 0
-    const peakItem = [...currentChartData].sort((a, b) => (b.income || 0) - (a.income || 0))[0] || { label: 'None', income: 0 }
+    const peakItem = [...currentChartData].sort((a, b) => (b.income || 0) - (a.income || 0))[0] || { label: '—', income: 0 }
     return {
       totalInc,
       totalExp,
       netTakeHome,
       margin,
-      peakLabel: peakItem.label,
-      peakIncome: peakItem.income
+      peakLabel: peakItem.income > 0 ? peakItem.label : '—',
+      peakIncome: peakItem.income || 0
     }
   }, [currentChartData])
 

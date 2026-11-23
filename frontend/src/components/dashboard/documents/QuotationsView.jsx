@@ -85,7 +85,7 @@ export default function QuotationsView({
       {/* Info Notice */}
       <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-400/30 text-[11px] text-purple-200 flex items-center justify-between">
         <span>
-          💡 Proforma quotations allow sending formal price estimates without affecting inventory balances or posting sales revenue.
+          Proforma quotations allow sending formal price estimates without affecting inventory balances or posting sales revenue.
         </span>
       </div>
 
