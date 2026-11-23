@@ -176,9 +176,9 @@ export default function UniversalModuleTable({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
           {/* Search Input */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="search"
@@ -188,7 +188,7 @@ export default function UniversalModuleTable({
                 setPage(1)
               }}
               placeholder="Search records..."
-              className="pl-8 pr-3 h-9 rounded-xl bg-white/10 border border-white/15 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none w-44 sm:w-56 transition-all shadow-inner"
+              className="pl-8 pr-3 h-9 rounded-xl bg-white/10 border border-white/15 text-xs text-white placeholder-slate-400 focus:bg-white/20 focus:border-[#218DFF]/60 focus:ring-2 focus:ring-[#218DFF]/30 focus:outline-none w-full sm:w-56 transition-all shadow-inner"
             />
           </div>
 
@@ -213,15 +213,15 @@ export default function UniversalModuleTable({
             </div>
           )}
 
-          {/* Add Entry Action Button - Clean Solid Sapphire Pill without white linear gradient */}
+          {/* Add Entry Action Button - Clean Solid Sapphire Pill without duplicate plus sign */}
           {onAddNew && (
             <button
               type="button"
               onClick={onAddNew}
-              className="btn-sapphire-clean h-9 px-4 text-xs font-bold whitespace-nowrap active:scale-[0.98] transition-transform duration-150"
+              className="btn-sapphire-clean h-9 px-4 text-xs font-bold whitespace-nowrap active:scale-[0.98] transition-transform duration-150 shrink-0"
             >
               <Plus className="w-3.5 h-3.5 text-[#9EDCFF]" />
-              <span>{addNewLabel}</span>
+              <span>{String(addNewLabel || 'New Entry').replace(/^\+\s*/, '')}</span>
             </button>
           )}
         </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exbos-pwa-v2'
+const CACHE_NAME = 'exbos-pwa-v3'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo/exboslogo.png']
 
 self.addEventListener('install', (event) => {

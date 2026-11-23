@@ -2133,7 +2133,7 @@ export default function InteractiveModulePanel({
           hideFinancials={hideFinancials}
         />
       ) : (
-        <div className="exbos-glass-card p-5 sm:p-6 space-y-4">
+        <div className="exbos-module-container space-y-4">
           {/* Quick trigger input to pop up category form when on Categories */}
           {isCategoriesPage && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 p-3.5 rounded-2xl bg-white/5 border border-white/10 hover:border-[#218DFF]/40 transition-all mb-1">

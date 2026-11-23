@@ -1687,6 +1687,7 @@ html.dark .cn-link:hover {
 /* ExBOS Neo-Glassmorphism Clean Dashboard Theme (Reference-Inspired) */
 .exbos-dashboard-bg {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #040d28;
   background-image:
     radial-gradient(circle at 15% 10%, rgba(33, 141, 255, 0.22) 0%, transparent 45%),
@@ -1694,7 +1695,13 @@ html.dark .cn-link:hover {
     radial-gradient(circle at 50% 50%, rgba(10, 39, 134, 0.25) 0%, transparent 60%),
     linear-gradient(175deg, #03081e 0%, #071544 55%, #050f2f 100%);
   color: #ffffff;
-  padding: 1rem;
+  padding: 0;
+}
+
+@media (min-width: 640px) {
+  .exbos-dashboard-bg {
+    padding: 0.75rem;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1723,19 +1730,35 @@ html.dark .cn-link:hover {
 }
 
 .exbos-glass-workspace {
-  background: rgba(255, 255, 255, 0.07) !important;
-  backdrop-filter: blur(32px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
-  border-radius: 28px !important;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
   padding: 0 !important;
   color: #ffffff !important;
-  height: calc(100vh - 2.5rem);
+  height: 100dvh;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
   position: relative;
+}
+
+@media (min-width: 640px) {
+  .exbos-glass-workspace {
+    background: rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(32px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: 28px !important;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
+    height: calc(100vh - 1.5rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .exbos-glass-workspace {
+    height: calc(100vh - 2.5rem);
+  }
 }
 
 .exbos-sticky-workspace-header {
@@ -1766,8 +1789,35 @@ html.dark .cn-link:hover {
   flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 1.5rem 1.75rem 2.5rem 1.75rem;
+  padding: 0.875rem 0.75rem 6.5rem 0.75rem;
   scroll-behavior: smooth;
+}
+
+@media (min-width: 640px) {
+  .exbos-workspace-scrollable-body {
+    padding: 1.5rem 1.75rem 2.5rem 1.75rem;
+  }
+}
+
+/* Full-width unboxed module layout on mobile (<640px), glass card container on tablet/desktop */
+.exbos-module-container {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+@media (min-width: 640px) {
+  .exbos-module-container {
+    background: rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(24px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(160%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 24px !important;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25), inset 0 1px 1px rgba(255, 255, 255, 0.15) !important;
+    padding: 1.5rem;
+  }
 }
 
 .exbos-workspace-scrollable-body::-webkit-scrollbar:horizontal {
