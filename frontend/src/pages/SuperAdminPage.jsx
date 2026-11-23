@@ -387,6 +387,31 @@ export default function SuperAdminPage() {
     refreshAll()
   }
 
+  const handleQuickRenew30Days = async (targetUser) => {
+    const baseDate =
+      targetUser.subscriptionExpiry && new Date(targetUser.subscriptionExpiry) > new Date()
+        ? new Date(targetUser.subscriptionExpiry)
+        : new Date()
+    const nextExpiry = new Date(baseDate.getTime() + 30 * 86400000).toISOString().slice(0, 10)
+    const targetPlan =
+      targetUser.plan && String(targetUser.plan).toLowerCase() !== 'free'
+        ? targetUser.plan
+        : 'Bronze'
+    const res = await apiClient.superAdminUpdateUserSubscription(targetUser.email, {
+      plan: targetPlan,
+      billingType: 'Paid',
+      subscriptionExpiry: nextExpiry,
+      reason: `Renewed ${targetPlan} plan (+30 days until ${nextExpiry})`,
+      notifyUser: true
+    })
+    if (!res.ok) {
+      showError(res.error || 'Failed to renew subscription.')
+      return
+    }
+    showNotice(`Renewed ${targetUser.email} (${targetPlan}) until ${nextExpiry}.`)
+    refreshAll()
+  }
+
   const handleApplySubscriptionChange = async (e) => {
     e.preventDefault()
     if (!selectedUserEmail) {
@@ -1313,7 +1338,7 @@ export default function SuperAdminPage() {
                           </div>
                         </td>
                         <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="px-2 py-0.5 rounded-full bg-[#218DFF]/20 text-[#9EDCFF] font-bold text-[10px]">
                               {u.plan}
                             </span>
@@ -1321,8 +1346,28 @@ export default function SuperAdminPage() {
                           </div>
                           <div className="text-[10px] text-slate-400 mt-0.5">
                             {formatRWF(u.monthlySpendRWF)}/mo
-                            {u.subscriptionExpiry ? ` · Exp ${u.subscriptionExpiry}` : ''}
+                            {u.subscriptionExpiry ? ` · Renews ${u.subscriptionExpiry}` : ''}
                           </div>
+                          {u.paidAt && (
+                            <div className="text-[10px] text-emerald-300/90 mt-0.5">
+                              Paid: {String(u.paidAt).slice(0, 16).replace('T', ' ')}
+                            </div>
+                          )}
+                          {u.timeRemainingLabel && (
+                            <div
+                              className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                u.renewalStatus === 'expired'
+                                  ? 'bg-rose-500/25 text-rose-300 border border-rose-400/40 animate-pulse'
+                                  : u.renewalStatus === 'expiring_soon'
+                                  ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
+                                  : u.renewalStatus === 'active'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                                  : 'bg-white/5 text-slate-400'
+                              }`}
+                            >
+                              ⏱ {u.timeRemainingLabel}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-3">
                           <span
@@ -1340,6 +1385,14 @@ export default function SuperAdminPage() {
                         </td>
                         <td className="py-3.5 px-3 text-right">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickRenew30Days(u)}
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[10px] cursor-pointer"
+                              title="Extend or Renew Plan by +30 Days"
+                            >
+                              +30d Renew
+                            </button>
                             <button
                               type="button"
                               onClick={() => {
@@ -1449,7 +1502,34 @@ export default function SuperAdminPage() {
                         </div>
                         <div className="text-[11px] text-slate-400">
                           {req.paymentMethod} · Ref: <code className="text-[#9EDCFF]">{req.paymentReference}</code> · Phone: {req.payerPhone || 'N/A'}
+                          {req.paidAt && (
+                            <span className="ml-2 text-emerald-300">
+                              · Paid: {String(req.paidAt).slice(0, 16).replace('T', ' ')}
+                            </span>
+                          )}
                         </div>
+                        {req.paymentMessageCopy && (
+                          <div className="mt-1 p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200 font-mono whitespace-pre-wrap">
+                            📩 SMS Copy: {req.paymentMessageCopy}
+                          </div>
+                        )}
+                        {req.paymentScreenshot && (
+                          <div className="mt-1.5">
+                            <a
+                              href={req.paymentScreenshot}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-2 text-[11px] text-[#9EDCFF] underline"
+                            >
+                              <img
+                                src={req.paymentScreenshot}
+                                alt="Payment Screenshot"
+                                className="w-10 h-10 rounded-lg object-cover border border-white/20"
+                              />
+                              <span>View Uploaded Payment Screenshot</span>
+                            </a>
+                          </div>
+                        )}
                       </div>
                       {req.status === 'pending' && (
                         <div className="flex items-center gap-2 shrink-0">
@@ -1526,18 +1606,56 @@ export default function SuperAdminPage() {
                         {biz.fullName} ({biz.email}) · Branches: <strong>{biz.branchCount}</strong> · Staff:{' '}
                         <strong>{biz.staffCount}</strong>
                       </div>
+                      {biz.paidAt && (
+                        <div className="text-[11px] text-emerald-300">
+                          Paid Time: <strong>{String(biz.paidAt).slice(0, 16).replace('T', ' ')}</strong>
+                          {biz.paymentMethod ? ` via ${biz.paymentMethod}` : ''}
+                        </div>
+                      )}
+                      {biz.paymentMessageCopy && (
+                        <div className="p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200 font-mono whitespace-pre-wrap">
+                          📩 Payment Message Copy: {biz.paymentMessageCopy}
+                        </div>
+                      )}
                       {biz.auditNote && (
                         <div className="text-[11px] text-[#9EDCFF]/80 italic">{biz.auditNote}</div>
                       )}
                     </div>
 
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-0 space-y-1">
                       <div className="font-orbitron text-sm font-extrabold text-white">
                         {formatRWF(biz.monthlySpendRWF)} / mo
                       </div>
-                      <span className="text-[11px] text-emerald-400 font-semibold">
-                        {biz.subscriptionExpiry ? `Exp: ${biz.subscriptionExpiry}` : biz.subscriptionStatus}
-                      </span>
+                      <div
+                        className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          biz.renewalStatus === 'expired'
+                            ? 'bg-rose-500/25 text-rose-300 border border-rose-400/40 animate-pulse'
+                            : biz.renewalStatus === 'expiring_soon'
+                            ? 'bg-amber-500/25 text-amber-200 border border-amber-400/40'
+                            : biz.renewalStatus === 'active'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                            : 'bg-white/10 text-slate-300'
+                        }`}
+                      >
+                        ⏱ {biz.timeRemainingLabel || (biz.subscriptionExpiry ? `Exp: ${biz.subscriptionExpiry}` : biz.subscriptionStatus)}
+                      </div>
+                      {biz.subscriptionExpiry && (
+                        <div className="text-[10px] text-slate-400">
+                          Renewal Due: {biz.subscriptionExpiry}
+                        </div>
+                      )}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleQuickRenew30Days(biz)
+                          }}
+                          className="mt-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-200 text-[10px] font-bold cursor-pointer"
+                        >
+                          +30 Days Renew
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

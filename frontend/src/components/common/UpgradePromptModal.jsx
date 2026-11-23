@@ -14,6 +14,8 @@ export default function UpgradePromptModal() {
   const [selectedPlan, setSelectedPlan] = useState('Silver')
   const [paymentMethod, setPaymentMethod] = useState('MTN MoMo Business')
   const [paymentReference, setPaymentReference] = useState('')
+  const [paymentMessageCopy, setPaymentMessageCopy] = useState('')
+  const [paymentScreenshot, setPaymentScreenshot] = useState('')
   const [payerPhone, setPayerPhone] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submittedMsg, setSubmittedMsg] = useState('')
@@ -36,13 +38,16 @@ export default function UpgradePromptModal() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!paymentReference.trim()) return
+    if (!paymentReference.trim() && !paymentMessageCopy.trim() && !paymentScreenshot) return
     setSubmitting(true)
     setSubmitErr('')
     const res = await apiClient.requestSubscriptionUpgrade({
       plan: selectedPlan,
       paymentMethod,
-      paymentReference: paymentReference.trim(),
+      paymentReference: paymentReference.trim() || paymentMessageCopy.trim().slice(0, 60) || 'Screenshot Uploaded',
+      paymentMessageCopy: paymentMessageCopy.trim(),
+      paymentScreenshot,
+      paidAt: new Date().toISOString(),
       payerPhone: payerPhone.trim()
     })
     setSubmitting(false)
@@ -159,16 +164,56 @@ export default function UpgradePromptModal() {
             </div>
 
             <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[10px] font-bold uppercase text-[#9EDCFF]">
+                  Payment Confirmation Message Copy (SMS) *
+                </label>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const clip = await navigator.clipboard.readText()
+                      if (clip && clip.trim()) {
+                        setPaymentMessageCopy(clip.trim())
+                        if (!paymentReference.trim()) setPaymentReference(clip.trim().slice(0, 60))
+                      }
+                    } catch {}
+                  }}
+                  className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-bold text-[#9EDCFF] cursor-pointer"
+                >
+                  📋 Paste SMS
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={paymentMessageCopy}
+                onChange={(e) => {
+                  setPaymentMessageCopy(e.target.value)
+                  if (!paymentReference.trim()) setPaymentReference(e.target.value.slice(0, 60))
+                }}
+                placeholder="Paste your MTN MoMo / Airtel Money confirmation SMS here..."
+                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/15 text-white outline-none focus:border-[#218DFF]"
+              />
+            </div>
+
+            <div>
               <label className="block text-[10px] font-bold uppercase text-[#9EDCFF] mb-1">
-                Transaction Reference ID *
+                Or Upload Payment Message Screenshot
               </label>
               <input
-                type="text"
-                required
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. MP261122.1555.B4421"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/15 text-white outline-none focus:border-[#218DFF]"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const reader = new FileReader()
+                  reader.onload = () => {
+                    setPaymentScreenshot(String(reader.result || ''))
+                    if (!paymentReference.trim()) setPaymentReference('Screenshot Uploaded')
+                  }
+                  reader.readAsDataURL(file)
+                }}
+                className="w-full px-3 py-1.5 rounded-xl bg-white/5 border border-white/15 text-white text-[11px] file:mr-2 file:py-0.5 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-bold file:bg-[#218DFF] file:text-white cursor-pointer"
               />
             </div>
 

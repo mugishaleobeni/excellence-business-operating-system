@@ -107,6 +107,10 @@ export default function RegisterPage() {
     enableStockTracking: true,
     enableWhatsAppLink: true,
     planTier: queryPlan || 'Free',
+    paymentMethod: 'MTN MoMo Business (+250 781 963 981)',
+    paymentMessageCopy: '',
+    paymentScreenshot: '',
+    paidAt: '',
     demoSpendableRWF: '',
     demoMonthlyRevenueRWF: '',
     demoPrimaryItem: ''
@@ -341,6 +345,13 @@ export default function RegisterPage() {
       }
     } else if (currentStep === 4) {
       if (!form.businessName.trim()) errs.businessName = 'Please fill out this field.'
+    } else if (currentStep === 6) {
+      const selectedPlanObj = pricingPlans.find((p) => p.tier === form.planTier)
+      const isPaid = selectedPlanObj ? Number(selectedPlanObj.priceRWF || 0) > 0 : form.planTier !== 'Free'
+      if (isPaid && !String(form.paymentMessageCopy || '').trim() && !form.paymentScreenshot) {
+        errs.paymentMessageCopy =
+          'Please paste your Mobile Money / Bank payment confirmation message copy or upload a screenshot of your payment message to continue with a paid plan.'
+      }
     }
     setErrors(errs)
     const firstField = Object.keys(errs)[0]
@@ -479,6 +490,10 @@ export default function RegisterPage() {
         location: form.location.trim() || 'Kigali, Rwanda',
         architectureId: form.architectureId,
         planTier: form.planTier,
+        paymentMethod: form.paymentMethod,
+        paymentMessageCopy: (form.paymentMessageCopy || '').trim(),
+        paymentScreenshot: form.paymentScreenshot || '',
+        paidAt: form.paidAt || new Date().toISOString(),
         currency: form.currency,
         language: form.language,
         startingSpendableRWF: form.demoSpendableRWF,
@@ -1265,6 +1280,126 @@ export default function RegisterPage() {
                         💬 WhatsApp Billing (+250 781 963 981)
                       </a>
                     </div>
+
+                    {/* Required Payment Message Copy & Screenshot Upload for Paid Plans */}
+                    {isPaidSelection && (
+                      <div className="pt-3 mt-2 border-t border-white/15 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <label className="text-xs font-orbitron font-bold uppercase text-[#9EDCFF]">
+                            Step 6B · Paste Payment Confirmation Message Copy or Upload Screenshot *
+                          </label>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const clip = await navigator.clipboard.readText()
+                                if (clip && clip.trim()) {
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    paymentMessageCopy: clip.trim(),
+                                    paidAt: new Date().toISOString()
+                                  }))
+                                  showToast('Payment confirmation message pasted from clipboard!', 'SMS Pasted')
+                                }
+                              } catch {
+                                showToast('Long-press inside the box below to paste your SMS message.', 'Paste SMS')
+                              }
+                            }}
+                            className="px-3 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
+                          >
+                            📋 Paste SMS from Clipboard
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              Payment Channel Used
+                            </label>
+                            <select
+                              value={form.paymentMethod}
+                              onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}
+                              className="w-full px-3 py-2.5 rounded-xl bg-[#03091F] border border-white/20 text-xs text-white focus:outline-none focus:border-[#218DFF]"
+                            >
+                              <option value="MTN MoMo Business (+250 781 963 981)">
+                                MTN MoMo Business (0781 963 981)
+                              </option>
+                              <option value="Airtel Money (+250 781 963 981)">
+                                Airtel Money Rwanda (0781 963 981)
+                              </option>
+                              <option value="Bank Transfer">Bank Transfer</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                              Upload Payment Message Screenshot (Optional)
+                            </label>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                const reader = new FileReader()
+                                reader.onload = () => {
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    paymentScreenshot: String(reader.result || ''),
+                                    paidAt: prev.paidAt || new Date().toISOString()
+                                  }))
+                                  showToast('Payment message screenshot uploaded!', 'Proof Attached')
+                                }
+                                reader.readAsDataURL(file)
+                              }}
+                              className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/20 text-xs text-slate-200 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-[#218DFF] file:text-white cursor-pointer"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <textarea
+                            rows={3}
+                            value={form.paymentMessageCopy}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                paymentMessageCopy: e.target.value,
+                                paidAt: new Date().toISOString()
+                              })
+                            }
+                            placeholder={`Paste your MTN MoMo or Airtel Money confirmation SMS here (e.g. "TxId: 184920341. Your payment of ${formatRWF(activePlanObj.priceRWF)} to 0781963981 has been completed...")`}
+                            className="w-full px-3.5 py-2.5 rounded-xl bg-[#03091F]/90 border border-white/25 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-[#9EDCFF]"
+                          />
+                        </div>
+
+                        {form.paymentScreenshot && (
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-400/35 text-xs text-emerald-200">
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={form.paymentScreenshot}
+                                alt="Payment proof"
+                                className="w-10 h-10 rounded-lg object-cover border border-white/20"
+                              />
+                              <span>✓ Payment message screenshot attached</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setForm({ ...form, paymentScreenshot: '' })}
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-200 text-[11px] font-bold cursor-pointer"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        )}
+
+                        {form.paidAt && (form.paymentMessageCopy.trim() || form.paymentScreenshot) && (
+                          <div className="text-[11px] text-emerald-300 font-semibold">
+                            ✓ Payment proof recorded at {new Date(form.paidAt).toLocaleString()} · 30-day renewal cycle will start automatically.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })()}

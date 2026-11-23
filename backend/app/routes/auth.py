@@ -299,13 +299,26 @@ def register_business(validated_data: RegisterBusinessSchema):
         "Free": 0,
         "Bronze": 10000,
         "Starter Plan": 15000,
-        "Silver": 25000,
+        "Silver": 20000,
         "Growth Plan": 35000,
-        "Gold": 50000,
+        "Gold": 35000,
         "Hybrid & Scale": 75000,
     }
-    mrr_rwf = plan_mrr_map.get(validated_data.planTier, 35000)
-    billing_type = "Complimentary" if mrr_rwf == 0 else "Paid"
+    mrr_rwf = plan_mrr_map.get(validated_data.planTier, 0 if str(validated_data.planTier).lower() == "free" else 20000)
+    raw_payload = request.get_json(silent=True) or {}
+    payment_message_copy = str(raw_payload.get("paymentMessageCopy") or "").strip()
+    payment_screenshot = str(raw_payload.get("paymentScreenshot") or "").strip()
+    payment_method = str(raw_payload.get("paymentMethod") or "MTN MoMo Business (+250 781 963 981)").strip()
+    payment_ref = str(
+        raw_payload.get("paymentReference")
+        or (payment_message_copy[:60] if payment_message_copy else ("Screenshot Uploaded" if payment_screenshot else ""))
+    ).strip()
+
+    is_paid_plan = mrr_rwf > 0 and str(validated_data.planTier).strip().lower() != "free"
+    billing_type = "Paid" if is_paid_plan else "Free"
+    now_dt = datetime.now(timezone.utc)
+    paid_at_iso = str(raw_payload.get("paidAt") or now_iso).strip() if is_paid_plan else ""
+    subscription_expiry = (now_dt + timedelta(days=30)).strftime("%Y-%m-%d") if is_paid_plan else ""
 
     start_spendable = float(
         validated_data.startingSpendableRWF
@@ -348,12 +361,44 @@ def register_business(validated_data: RegisterBusinessSchema):
         "plan": validated_data.planTier,
         "planTier": validated_data.planTier,
         "billingType": billing_type,
+        "monthlySpendRWF": float(mrr_rwf) if is_paid_plan else 0.0,
+        "subscriptionStatus": "Active",
+        "paidAt": paid_at_iso,
+        "subscriptionStartAt": now_iso if is_paid_plan else "",
+        "subscriptionExpiry": subscription_expiry,
+        "paymentMethod": payment_method if is_paid_plan else "",
+        "paymentReference": payment_ref if is_paid_plan else "",
+        "paymentMessageCopy": payment_message_copy if is_paid_plan else "",
+        "paymentScreenshot": payment_screenshot if is_paid_plan else "",
         "enabledActivities": enabled_activities,
         "verified": True,
         "created_at": now_iso,
         "updated_at": now_iso,
     }
     db.users.insert_one(user_doc)
+
+    if is_paid_plan and (payment_message_copy or payment_screenshot or payment_ref):
+        db.subscription_requests.insert_one(
+            {
+                "id": f"UPG-{now_ms}",
+                "email": email_lower,
+                "fullName": validated_data.fullName,
+                "businessName": validated_data.businessName,
+                "currentPlan": "Registration",
+                "requestedPlan": validated_data.planTier,
+                "amountRWF": float(mrr_rwf),
+                "paymentMethod": payment_method,
+                "paymentReference": payment_ref or "Registration Payment",
+                "paymentMessageCopy": payment_message_copy,
+                "paymentScreenshot": payment_screenshot,
+                "payerPhone": validated_data.phone,
+                "paidAt": paid_at_iso,
+                "expiryDate": subscription_expiry,
+                "status": "approved",
+                "notes": "Submitted during business registration",
+                "createdAt": now_iso,
+            }
+        )
 
     biz_doc = {
         "id": biz_id,
@@ -365,13 +410,16 @@ def register_business(validated_data: RegisterBusinessSchema):
         "architectureId": validated_data.architectureId,
         "plan": validated_data.planTier,
         "billingType": billing_type,
-        "mrrRWF": mrr_rwf,
-        "monthlySpendRWF": mrr_rwf,
+        "mrrRWF": float(mrr_rwf) if is_paid_plan else 0.0,
+        "monthlySpendRWF": float(mrr_rwf) if is_paid_plan else 0.0,
         "status": "Active",
         "branches": 1,
         "location": f"{validated_data.country}, {validated_data.location}".strip(", "),
         "joinedAt": now_iso[:10],
-        "expiryDate": "2027-11-07",
+        "paidAt": paid_at_iso,
+        "expiryDate": subscription_expiry,
+        "paymentMethod": payment_method if is_paid_plan else "",
+        "paymentMessageCopy": payment_message_copy if is_paid_plan else "",
         "created_at": now_iso,
         "updated_at": now_iso,
     }
@@ -1231,19 +1279,26 @@ def submit_subscription_upgrade_request():
         return error_response("Select a valid paid plan: Bronze, Silver, or Gold.", status_code=400)
 
     payment_method = str(payload.get("paymentMethod") or "MTN MoMo Business").strip()
-    payment_reference = str(payload.get("paymentReference") or "").strip()
+    payment_message_copy = str(payload.get("paymentMessageCopy") or "").strip()
+    payment_screenshot = str(payload.get("paymentScreenshot") or "").strip()
+    payment_reference = str(
+        payload.get("paymentReference")
+        or (payment_message_copy[:60] if payment_message_copy else ("Screenshot Uploaded" if payment_screenshot else ""))
+    ).strip()
     payer_phone = str(payload.get("payerPhone") or actor.get("phone") or "").strip()
-    notes = str(payload.get("notes") or "").strip()
+    notes = str(payload.get("notes") or payment_message_copy or "").strip()
 
-    if not payment_reference:
+    if not payment_reference and not payment_message_copy and not payment_screenshot:
         return error_response(
-            "Please enter your MTN MoMo, Airtel Money, or Bank transaction reference ID.",
+            "Please paste your Mobile Money / Bank payment confirmation message or upload a screenshot.",
             status_code=400,
         )
 
     plan_info = get_plan_limits(requested_plan)
-    now_iso = datetime.now(timezone.utc).isoformat()
-    req_id = f"UPG-{int(datetime.now(timezone.utc).timestamp() * 1000)}"
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    paid_at_iso = str(payload.get("paidAt") or now_iso).strip()
+    req_id = f"UPG-{int(now_dt.timestamp() * 1000)}"
 
     req_doc = {
         "id": req_id,
@@ -1255,12 +1310,26 @@ def submit_subscription_upgrade_request():
         "amountRWF": float(plan_info.get("priceRWF") or 0),
         "paymentMethod": payment_method,
         "paymentReference": payment_reference,
+        "paymentMessageCopy": payment_message_copy,
+        "paymentScreenshot": payment_screenshot,
         "payerPhone": payer_phone,
+        "paidAt": paid_at_iso,
         "notes": notes,
         "status": "pending",
         "createdAt": now_iso,
     }
     db.subscription_requests.insert_one(dict(req_doc))
+    db.users.update_one(
+        {"email": owner_scope},
+        {
+            "$set": {
+                "lastPaymentSubmittedAt": paid_at_iso,
+                "paymentMessageCopy": payment_message_copy or actor.get("paymentMessageCopy") or "",
+                "paymentScreenshot": payment_screenshot or actor.get("paymentScreenshot") or "",
+                "paymentMethod": payment_method,
+            }
+        },
+    )
 
     return success_response(
         data=req_doc,

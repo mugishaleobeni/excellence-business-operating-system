@@ -113,6 +113,98 @@ def _resolve_plan_price_rwf(db, plan_name: str) -> float:
     return fallback.get(target, 0.0)
 
 
+def _compute_renewal_info(user_doc: dict, now_dt: datetime) -> dict:
+    """
+    Compute paidAt timestamp, subscriptionExpiry date, exact days/hours remaining,
+    and human-readable renewal status for Super Admin monitoring.
+    """
+    plan = str(user_doc.get("plan") or user_doc.get("planTier") or "Free").strip()
+    billing_type = str(user_doc.get("billingType") or "Free").strip()
+    paid_at = str(
+        user_doc.get("paidAt")
+        or user_doc.get("lastPaymentSubmittedAt")
+        or user_doc.get("subscriptionStartAt")
+        or ""
+    ).strip()
+    expiry_raw = str(user_doc.get("subscriptionExpiry") or "").strip()
+
+    if plan.lower() == "free" and not expiry_raw:
+        return {
+            "paidAt": paid_at,
+            "subscriptionExpiry": "",
+            "daysRemaining": None,
+            "hoursRemaining": None,
+            "timeRemainingLabel": "Forever Free · No Expiry",
+            "renewalStatus": "free",
+        }
+
+    if not expiry_raw and plan.lower() != "free" and "complimentary" not in billing_type.lower():
+        base_str = paid_at or str(user_doc.get("created_at") or "")
+        if base_str:
+            try:
+                base_dt = datetime.fromisoformat(base_str.replace("Z", "+00:00"))
+                if base_dt.tzinfo is None:
+                    base_dt = base_dt.replace(tzinfo=timezone.utc)
+                expiry_raw = (base_dt + timedelta(days=30)).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+    if not expiry_raw:
+        return {
+            "paidAt": paid_at,
+            "subscriptionExpiry": "",
+            "daysRemaining": None,
+            "hoursRemaining": None,
+            "timeRemainingLabel": "Complimentary · No Fixed Expiry"
+            if "complimentary" in billing_type.lower()
+            else "Active · No Expiry Set",
+            "renewalStatus": "active",
+        }
+
+    try:
+        exp_dt = datetime.fromisoformat(expiry_raw.replace("Z", "+00:00"))
+        if len(expiry_raw) <= 10 or (exp_dt.hour == 0 and exp_dt.minute == 0 and "T" not in expiry_raw):
+            exp_dt = exp_dt.replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+        elif exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+
+        delta_sec = (exp_dt - now_dt).total_seconds()
+        days_rem = int(delta_sec // 86400)
+        hours_rem = int((abs(delta_sec) % 86400) // 3600)
+
+        if delta_sec < 0:
+            overdue_days = abs(days_rem)
+            label = f"Expired {overdue_days}d {hours_rem}h ago · Needs Renewal"
+            status = "expired"
+        elif days_rem == 0:
+            label = f"Expires today ({hours_rem}h remaining)"
+            status = "expiring_soon"
+        elif days_rem <= 5:
+            label = f"{days_rem}d {hours_rem}h remaining · Renew Soon"
+            status = "expiring_soon"
+        else:
+            label = f"{days_rem}d {hours_rem}h remaining"
+            status = "active"
+
+        return {
+            "paidAt": paid_at,
+            "subscriptionExpiry": expiry_raw[:10],
+            "daysRemaining": days_rem,
+            "hoursRemaining": hours_rem,
+            "timeRemainingLabel": label,
+            "renewalStatus": status,
+        }
+    except Exception:
+        return {
+            "paidAt": paid_at,
+            "subscriptionExpiry": expiry_raw,
+            "daysRemaining": None,
+            "hoursRemaining": None,
+            "timeRemainingLabel": f"Expires {expiry_raw}",
+            "renewalStatus": "active",
+        }
+
+
 @super_admin_bp.route("/analytics", methods=["GET"])
 @require_super_admin
 def get_platform_analytics():
@@ -328,6 +420,7 @@ def list_platform_users():
     complimentary_count = 0
     paid_mrr_rwf = 0.0
 
+    now_dt = datetime.now(timezone.utc)
     for u in all_users:
         email = (u.get("email") or "").strip().lower()
         is_staff = bool(u.get("ownerScopeKey"))
@@ -351,6 +444,8 @@ def list_platform_users():
         else:
             active_users += 1
 
+        renewal_info = _compute_renewal_info(u, now_dt)
+
         row = {
             "id": str(u.get("_id")),
             "email": email,
@@ -370,7 +465,16 @@ def list_platform_users():
             "plan": plan,
             "billingType": billing_type,
             "subscriptionStatus": u.get("subscriptionStatus") or "Active",
-            "subscriptionExpiry": u.get("subscriptionExpiry") or "",
+            "subscriptionExpiry": renewal_info["subscriptionExpiry"],
+            "paidAt": renewal_info["paidAt"],
+            "daysRemaining": renewal_info["daysRemaining"],
+            "hoursRemaining": renewal_info["hoursRemaining"],
+            "timeRemainingLabel": renewal_info["timeRemainingLabel"],
+            "renewalStatus": renewal_info["renewalStatus"],
+            "paymentMethod": u.get("paymentMethod") or "",
+            "paymentReference": u.get("paymentReference") or "",
+            "paymentMessageCopy": u.get("paymentMessageCopy") or "",
+            "paymentScreenshot": u.get("paymentScreenshot") or "",
             "monthlySpendRWF": monthly_spend,
             "auditNote": u.get("auditNote") or "",
             "staffCount": 0 if is_staff else staff_counts.get(email, 0),
@@ -557,7 +661,10 @@ def update_user_subscription(target_email: str):
             else _resolve_plan_price_rwf(db, plan)
         )
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    if not expiry_date and not is_comp_or_free:
+        expiry_date = (now_dt + timedelta(days=30)).strftime("%Y-%m-%d")
     audit_note = f"[Super Admin · {now_iso[:10]} · {actor_email}] {reason}"
 
     user_updates = {
@@ -570,6 +677,8 @@ def update_user_subscription(target_email: str):
         "auditNote": audit_note,
         "updated_at": now_iso,
     }
+    if not is_comp_or_free:
+        user_updates["paidAt"] = user_doc.get("paidAt") or now_iso
     db.users.update_one({"_id": user_doc["_id"]}, {"$set": user_updates})
 
     # Propagate plan tier to all staff accounts belonging to this business owner
@@ -1342,7 +1451,12 @@ def review_upgrade_request(req_id: str):
         "planTier": requested_plan,
         "billingType": "Paid",
         "subscriptionStatus": "Active",
+        "paidAt": req_doc.get("paidAt") or req_doc.get("createdAt") or now_iso,
         "subscriptionExpiry": expiry_date,
+        "paymentMethod": req_doc.get("paymentMethod") or "MTN MoMo Business",
+        "paymentReference": req_doc.get("paymentReference") or "",
+        "paymentMessageCopy": req_doc.get("paymentMessageCopy") or req_doc.get("notes") or "",
+        "paymentScreenshot": req_doc.get("paymentScreenshot") or "",
         "monthlySpendRWF": amount_rwf,
         "auditNote": audit_note,
         "updated_at": now_iso,

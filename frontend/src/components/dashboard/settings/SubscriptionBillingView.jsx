@@ -65,6 +65,8 @@ export default function SubscriptionBillingView({
   const [copiedMoMo, setCopiedMoMo] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('MTN MoMo Business')
   const [paymentReference, setPaymentReference] = useState('')
+  const [paymentMessageCopy, setPaymentMessageCopy] = useState('')
+  const [paymentScreenshot, setPaymentScreenshot] = useState('')
   const [payerPhone, setPayerPhone] = useState(user?.phone || '')
   const [submitting, setSubmitting] = useState(false)
   const [myRequests, setMyRequests] = useState([])
@@ -131,12 +133,15 @@ export default function SubscriptionBillingView({
 
   const handleSubmitUpgradeRequest = async (e) => {
     e.preventDefault()
-    if (!upgradeModalPlan || !paymentReference.trim()) return
+    if (!upgradeModalPlan || (!paymentReference.trim() && !paymentMessageCopy.trim() && !paymentScreenshot)) return
     setSubmitting(true)
     const res = await apiClient.requestSubscriptionUpgrade({
       plan: upgradeModalPlan.id,
       paymentMethod,
-      paymentReference: paymentReference.trim(),
+      paymentReference: paymentReference.trim() || paymentMessageCopy.trim().slice(0, 60) || 'Payment Proof Uploaded',
+      paymentMessageCopy: paymentMessageCopy.trim(),
+      paymentScreenshot,
+      paidAt: new Date().toISOString(),
       payerPhone: payerPhone.trim()
     })
     setSubmitting(false)
@@ -159,6 +164,8 @@ export default function SubscriptionBillingView({
     })
     setUpgradeModalPlan(null)
     setPaymentReference('')
+    setPaymentMessageCopy('')
+    setPaymentScreenshot('')
     loadRequests()
   }
 
@@ -445,16 +452,56 @@ export default function SubscriptionBillingView({
               </div>
 
               <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-bold uppercase text-slate-300">
+                    Payment Confirmation Message Copy (SMS / Reference) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const clip = await navigator.clipboard.readText()
+                        if (clip && clip.trim()) {
+                          setPaymentMessageCopy(clip.trim())
+                          if (!paymentReference.trim()) setPaymentReference(clip.trim().slice(0, 60))
+                        }
+                      } catch {}
+                    }}
+                    className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-[10px] font-bold text-[#9EDCFF] cursor-pointer"
+                  >
+                    📋 Paste SMS
+                  </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={paymentMessageCopy}
+                  onChange={(e) => {
+                    setPaymentMessageCopy(e.target.value)
+                    if (!paymentReference.trim()) setPaymentReference(e.target.value.slice(0, 60))
+                  }}
+                  placeholder="Paste your MTN MoMo or Airtel Money confirmation SMS message copy here..."
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white outline-none focus:border-[#218DFF]"
+                />
+              </div>
+
+              <div>
                 <label className="block text-[11px] font-bold uppercase text-slate-300 mb-1">
-                  Transaction Reference / Receipt ID *
+                  Or Upload Payment Message Screenshot (Optional)
                 </label>
                 <input
-                  type="text"
-                  required
-                  value={paymentReference}
-                  onChange={(e) => setPaymentReference(e.target.value)}
-                  placeholder="e.g. MP261122.1204.A9821"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white outline-none focus:border-[#218DFF]"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                      setPaymentScreenshot(String(reader.result || ''))
+                      if (!paymentReference.trim()) setPaymentReference('Screenshot Uploaded')
+                    }
+                    reader.readAsDataURL(file)
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/15 text-slate-200 text-xs file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-[#218DFF] file:text-white cursor-pointer"
                 />
               </div>
 
