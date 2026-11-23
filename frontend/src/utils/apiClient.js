@@ -1,3 +1,5 @@
+import { reportSystemError } from './errorReporter'
+
 export function isTokenValid(token) {
   if (!token || typeof token !== 'string') return false
   try {
@@ -101,16 +103,16 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
       window.dispatchEvent(new CustomEvent('exbos:plan-limit', { detail }))
     }
     if (response.status >= 500 && !String(endpoint || '').includes('/health/report-error')) {
-      import('./errorReporter')
-        .then(({ reportSystemError }) =>
-          reportSystemError({
-            source: 'api-5xx',
-            message: data?.error || data?.message || `HTTP ${response.status} on ${endpoint}`,
-            statusCode: response.status,
-            endpoint
-          })
-        )
-        .catch(() => {})
+      try {
+        reportSystemError({
+          source: 'api-5xx',
+          message: data?.error || data?.message || `HTTP ${response.status} on ${endpoint}`,
+          statusCode: response.status,
+          endpoint
+        })
+      } catch {
+        /* ignore reporting errors */
+      }
     }
     return {
       ok: response.ok,

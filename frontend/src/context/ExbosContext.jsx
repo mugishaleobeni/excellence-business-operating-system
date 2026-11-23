@@ -832,6 +832,8 @@ export function ExbosProvider({ children }) {
   }
 
   const isHydratedRef = useRef(false)
+  const isFetchingCloudRef = useRef(false)
+  const lastPostedHashRef = useRef('')
   const lastMutationTsRef = useRef(0)
   const recentlyDeletedIdsRef = useRef(new Set())
 
@@ -927,11 +929,14 @@ export function ExbosProvider({ children }) {
         .then((res) => (res.ok ? res.json() : null))
         .then((serverData) => {
           if (!isMounted || !serverData) return
+          isFetchingCloudRef.current = true
           if (serverData.workspaces && typeof serverData.workspaces === 'object') {
             const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
-            setWorkspaces((prev) =>
-              isInitial ? sanitized : mergeServerWorkspacesWithLocal(sanitized, prev)
-            )
+            setWorkspaces((prev) => {
+              const nextWs = isInitial ? sanitized : mergeServerWorkspacesWithLocal(sanitized, prev)
+              if (JSON.stringify(prev) === JSON.stringify(nextWs)) return prev
+              return nextWs
+            })
           }
           if (Array.isArray(serverData.transactions)) {
             const serverTxs = sanitizeUserTransactions(
@@ -940,7 +945,10 @@ export function ExbosProvider({ children }) {
               )
             )
             setTransactions((prev) => {
-              if (isInitial) return serverTxs
+              if (isInitial) {
+                if (JSON.stringify(prev) === JSON.stringify(serverTxs)) return prev
+                return serverTxs
+              }
               const seen = new Set()
               const out = []
               for (const tx of [...prev, ...serverTxs]) {
@@ -951,29 +959,45 @@ export function ExbosProvider({ children }) {
                 seen.add(tid)
                 out.push(tx)
               }
+              if (JSON.stringify(prev) === JSON.stringify(out)) return prev
               return out
             })
           }
           if (Array.isArray(serverData.businesses)) {
-            setBusinesses(
-              serverData.businesses.filter(
-                (b) =>
-                  !/^BIZ-10[0-9]{2}$/.test(String(b?.id || '')) &&
-                  !String(b?.status || '').toLowerCase().includes('demo')
-              )
+            const nextBiz = serverData.businesses.filter(
+              (b) =>
+                !/^BIZ-10[0-9]{2}$/.test(String(b?.id || '')) &&
+                !String(b?.status || '').toLowerCase().includes('demo')
             )
+            setBusinesses((prev) => (JSON.stringify(prev) === JSON.stringify(nextBiz) ? prev : nextBiz))
           }
           if (Array.isArray(serverData.savedAnalyses)) {
-            setSavedAnalyses(serverData.savedAnalyses)
+            setSavedAnalyses((prev) =>
+              JSON.stringify(prev) === JSON.stringify(serverData.savedAnalyses)
+                ? prev
+                : serverData.savedAnalyses
+            )
           }
           if (Array.isArray(serverData.exportHistory)) {
-            setExportHistory(serverData.exportHistory)
+            setExportHistory((prev) =>
+              JSON.stringify(prev) === JSON.stringify(serverData.exportHistory)
+                ? prev
+                : serverData.exportHistory
+            )
           }
           if (serverData.integrations && typeof serverData.integrations === 'object') {
-            setIntegrations(serverData.integrations)
+            setIntegrations((prev) =>
+              JSON.stringify(prev) === JSON.stringify(serverData.integrations)
+                ? prev
+                : serverData.integrations
+            )
           }
           if (serverData.superAdminBroadcast !== undefined) {
-            setSuperAdminBroadcast(serverData.superAdminBroadcast)
+            setSuperAdminBroadcast((prev) =>
+              JSON.stringify(prev) === JSON.stringify(serverData.superAdminBroadcast)
+                ? prev
+                : serverData.superAdminBroadcast
+            )
           }
         })
         .catch((err) => {
@@ -982,6 +1006,9 @@ export function ExbosProvider({ children }) {
         .finally(() => {
           if (isMounted) {
             isHydratedRef.current = true
+            setTimeout(() => {
+              isFetchingCloudRef.current = false
+            }, 150)
           }
         })
     }
@@ -1017,10 +1044,24 @@ export function ExbosProvider({ children }) {
       }
     } catch {}
 
-    if (!isHydratedRef.current) return
+    if (!isHydratedRef.current || isFetchingCloudRef.current) return
 
     const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
-    const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
+    if (!effectiveScope) return
+
+    const stateFingerprint = JSON.stringify({
+      workspaces,
+      transactions,
+      user,
+      savedAnalyses,
+      integrations,
+      exportHistory,
+      superAdminBroadcast
+    })
+    if (stateFingerprint === lastPostedHashRef.current) return
+    lastPostedHashRef.current = stateFingerprint
+
+    const scopeParam = `?scopeKey=${encodeURIComponent(effectiveScope)}`
     const payload = JSON.stringify({
       workspaces,
       transactions,
@@ -2109,9 +2150,10 @@ export function ExbosProvider({ children }) {
       if (backendUser) {
         localStorage.setItem('exbos_user', JSON.stringify(backendUser))
       }
-      if (backendUser?.architectureId) {
-        localStorage.setItem('exbos_active_arch', backendUser.architectureId)
-      }
+      const loginArch = backendUser?.architectureId || 'buy-and-sell'
+      localStorage.setItem('exbos_active_arch', loginArch)
+      localStorage.removeItem(`exbos_active_module_${loginArch}`)
+      localStorage.removeItem(`exbos_active_page_${loginArch}`)
     } catch {}
 
     if (backendWorkspaces && typeof backendWorkspaces === 'object') {
@@ -2233,6 +2275,10 @@ export function ExbosProvider({ children }) {
       localStorage.removeItem('exbos_saved_analyses')
       localStorage.removeItem('exbos_active_arch')
       localStorage.removeItem('exbos_active_branch')
+      SIX_ARCHITECTURES.forEach((a) => {
+        localStorage.removeItem(`exbos_active_module_${a.id}`)
+        localStorage.removeItem(`exbos_active_page_${a.id}`)
+      })
     } catch {}
   }
 
