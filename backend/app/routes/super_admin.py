@@ -600,6 +600,182 @@ def update_user_access(target_email: str):
     )
 
 
+@super_admin_bp.route("/users/<path:target_email>", methods=["DELETE"])
+@require_super_admin
+def super_admin_delete_user(target_email: str):
+    """
+    Permanently delete a user/business account and all associated tenant records
+    (staff accounts, businesses, workspaces, module_records, transactions, branches,
+    subscription_requests) from MongoDB Atlas.
+    """
+    db = get_db()
+    email = (target_email or "").strip().lower()
+    actor_email = g.super_admin_email
+
+    if not email or email == actor_email:
+        return error_response("You cannot delete your own Super Admin account.", status_code=400)
+
+    user_doc = db.users.find_one({"email": email})
+    if not user_doc:
+        return error_response(f"User '{email}' not found.", status_code=404)
+
+    if _is_super_admin_doc(user_doc, email):
+        return error_response("Revoke Super Admin privileges before deleting this account.", status_code=400)
+
+    payload = request.get_json(silent=True) or {}
+    reason = str(payload.get("reason") or "Deleted by Super Admin").strip()
+    is_owner = not bool(user_doc.get("ownerScopeKey"))
+
+    db.users.delete_one({"email": email})
+    removed_staff = 0
+    if is_owner:
+        res_staff = db.users.delete_many({"ownerScopeKey": email})
+        removed_staff = res_staff.deleted_count
+        db.businesses.delete_many({"email": email})
+        db.workspaces.delete_many({"scopeKey": email})
+        db.module_records.delete_many({"scopeKey": email})
+        db.products.delete_many({"scopeKey": email})
+        db.transactions.delete_many({"scopeKey": email})
+        db.branches.delete_many({"scopeKey": email})
+        db.subscription_requests.delete_many({"email": email})
+        db.tax_profiles.delete_many({"scopeKey": email})
+
+    _record_audit_log(
+        db=db,
+        actor_email=actor_email,
+        target_email=email,
+        action=f"Deleted Account ({'Owner + ' + str(removed_staff) + ' staff' if is_owner else 'Staff'})",
+        details={"isOwner": is_owner, "removedStaff": removed_staff},
+        reason=reason,
+    )
+
+    return success_response(
+        data={"email": email, "deleted": True, "removedStaff": removed_staff},
+        message=f"Permanently deleted user '{email}' and associated data.",
+    )
+
+
+@super_admin_bp.route("/users/<path:target_email>/revoke-payment", methods=["POST"])
+@require_super_admin
+def super_admin_revoke_payment(target_email: str):
+    """
+    Revoke a user's paid subscription due to corrupt/fraudulent/unverified payment proof.
+    Immediately downgrades the owner + staff back to Free (monthlySpendRWF = 0),
+    marks any linked subscription_requests as 'revoked', optionally suspends the account,
+    emails the user a clear notice, and records an audit trail entry.
+    """
+    db = get_db()
+    email = (target_email or "").strip().lower()
+    actor_email = g.super_admin_email
+    payload = request.get_json(silent=True) or {}
+    reason = str(payload.get("reason") or "Payment proof could not be verified or was flagged as invalid/corrupt.").strip()
+    suspend_also = bool(payload.get("suspendAccount", False))
+    req_id = str(payload.get("requestId") or "").strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    user_doc = db.users.find_one({"email": email})
+    if not user_doc:
+        return error_response(f"User '{email}' not found.", status_code=404)
+
+    prev_plan = user_doc.get("plan") or "Free"
+    audit_note = f"[Payment Revoked · {now_iso[:10]}] {reason}"
+
+    user_updates = {
+        "plan": "Free",
+        "planTier": "Free",
+        "billingType": "Free",
+        "subscriptionStatus": "Revoked",
+        "subscriptionExpiry": "",
+        "monthlySpendRWF": 0,
+        "auditNote": audit_note,
+        "updated_at": now_iso,
+    }
+    if suspend_also and email != actor_email:
+        user_updates["accountStatus"] = "Suspended"
+        user_updates["suspensionReason"] = reason
+
+    db.users.update_one({"email": email}, {"$set": user_updates})
+    staff_updates = {
+        "plan": "Free",
+        "planTier": "Free",
+        "billingType": "Free",
+        "subscriptionExpiry": "",
+        "updated_at": now_iso,
+    }
+    if suspend_also:
+        staff_updates["accountStatus"] = "Suspended"
+        staff_updates["suspensionReason"] = reason
+    db.users.update_many({"ownerScopeKey": email}, {"$set": staff_updates})
+
+    db.businesses.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "plan": "Free",
+                "billingType": "Free",
+                "status": "Suspended" if suspend_also else "Active",
+                "mrrRWF": 0,
+                "monthlySpendRWF": 0,
+                "expiryDate": "",
+                "auditNote": audit_note,
+                "updated_at": now_iso,
+            }
+        },
+    )
+
+    req_filter = {"id": req_id} if req_id else {"email": email, "status": {"$in": ["approved", "pending"]}}
+    db.subscription_requests.update_many(
+        req_filter,
+        {
+            "$set": {
+                "status": "revoked",
+                "reviewedBy": actor_email,
+                "reviewedAt": now_iso,
+                "reviewNote": reason,
+            }
+        },
+    )
+
+    _record_audit_log(
+        db=db,
+        actor_email=actor_email,
+        target_email=email,
+        action=f"Revoked Paid Plan ({prev_plan} -> Free){' + Suspended' if suspend_also else ''}",
+        details={"previousPlan": prev_plan, "requestId": req_id, "suspended": suspend_also},
+        reason=reason,
+    )
+
+    try:
+        biz_name = user_doc.get("businessName") or "your ExBOS workspace"
+        send_gmail_email(
+            to_email=email,
+            subject=f"[ExBOS Notice] Paid Subscription Revoked for {biz_name}",
+            html_body=render_exbos_email(
+                category="Billing Notice",
+                title="Subscription Payment Revoked",
+                greeting=f"Hello <strong>{user_doc.get('fullName') or email}</strong>,",
+                intro_html=f"Your paid subscription ({prev_plan}) for <strong>{biz_name}</strong> has been revoked by ExBOS Billing Administration and your workspace has been reverted to the Free plan.",
+                details=[
+                    ("Business Workspace", biz_name),
+                    ("Previous Plan", prev_plan),
+                    ("Current Plan", "Free"),
+                    ("Account Status", "Suspended" if suspend_also else "Active (Free Tier)"),
+                    ("Reason", reason),
+                ],
+                primary_cta=("Contact ExBOS Support", "https://exbos.pages.dev/dashboard"),
+                footer_note="If you believe this was in error, please submit a valid MTN MoMo / Airtel Money / Bank confirmation receipt.",
+            ),
+            text_body=f"Your ExBOS paid subscription ({prev_plan}) for {biz_name} has been revoked. Reason: {reason}",
+        )
+    except Exception:
+        pass
+
+    return success_response(
+        data={"email": email, "plan": "Free", "suspended": suspend_also},
+        message=f"Payment revoked for {email} (reverted {prev_plan} to Free{' and suspended' if suspend_also else ''}).",
+    )
+
+
 @super_admin_bp.route("/users/<path:target_email>/subscription", methods=["PATCH"])
 @require_super_admin
 def update_user_subscription(target_email: str):

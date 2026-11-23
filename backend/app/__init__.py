@@ -1,12 +1,12 @@
 import logging
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager
+from flask_jwt_extended import JWTManager, get_jwt_identity, verify_jwt_in_request
 from pymongo.errors import PyMongoError
 from werkzeug.exceptions import HTTPException
 
 from app.config import BaseConfig, get_config
-from app.database import init_db
+from app.database import get_db, init_db
 from app.routes import register_blueprints
 from app.utils.responses import error_response
 
@@ -74,6 +74,83 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
 
     # 4. Register all modular Blueprints
     register_blueprints(app)
+
+    # 4b. Live Enforcement: immediately block any API call from a Suspended or Deleted user
+    @app.before_request
+    def enforce_live_account_status():
+        if request.method == "OPTIONS":
+            return None
+        path = request.path or ""
+        if not path.startswith("/api/"):
+            return None
+        # Allow public/auth/health endpoints to pass without active-session suspension block
+        if (
+            path.startswith("/api/v1/health")
+            or path.startswith("/api/v1/auth/login")
+            or path.startswith("/api/v1/auth/register")
+            or path.startswith("/api/v1/auth/send-verification")
+            or path.startswith("/api/v1/auth/verify-email")
+            or path.startswith("/api/v1/auth/verification-status")
+            or path.startswith("/api/v1/auth/forgot-password")
+            or path.startswith("/api/v1/auth/reset-password")
+            or path.startswith("/api/v1/documents/public/")
+        ):
+            return None
+
+        email_to_check = ""
+        try:
+            verify_jwt_in_request(optional=True)
+            ident = get_jwt_identity()
+            if isinstance(ident, str) and ident.strip():
+                email_to_check = ident.strip().lower()
+        except Exception:
+            pass
+
+        if not email_to_check:
+            return None
+
+        try:
+            db = get_db()
+            user_doc = db.users.find_one(
+                {"email": email_to_check},
+                {"accountStatus": 1, "suspensionReason": 1, "ownerScopeKey": 1, "isSuperAdmin": 1},
+            )
+            if user_doc is None:
+                return error_response(
+                    error="This account has been deleted by the ExBOS administrator.",
+                    details={"code": "ACCOUNT_DELETED"},
+                    status_code=403,
+                )
+            if str(user_doc.get("accountStatus") or "Active").lower() == "suspended":
+                reason = user_doc.get("suspensionReason") or "Suspended by ExBOS Super Administrator."
+                return error_response(
+                    error=f"Your account has been suspended: {reason}",
+                    details={"code": "ACCOUNT_SUSPENDED", "reason": reason},
+                    status_code=403,
+                )
+            # Also enforce if the parent owner of a staff account was suspended
+            owner_key = str(user_doc.get("ownerScopeKey") or "").strip().lower()
+            if owner_key and owner_key != email_to_check:
+                owner_doc = db.users.find_one(
+                    {"email": owner_key},
+                    {"accountStatus": 1, "suspensionReason": 1},
+                )
+                if owner_doc is None:
+                    return error_response(
+                        error="Your workspace account has been removed by the administrator.",
+                        details={"code": "ACCOUNT_DELETED"},
+                        status_code=403,
+                    )
+                if str(owner_doc.get("accountStatus") or "Active").lower() == "suspended":
+                    reason = owner_doc.get("suspensionReason") or "Workspace suspended by ExBOS Super Administrator."
+                    return error_response(
+                        error=f"Your workspace has been suspended: {reason}",
+                        details={"code": "ACCOUNT_SUSPENDED", "reason": reason},
+                        status_code=403,
+                    )
+        except Exception:
+            pass
+        return None
 
     # 5. Global JSON error handlers
     @app.errorhandler(400)

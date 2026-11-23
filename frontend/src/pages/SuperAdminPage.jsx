@@ -412,6 +412,49 @@ export default function SuperAdminPage() {
     refreshAll()
   }
 
+  const handleRevokePayment = async (targetUser, reqId = '') => {
+    const reason = window.prompt(
+      `Revoke paid subscription for ${targetUser.email} due to corrupt/invalid payment?\nEnter reason:`,
+      'Corrupt or unverified payment proof'
+    )
+    if (!reason) return
+    const suspendAlso = window.confirm(
+      `Also suspend ${targetUser.email}'s account immediately while revoking payment?`
+    )
+    const res = await apiClient.superAdminRevokePayment(targetUser.email, {
+      reason,
+      suspendAccount: suspendAlso,
+      requestId: reqId
+    })
+    if (!res.ok) {
+      showError(res.error || 'Could not revoke payment.')
+      return
+    }
+    showNotice(res.data?.message || `Payment revoked for ${targetUser.email}.`)
+    refreshAll()
+  }
+
+  const handleDeleteUser = async (targetUser) => {
+    const confirmed = window.confirm(
+      `PERMANENTLY DELETE ${targetUser.email} (${targetUser.businessName}) and all their workspaces, staff, and records from MongoDB Atlas?\n\nThis action cannot be undone.`
+    )
+    if (!confirmed) return
+    const reason = window.prompt(
+      `Enter audit reason for deleting ${targetUser.email}:`,
+      'Account removed by Super Admin'
+    )
+    if (reason === null) return
+    const res = await apiClient.superAdminDeleteUser(targetUser.email, {
+      reason: reason || 'Account removed by Super Admin'
+    })
+    if (!res.ok) {
+      showError(res.error || 'Failed to delete user.')
+      return
+    }
+    showNotice(res.data?.message || `Deleted user ${targetUser.email}.`)
+    refreshAll()
+  }
+
   const handleApplySubscriptionChange = async (e) => {
     e.preventDefault()
     if (!selectedUserEmail) {
@@ -1353,6 +1396,26 @@ export default function SuperAdminPage() {
                               Paid: {String(u.paidAt).slice(0, 16).replace('T', ' ')}
                             </div>
                           )}
+                          {u.paymentMessageCopy && (
+                            <div className="mt-1.5 p-2 rounded-xl bg-white/5 border border-white/10 text-[10px] text-slate-200 font-mono whitespace-pre-wrap max-w-xs">
+                              <span className="text-[#9EDCFF] font-sans font-bold uppercase tracking-wider block mb-0.5">
+                                Payment Confirmation Message:
+                              </span>
+                              {u.paymentMessageCopy}
+                            </div>
+                          )}
+                          {u.paymentScreenshot && (
+                            <div className="mt-1">
+                              <a
+                                href={u.paymentScreenshot}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] text-[#9EDCFF] underline font-semibold"
+                              >
+                                View Payment Screenshot
+                              </a>
+                            </div>
+                          )}
                           {u.timeRemainingLabel && (
                             <div
                               className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-bold ${
@@ -1365,7 +1428,7 @@ export default function SuperAdminPage() {
                                   : 'bg-white/5 text-slate-400'
                               }`}
                             >
-                              ⏱ {u.timeRemainingLabel}
+                              {u.timeRemainingLabel}
                             </div>
                           )}
                         </td>
@@ -1443,6 +1506,26 @@ export default function SuperAdminPage() {
                                     </>
                                   )}
                                 </button>
+                                {String(u.plan || 'Free').toLowerCase() !== 'free' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRevokePayment(u)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 font-bold text-[10px] cursor-pointer"
+                                    title="Revoke paid plan due to corrupt or invalid payment proof"
+                                  >
+                                    Revoke Payment
+                                  </button>
+                                )}
+                                {!u.isSuperAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteUser(u)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/40 text-rose-200 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                                    title="Permanently delete user and all workspace data"
+                                  >
+                                    <Trash2 className="w-3 h-3" /> Delete
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>
@@ -1531,24 +1614,39 @@ export default function SuperAdminPage() {
                           </div>
                         )}
                       </div>
-                      {req.status === 'pending' && (
+                      {req.status === 'pending' ? (
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             onClick={() => handleReviewUpgrade(req.id, 'approve')}
                             className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[11px] cursor-pointer"
                           >
-                            ✓ Approve (30d Paid)
+                            Approve (30d Paid)
                           </button>
                           <button
                             type="button"
                             onClick={() => handleReviewUpgrade(req.id, 'reject')}
-                            className="px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-[11px] cursor-pointer"
+                            className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-[11px] cursor-pointer"
                           >
                             Reject
                           </button>
                         </div>
-                      )}
+                      ) : req.status === 'approved' ? (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRevokePayment(
+                                { email: req.email, businessName: req.businessName },
+                                req.id
+                              )
+                            }
+                            className="px-3.5 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 text-rose-200 font-bold text-[11px] cursor-pointer"
+                          >
+                            Revoke Payment
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1614,7 +1712,22 @@ export default function SuperAdminPage() {
                       )}
                       {biz.paymentMessageCopy && (
                         <div className="p-2 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-200 font-mono whitespace-pre-wrap">
-                          Payment Message Copy: {biz.paymentMessageCopy}
+                          <span className="text-[#9EDCFF] font-sans font-bold uppercase tracking-wider text-[10px] block mb-0.5">
+                            Payment Confirmation Message:
+                          </span>
+                          {biz.paymentMessageCopy}
+                        </div>
+                      )}
+                      {biz.paymentScreenshot && (
+                        <div className="pt-0.5">
+                          <a
+                            href={biz.paymentScreenshot}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] text-[#9EDCFF] underline font-semibold"
+                          >
+                            View Uploaded Payment Screenshot
+                          </a>
                         </div>
                       )}
                       {biz.auditNote && (
@@ -1637,24 +1750,36 @@ export default function SuperAdminPage() {
                             : 'bg-white/10 text-slate-300'
                         }`}
                       >
-                        ⏱ {biz.timeRemainingLabel || (biz.subscriptionExpiry ? `Exp: ${biz.subscriptionExpiry}` : biz.subscriptionStatus)}
+                        {biz.timeRemainingLabel || (biz.subscriptionExpiry ? `Exp: ${biz.subscriptionExpiry}` : biz.subscriptionStatus)}
                       </div>
                       {biz.subscriptionExpiry && (
                         <div className="text-[10px] text-slate-400">
                           Renewal Due: {biz.subscriptionExpiry}
                         </div>
                       )}
-                      <div>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleQuickRenew30Days(biz)
                           }}
-                          className="mt-1 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-200 text-[10px] font-bold cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400/40 text-emerald-200 text-[10px] font-bold cursor-pointer"
                         >
                           +30 Days Renew
                         </button>
+                        {String(biz.plan || 'Free').toLowerCase() !== 'free' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRevokePayment(biz)
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-400/40 text-rose-200 text-[10px] font-bold cursor-pointer"
+                          >
+                            Revoke Payment
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1886,7 +2011,7 @@ export default function SuperAdminPage() {
                 {/* Numeric Quotas with Unlimited Toggle */}
                 <div>
                   <h4 className="text-xs font-orbitron uppercase text-[#9EDCFF] font-bold mb-2.5">
-                    Numeric Quotas (Check &ldquo;∞ Unlimited&rdquo; for no limit)
+                    Numeric Quotas (Check &ldquo;Unlimited&rdquo; for no limit)
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
                     {[
@@ -1913,12 +2038,12 @@ export default function SuperAdminPage() {
                                   updateEditingTierField(q.key, e.target.checked ? null : 1)
                                 }
                               />
-                              <span>∞</span>
+                              <span>Unlim</span>
                             </label>
                           </div>
                           {isUnlim ? (
                             <div className="py-1.5 px-2.5 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-orbitron font-bold text-center text-[11px]">
-                              ∞ Unlimited
+                              Unlimited
                             </div>
                           ) : (
                             <input

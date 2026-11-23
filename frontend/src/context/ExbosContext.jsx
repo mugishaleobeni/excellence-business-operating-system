@@ -926,7 +926,24 @@ export function ExbosProvider({ children }) {
         headers: getAuthHeaders(),
         cache: 'no-store'
       })
-        .then((res) => (res.ok ? res.json() : null))
+        .then(async (res) => {
+          if (res.status === 403) {
+            const errJson = await res.json().catch(() => ({}))
+            const code = errJson?.details?.code || errJson?.code || ''
+            if (code === 'ACCOUNT_SUSPENDED' || code === 'ACCOUNT_DELETED') {
+              window.dispatchEvent(
+                new CustomEvent('exbos:account-suspended', {
+                  detail: {
+                    code,
+                    reason: errJson?.details?.reason || errJson?.error || 'Your account has been suspended.'
+                  }
+                })
+              )
+            }
+            return null
+          }
+          return res.ok ? res.json() : null
+        })
         .then((serverData) => {
           if (!isMounted || !serverData) return
           isFetchingCloudRef.current = true
@@ -1020,12 +1037,36 @@ export function ExbosProvider({ children }) {
         fetchAndSyncCloud(false)
       }
     }
+    const onAccountSuspended = (ev) => {
+      const reason = ev?.detail?.reason || 'Your account has been suspended by ExBOS Super Admin.'
+      const isDeleted = ev?.detail?.code === 'ACCOUNT_DELETED'
+      isHydratedRef.current = false
+      setUser(null)
+      setWorkspaces(createCleanWorkspaces())
+      setTransactions([])
+      try {
+        localStorage.removeItem('exbos_access_token')
+        localStorage.removeItem('exbos_user')
+        localStorage.removeItem('exbos_workspaces_v2')
+        localStorage.removeItem('exbos_transactions')
+      } catch {}
+      addToast({
+        type: 'error',
+        title: isDeleted ? 'Account Removed' : 'Account Suspended',
+        message: reason
+      })
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = `/login?suspended=1`
+      }
+    }
+    window.addEventListener('exbos:account-suspended', onAccountSuspended)
     window.addEventListener('focus', onFocusOrVisible)
     document.addEventListener('visibilitychange', onFocusOrVisible)
     const syncTimer = setInterval(() => fetchAndSyncCloud(false), 7000)
 
     return () => {
       isMounted = false
+      window.removeEventListener('exbos:account-suspended', onAccountSuspended)
       window.removeEventListener('focus', onFocusOrVisible)
       document.removeEventListener('visibilitychange', onFocusOrVisible)
       clearInterval(syncTimer)

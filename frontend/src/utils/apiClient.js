@@ -93,6 +93,19 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
       }
     }
     const data = await response.json().catch(() => null)
+    if (response.status === 403 && typeof window !== 'undefined') {
+      const code = data?.details?.code || data?.code || ''
+      if (code === 'ACCOUNT_SUSPENDED' || code === 'ACCOUNT_DELETED') {
+        window.dispatchEvent(
+          new CustomEvent('exbos:account-suspended', {
+            detail: {
+              code,
+              reason: data?.details?.reason || data?.error || 'Your account has been suspended by ExBOS Super Admin.'
+            }
+          })
+        )
+      }
+    }
     if (response.status === 402 && typeof window !== 'undefined') {
       const detail =
         (data?.details && typeof data.details === 'object' ? data.details : null) || {
@@ -317,6 +330,16 @@ export const exbosApi = {
   superAdminReviewUpgradeRequest: (reqId, payload = {}) =>
     apiRequest(`/super-admin/upgrade-requests/${encodeURIComponent(reqId)}/review`, {
       method: 'POST',
+      body: payload
+    }),
+  superAdminRevokePayment: (email, payload = {}) =>
+    apiRequest(`/super-admin/users/${encodeURIComponent(email)}/revoke-payment`, {
+      method: 'POST',
+      body: payload
+    }),
+  superAdminDeleteUser: (email, payload = {}) =>
+    apiRequest(`/super-admin/users/${encodeURIComponent(email)}`, {
+      method: 'DELETE',
       body: payload
     }),
   superAdminGetPlanLimits: () => apiRequest('/super-admin/plan-limits'),
