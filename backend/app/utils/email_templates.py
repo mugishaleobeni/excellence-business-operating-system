@@ -236,3 +236,4 @@ def render_exbos_email(
   </table>
 </body>
 </html>"""
+
