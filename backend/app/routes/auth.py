@@ -27,6 +27,7 @@ from app.seed_defaults import (
     get_default_workspaces,
 )
 from app.utils.mailer import send_gmail_email
+from app.utils.email_templates import render_exbos_email
 from app.utils.responses import error_response, success_response, validate_json
 from app.utils.security import generate_numeric_code, hash_password, verify_password
 
@@ -162,24 +163,17 @@ def send_email_verification(validated_data: SendVerificationSchema):
             f"{verify_link}\n\n"
             f"This code expires in 15 minutes."
         ),
-        html_body=(
-            f"<div style='font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:28px;background:#03091F;color:#ffffff;border-radius:16px;border:1px solid #218DFF;'>"
-            f"<div style='font-size:11px;font-weight:800;color:#9EDCFF;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px;'>EXCELLENCE BUSINESS OPERATING SYSTEM</div>"
-            f"<h2 style='color:#ffffff;margin-top:0;margin-bottom:12px;'>Verify Your Email Address</h2>"
-            f"<p style='color:#cbd5e1;font-size:14px;line-height:1.6;'>Hello <strong>{validated_data.fullName}</strong>, copy the 6-digit code below or click the instant verification button:</p>"
-            f"<div style='margin:20px 0;padding:18px;background:#071544;border:2px dashed #218DFF;border-radius:12px;text-align:center;'>"
-            f"<div style='font-size:11px;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>6-Digit Verification Code (Tap to Select &amp; Copy)</div>"
-            f"<div style='font-size:32px;font-weight:800;letter-spacing:8px;color:#ffffff;font-family:monospace;user-select:all;-webkit-user-select:all;cursor:pointer;'>{code}</div>"
-            f"</div>"
-            f"<div style='text-align:center;margin:22px 0;'>"
-            f"<a href='{verify_link}' style='display:inline-block;margin:6px;padding:13px 24px;background:linear-gradient(135deg,#218DFF,#0055FF);color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;'>&#10003; Verify Email Instantly</a>"
-            f"<a href='{copy_link}' style='display:inline-block;margin:6px;padding:13px 20px;background:#0B215E;border:1px solid #9EDCFF;color:#9EDCFF;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;'>&#128203; Copy Code &amp; Auto-Fill</a>"
-            f"</div>"
-            f"<p style='color:#94a3b8;font-size:12px;line-height:1.5;margin-top:18px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;'>"
-            f"Valid for 15 minutes. If the buttons above do not open, paste this verified link into your browser:<br/>"
-            f"<a href='{verify_link}' style='color:#9EDCFF;word-break:break-all;'>{verify_link}</a>"
-            f"</p>"
-            f"</div>"
+        html_body=render_exbos_email(
+            category="Account Security",
+            title="Verify Your Email Address",
+            greeting=f"Hello <strong>{validated_data.fullName}</strong>,",
+            intro_html="Thank you for registering with ExBOS. Enter the 6-digit verification code below or use the instant verification button to continue setting up your business workspace.",
+            code=code,
+            code_label="6-Digit Verification Code",
+            primary_cta=("Verify Email Instantly", verify_link),
+            secondary_cta=("Copy Code & Auto-Fill", copy_link),
+            footer_note="This verification code is valid for 15 minutes. If you did not request this email, you may safely ignore it.",
+            fallback_link=verify_link,
         ),
     )
 
@@ -614,25 +608,18 @@ def login_user(validated_data: LoginSchema):
             frontend_origin = _resolve_frontend_origin()
             verify_2fa_link = f"{frontend_origin}/login?email={quote(email_lower)}&otp={quote(code)}"
             copy_2fa_link = f"{frontend_origin}/login?email={quote(email_lower)}&otp={quote(code)}&copy=1"
-            html_body = f"""
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #040D29; color: #ffffff; border-radius: 16px; padding: 32px; border: 1px solid #218DFF;">
-                <h2 style="color: #9EDCFF; margin-top: 0;">ExBOS Login 2-Step Verification</h2>
-                <p style="color: #cbd5e1; font-size: 15px; line-height: 1.6;">
-                    Hello <strong>{user_name}</strong>, copy the 6-digit security code below or click the button to auto-fill your sign-in:
-                </p>
-                <div style="margin: 22px 0; padding: 20px; background: #0B194C; border: 2px dashed #218DFF; border-radius: 12px; text-align: center;">
-                    <div style="font-size: 11px; color: #9EDCFF; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">6-Digit Security Code (Tap to Select &amp; Copy)</div>
-                    <span style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #ffffff; font-family: monospace; user-select: all; -webkit-user-select: all;">{code}</span>
-                </div>
-                <div style="text-align: center; margin: 22px 0;">
-                    <a href="{verify_2fa_link}" style="display: inline-block; margin: 6px; padding: 13px 24px; background: linear-gradient(135deg, #218DFF, #0055FF); color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; border-radius: 10px;">&#10003; Open Sign-In with Code Filled</a>
-                    <a href="{copy_2fa_link}" style="display: inline-block; margin: 6px; padding: 13px 20px; background: #0B215E; border: 1px solid #9EDCFF; color: #9EDCFF; text-decoration: none; font-size: 13px; font-weight: 700; border-radius: 10px;">&#128203; Copy 6-Digit Code</a>
-                </div>
-                <p style="color: #94a3b8; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-                    This code expires in 15 minutes. Verified link: <a href="{verify_2fa_link}" style="color: #9EDCFF; word-break: break-all;">{verify_2fa_link}</a>
-                </p>
-            </div>
-            """
+            html_body = render_exbos_email(
+                category="2-Step Login",
+                title="Sign-In Security Verification",
+                greeting=f"Hello <strong>{user_name}</strong>,",
+                intro_html="A sign-in attempt to your ExBOS workspace requires 2-step verification. Enter the 6-digit security code below or click the verified link to complete your sign-in.",
+                code=code,
+                code_label="6-Digit Login Security Code",
+                primary_cta=("Open Sign-In with Code Filled", verify_2fa_link),
+                secondary_cta=("Copy 6-Digit Code", copy_2fa_link),
+                footer_note="This security code expires in 15 minutes. If you did not attempt to sign in, please update your password immediately.",
+                fallback_link=verify_2fa_link,
+            )
             text_body = (
                 f"Your ExBOS 2-Step Login Verification code is: {code} (valid for 15 minutes).\n"
                 f"Or click this verified link to auto-fill your sign-in: {verify_2fa_link}"
@@ -842,20 +829,16 @@ def forgot_password(validated_data: ForgotPasswordSchema):
             f"Your ExBOS password reset code is: {code} (valid for 15 minutes).\n"
             f"Or open this verified reset link: {reset_link}"
         ),
-        html_body=(
-            f"<div style='font-family:Segoe UI,Arial,sans-serif;max-width:560px;margin:0 auto;padding:28px;background:#03091F;color:#ffffff;border-radius:16px;border:1px solid #218DFF;'>"
-            f"<h2 style='color:#218DFF;margin-top:0;'>ExBOS Password Reset Verification</h2>"
-            f"<p style='color:#cbd5e1;font-size:14px;line-height:1.6;'>Copy the 6-digit verification code below or click the button to open the password reset screen with your code pre-filled:</p>"
-            f"<div style='margin:20px 0;padding:18px;background:#071544;border:2px dashed #218DFF;border-radius:12px;text-align:center;'>"
-            f"<div style='font-size:11px;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;'>6-Digit Reset Code (Tap to Select &amp; Copy)</div>"
-            f"<div style='font-size:32px;font-weight:800;letter-spacing:8px;color:#ffffff;font-family:monospace;user-select:all;-webkit-user-select:all;'>{code}</div>"
-            f"</div>"
-            f"<div style='text-align:center;margin:22px 0;'>"
-            f"<a href='{reset_link}' style='display:inline-block;margin:6px;padding:13px 24px;background:linear-gradient(135deg,#218DFF,#0055FF);color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;border-radius:10px;'>&#10003; Reset Password via Verified Link</a>"
-            f"<a href='{copy_reset_link}' style='display:inline-block;margin:6px;padding:13px 20px;background:#0B215E;border:1px solid #9EDCFF;color:#9EDCFF;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;'>&#128203; Copy 6-Digit Code</a>"
-            f"</div>"
-            f"<p style='color:#94a3b8;font-size:12px;margin-top:16px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;'>This code expires in 15 minutes.<br/><a href='{reset_link}' style='color:#9EDCFF;word-break:break-all;'>{reset_link}</a></p>"
-            f"</div>"
+        html_body=render_exbos_email(
+            category="Password Reset",
+            title="Reset Your ExBOS Password",
+            intro_html="We received a request to reset the password for your ExBOS account. Use the 6-digit verification code below or click the button to open the password reset form pre-filled.",
+            code=code,
+            code_label="6-Digit Password Reset Code",
+            primary_cta=("Reset Password via Verified Link", reset_link),
+            secondary_cta=("Copy 6-Digit Code", copy_reset_link),
+            footer_note="This reset code expires in 15 minutes. If you did not request a password reset, no action is required.",
+            fallback_link=reset_link,
         ),
     )
 
@@ -1152,38 +1135,31 @@ def invite_team_member():
     login_link = f"{app_origin}/login?email={member_email}"
     email_sent = False
     try:
-        pwd_note = (
-            f"<p style='margin:10px 0;color:#e2e8f0;'><strong>Temporary Password:</strong> <code style='background:#071544;padding:3px 8px;border-radius:6px;color:#9EDCFF;'>{raw_password}</code></p>"
-            if raw_password
-            else "<p style='margin:10px 0;color:#cbd5e1;'>Use your existing ExBOS password to sign in.</p>"
+        invite_details = [
+            ("Workspace", business_name),
+            ("Login Email", member_email),
+            ("Assigned Role", role),
+        ]
+        if raw_password:
+            invite_details.append(
+                (
+                    "Temporary Password",
+                    f'<code style="background:#EEF4FB;border:1px solid #BFDBFE;padding:3px 8px;border-radius:6px;color:#0A2786;font-family:monospace;">{raw_password}</code>',
+                )
+            )
+        else:
+            invite_details.append(("Password", "Use your existing ExBOS password"))
+
+        html_body = render_exbos_email(
+            category="Team Invitation",
+            title=f"You Are Invited to {business_name}",
+            greeting=f"Hello <strong>{full_name}</strong>,",
+            intro_html=f"<strong>{actor.get('fullName') or owner_scope}</strong> has added you to the <strong>{business_name}</strong> workspace on ExBOS with the role of <strong>{role}</strong>.",
+            details=invite_details,
+            primary_cta=("Sign In to ExBOS Workspace", login_link),
+            footer_note="For your security, please change your temporary password after your first sign-in.",
+            fallback_link=login_link,
         )
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <body style="background:#03091F;color:#ffffff;font-family:sans-serif;padding:24px;">
-            <div style="max-width:560px;margin:0 auto;background:#0A2786;border:1px solid #218DFF;border-radius:16px;padding:26px;">
-                <div style="font-size:11px;font-weight:800;color:#9EDCFF;text-transform:uppercase;letter-spacing:1px;">
-                    EXCELLENCE BOS · TEAM INVITATION
-                </div>
-                <h2 style="color:#ffffff;margin-top:10px;">You've been invited to {business_name}</h2>
-                <p style="color:#cbd5e1;font-size:14px;line-height:1.5;">
-                    Hello <strong>{full_name}</strong>,<br/>
-                    <strong>{actor.get('fullName') or owner_scope}</strong> has added you to the <strong>{business_name}</strong> workspace on ExBOS as <strong>{role}</strong>.
-                </p>
-                <div style="background:rgba(7,21,68,0.85);border:1px solid rgba(158,220,255,0.28);border-radius:12px;padding:14px;margin:16px 0;font-size:13px;">
-                    <div><strong style="color:#9EDCFF;">Login Email:</strong> {member_email}</div>
-                    <div><strong style="color:#9EDCFF;">Assigned Role:</strong> {role}</div>
-                    {pwd_note}
-                </div>
-                <div style="text-align:center;margin-top:22px;">
-                    <a href="{login_link}" style="display:inline-block;padding:12px 24px;background:#218DFF;color:#ffffff;text-decoration:none;font-size:13px;font-weight:700;border-radius:10px;">
-                        Sign In to ExBOS &rarr;
-                    </a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
         email_sent = send_gmail_email(
             to_email=member_email,
             subject=f"You're invited to {business_name} on ExBOS ({role})",

@@ -16,6 +16,7 @@ from app.seed_defaults import (
     DEFAULT_PRICING_PLANS,
 )
 from app.utils.mailer import send_gmail_email
+from app.utils.email_templates import render_exbos_email
 from app.utils.responses import error_response, success_response, validate_json
 
 logger = logging.getLogger("app.super_admin")
@@ -740,15 +741,19 @@ def update_user_subscription(target_email: str):
             send_gmail_email(
                 to_email=email,
                 subject=f"[ExBOS] Subscription Updated: {plan} ({billing_type})",
-                html_body=(
-                    f"<div style='font-family:sans-serif;background:#03091F;color:#fff;padding:24px;border-radius:12px;'>"
-                    f"<h2 style='color:#9EDCFF;'>ExBOS Subscription Update</h2>"
-                    f"<p>Hello <strong>{user_doc.get('fullName') or email}</strong>,</p>"
-                    f"<p>Your subscription for <strong>{biz_name}</strong> has been updated to "
-                    f"<strong>{plan}</strong> ({billing_type}).</p>"
-                    f"<p><strong>Expiry:</strong> {expiry_date or 'No fixed expiry'}<br/>"
-                    f"<strong>Note:</strong> {reason}</p>"
-                    f"</div>"
+                html_body=render_exbos_email(
+                    category="Billing & Subscription",
+                    title="Your ExBOS Subscription Was Updated",
+                    greeting=f"Hello <strong>{user_doc.get('fullName') or email}</strong>,",
+                    intro_html=f"Your ExBOS workspace subscription for <strong>{biz_name}</strong> has been updated by the ExBOS administration team.",
+                    details=[
+                        ("Business Workspace", biz_name),
+                        ("Active Plan Tier", f"{plan} ({billing_type})"),
+                        ("Valid Until / Expiry", expiry_date or "No fixed expiry"),
+                        ("Update Note", reason or "Account subscription updated"),
+                    ],
+                    primary_cta=("Open ExBOS Dashboard", "https://exbos.pages.dev/dashboard"),
+                    footer_note="Thank you for growing your business with Excellence Business Operating System.",
                 ),
                 text_body=f"Your ExBOS subscription for {biz_name} is now {plan} ({billing_type}). Expiry: {expiry_date or 'N/A'}. Reason: {reason}",
             )
@@ -1519,14 +1524,19 @@ def review_upgrade_request(req_id: str):
         send_gmail_email(
             to_email=target_email,
             subject=f"[ExBOS Receipt] {requested_plan} Plan Activated until {expiry_date}",
-            html_body=(
-                f"<div style='font-family:sans-serif;background:#03091F;color:#fff;padding:24px;border-radius:12px;'>"
-                f"<h2 style='color:#9EDCFF;'>ExBOS Subscription Activated</h2>"
-                f"<p>Your payment (Ref: <strong>{req_doc.get('paymentReference')}</strong>) has been verified.</p>"
-                f"<p><strong>Plan:</strong> {requested_plan} (Paid)<br/>"
-                f"<strong>Amount:</strong> {amount_rwf:,.0f} RWF<br/>"
-                f"<strong>Valid Until:</strong> {expiry_date}</p>"
-                f"</div>"
+            html_body=render_exbos_email(
+                category="Payment Receipt",
+                title=f"{requested_plan} Plan Activated",
+                intro_html="Your subscription payment has been verified and your ExBOS workspace has been upgraded immediately.",
+                details=[
+                    ("Plan Activated", f"{requested_plan} (Paid)"),
+                    ("Amount Paid", f"{amount_rwf:,.0f} RWF"),
+                    ("Payment Reference", str(req_doc.get("paymentReference") or "Verified")),
+                    ("Payment Channel", str(req_doc.get("paymentMethod") or "Mobile Money / Bank")),
+                    ("Valid Until", str(expiry_date)),
+                ],
+                primary_cta=("Go to Your Dashboard", "https://exbos.pages.dev/dashboard"),
+                footer_note="Please keep this email as your official ExBOS subscription payment confirmation.",
             ),
             text_body=f"Your ExBOS {requested_plan} plan is now active until {expiry_date}. Payment ref: {req_doc.get('paymentReference')}.",
         )

@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from app.database import get_db, serialize_doc
 from app.utils.mailer import send_gmail_email
+from app.utils.email_templates import render_exbos_email
 from app.utils.responses import error_response, success_response
 
 logger = logging.getLogger("app.integrations")
@@ -319,32 +320,20 @@ def test_gmail_connection():
     now_str = datetime.now(timezone.utc).strftime("%d %B %Y at %H:%M UTC")
 
     subject = f"[ExBOS Live Test] Gmail Integration Verified for {business_name}"
-    html_body = f"""
-    <!DOCTYPE html>
-    <html>
-    <body style="background: #03091F; color: #ffffff; font-family: sans-serif; padding: 20px;">
-        <div style="max-width: 580px; margin: 0 auto; background: #0A2786; border: 1px solid #218DFF; border-radius: 16px; padding: 24px;">
-            <div style="font-size: 11px; font-weight: 800; color: #9EDCFF; text-transform: uppercase; letter-spacing: 1px;">
-                EXCELLENCE BOS · GMAIL INTEGRATION VERIFIED
-            </div>
-            <h2 style="color: #ffffff; margin-top: 10px;">Live SMTP Connection Active!</h2>
-            <p style="color: #cbd5e1; font-size: 13px; line-height: 1.6;">
-                This test email confirms that your ExBOS business workspace for <strong style="color: #ffffff;">{business_name}</strong>
-                is successfully synchronized with Google Gmail SMTP.
-            </p>
-            <div style="background: rgba(7, 21, 68, 0.8); border: 1px solid rgba(158,220,255,0.3); border-radius: 12px; padding: 14px; margin: 16px 0; font-size: 12px;">
-                <div style="margin-bottom: 6px;"><strong style="color: #9EDCFF;">Linked Account:</strong> {target_email}</div>
-                <div style="margin-bottom: 6px;"><strong style="color: #9EDCFF;">Verified At:</strong> {now_str}</div>
-                <div style="margin-bottom: 6px;"><strong style="color: #9EDCFF;">Security:</strong> SSL Encrypted Port 465 (smtp.gmail.com)</div>
-                <div><strong style="color: #9EDCFF;">Database Status:</strong> Connected (MongoDB Atlas exbos_db)</div>
-            </div>
-            <p style="color: #94a3b8; font-size: 11px;">
-                You can now export financial reports, invoices, receipts, and ledger statements directly to your inbox with a single tap.
-            </p>
-        </div>
-    </body>
-    </html>
-    """
+    html_body = render_exbos_email(
+        category="Gmail Verified",
+        title="Live Email Integration Active",
+        intro_html=f"This confirmation verifies that your ExBOS workspace for <strong>{business_name}</strong> is connected and ready to dispatch financial reports, invoices, receipts, and statements directly to your inbox.",
+        details=[
+            ("Business Workspace", business_name),
+            ("Linked Email Account", target_email),
+            ("Verified At", now_str),
+            ("Transport Security", "TLS / SSL Encrypted (smtp.gmail.com)"),
+            ("Database Status", "Connected (MongoDB Atlas)"),
+        ],
+        primary_cta=("Open ExBOS Dashboard", "https://exbos.pages.dev/dashboard"),
+        footer_note="You can now send financial reports, RRA tax packs, and client statements with a single click.",
+    )
 
     # Send live email
     delivered = send_gmail_email(
@@ -760,33 +749,21 @@ def export_report_to_google_drive():
     # Deliver a backup synchronization notification to user's real email
     try:
         notify_subject = f"[Google Drive Backup] {report_title} Synchronized · {business_name}"
-        notify_html = f"""
-        <!DOCTYPE html>
-        <html>
-        <body style="background: #03091F; color: #ffffff; font-family: sans-serif; padding: 20px;">
-            <div style="max-width: 580px; margin: 0 auto; background: #0A2786; border: 1px solid #218DFF; border-radius: 16px; padding: 24px;">
-                <div style="font-size: 11px; font-weight: 800; color: #9EDCFF; text-transform: uppercase;">
-                    EXCELLENCE BOS · GOOGLE DRIVE VAULT
-                </div>
-                <h2 style="color: #ffffff; margin-top: 10px;">Report Synchronized to Drive Vault</h2>
-                <p style="color: #cbd5e1; font-size: 13px;">
-                    The report <strong style="color: #ffffff;">{report_title}</strong> ({report_format}) has been backed up to your Google Drive destination folder:
-                </p>
-                <div style="background: rgba(7, 21, 68, 0.8); border: 1px solid rgba(158,220,255,0.3); border-radius: 12px; padding: 14px; margin: 16px 0; font-size: 12px;">
-                    <div><strong style="color: #9EDCFF;">Destination Folder:</strong> {folder_name}</div>
-                    <div><strong style="color: #9EDCFF;">Account:</strong> {account_email}</div>
-                    <div><strong style="color: #9EDCFF;">Timestamp:</strong> {now_str}</div>
-                    <div><strong style="color: #9EDCFF;">Format:</strong> {report_format}</div>
-                </div>
-                <div style="text-align: center; margin-top: 20px;">
-                    <a href="{drive_link}" style="display: inline-block; padding: 10px 22px; background: #218DFF; color: #ffffff; text-decoration: none; font-size: 12px; font-weight: 700; border-radius: 10px;">
-                        Open in Google Drive &rarr;
-                    </a>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
+        notify_html = render_exbos_email(
+            category="Google Drive Vault",
+            title="Report Synchronized to Drive Vault",
+            intro_html=f"The report <strong>{report_title}</strong> ({report_format}) has been backed up to your linked Google Drive destination folder.",
+            details=[
+                ("Report Title", report_title),
+                ("Format", report_format),
+                ("Destination Folder", folder_name),
+                ("Account", account_email),
+                ("Synchronized At", now_str),
+            ],
+            primary_cta=("Open in Google Drive", drive_link),
+            footer_note="Automated backup confirmation from ExBOS Cloud Integrations.",
+            fallback_link=drive_link,
+        )
         send_gmail_email(
             to_email=account_email,
             subject=notify_subject,

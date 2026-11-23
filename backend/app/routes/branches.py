@@ -8,6 +8,7 @@ from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
 from app.database import get_db
 from app.utils.mailer import send_gmail_email
+from app.utils.email_templates import render_exbos_email
 from app.utils.responses import error_response, success_response
 from app.utils.security import hash_password, verify_password
 
@@ -355,17 +356,29 @@ def assign_branch_manager(branch_id: str):
     login_link = f"{frontend_origin}/login?email={quote(manager_email)}&branch={quote(branch_id)}"
     branch_name = branch_doc.get("name", "Branch")
 
-    email_html = (
-        f"<div style='font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px;'>"
-        f"<h2 style='color:#0284c7;margin-top:0;'>ExBOS Branch Manager Access</h2>"
-        f"<p>Hello <strong>{manager_name}</strong>,</p>"
-        f"<p>You have been assigned as the <strong>Branch Manager</strong> for <strong>{branch_name}</strong> ({biz_name}).</p>"
-        f"<p><strong>Login Email:</strong> {manager_email}<br/>"
-        f"{f'<strong>Password:</strong> {password}<br/>' if password else ''}"
-        f"<strong>Dashboard Link:</strong> <a href='{login_link}'>{login_link}</a></p>"
-        f"<p><a href='{login_link}' style='display:inline-block;padding:12px 20px;background:#0284c7;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold;'>Open Branch Dashboard</a></p>"
-        f"<p style='color:#64748b;font-size:12px;'>Use this link to sign in and record sales, purchases, expenses, and inventory for {branch_name}.</p>"
-        f"</div>"
+    branch_details = [
+        ("Business", biz_name),
+        ("Assigned Branch", branch_name),
+        ("Role", "Branch Manager"),
+        ("Login Email", manager_email),
+    ]
+    if password:
+        branch_details.append(
+            (
+                "Password",
+                f'<code style="background:#EEF4FB;border:1px solid #BFDBFE;padding:3px 8px;border-radius:6px;color:#0A2786;font-family:monospace;">{password}</code>',
+            )
+        )
+
+    email_html = render_exbos_email(
+        category="Branch Access",
+        title=f"Branch Manager Access — {branch_name}",
+        greeting=f"Hello <strong>{manager_name}</strong>,",
+        intro_html=f"You have been assigned as the <strong>Branch Manager</strong> for <strong>{branch_name}</strong> ({biz_name}). Sign in using the credentials below to record sales, purchases, expenses, and inventory for your branch.",
+        details=branch_details,
+        primary_cta=("Open Branch Dashboard", login_link),
+        footer_note=f"Your access is scoped directly to {branch_name} under Main HQ supervision.",
+        fallback_link=login_link,
     )
     email_text = (
         f"Hello {manager_name}, you have been assigned as Branch Manager for {branch_name} ({biz_name}). "
