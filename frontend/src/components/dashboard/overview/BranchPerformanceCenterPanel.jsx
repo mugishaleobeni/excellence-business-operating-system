@@ -169,36 +169,38 @@ export default function BranchPerformanceCenterPanel({
   const best = computed.bestBranch || backendAnalytics?.bestBranch
 
   return (
-    <div className="rounded-3xl border border-[#218DFF]/30 bg-gradient-to-br from-[#06143D]/95 via-[#040D29]/95 to-[#07184A]/95 p-5 sm:p-6 space-y-5 shadow-xl">
+    <div className="rounded-3xl border border-[#218DFF]/30 bg-gradient-to-br from-[#06143D]/95 via-[#040D29]/95 to-[#07184A]/95 p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl overflow-hidden max-w-full">
       {/* Header + Visualization Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF]">
-            <GitBranch className="w-5 h-5" />
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-white/10 pb-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF] shrink-0 mt-0.5">
+            <GitBranch className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
-          <div>
-            <h3 className="font-orbitron text-sm sm:text-base font-bold text-white flex items-center gap-2">
-              <span>Main HQ · Branch Activity &amp; Best Performer</span>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-orbitron text-sm sm:text-base font-bold text-white leading-snug">
+                Main HQ · Branch Activity &amp; Best Performer
+              </h3>
               {best && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold">
-                  <Trophy className="w-3 h-3" />
-                  <span>Top: {best.name}</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-[11px] font-bold max-w-full">
+                  <Trophy className="w-3 h-3 shrink-0" />
+                  <span className="truncate">Top: {best.name}</span>
                 </span>
               )}
-            </h3>
-            <p className="text-xs text-slate-300">
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
               ExBOS daily activity pulse &amp; cross-branch performance graph.
             </p>
           </div>
         </div>
 
         {/* Visualization Mode Switcher */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto min-w-0">
           {branches.length > 1 && (
             <select
               value={selectedBranchFilter}
               onChange={(e) => setSelectedBranchFilter(e.target.value)}
-              className="px-3 py-1.5 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white cursor-pointer"
+              className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white cursor-pointer"
             >
               <option value="ALL">All Branches</option>
               {branches.map((b) => (
@@ -209,45 +211,48 @@ export default function BranchPerformanceCenterPanel({
             </select>
           )}
 
-          <div className="inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
-            {[
-              { id: 'both', label: 'Both', icon: Layers },
-              { id: 'heatmap', label: 'Activity Pulse', icon: Grid3X3 },
-              { id: 'bar', label: 'Branch Graph', icon: BarChart3 },
-              { id: 'profit', label: 'Profit Share', icon: TrendingUp }
-            ].map((tab) => {
-              const Icon = tab.icon
-              const active = viewMode === tab.id
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setViewMode(tab.id)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all ${
-                    active
-                      ? 'bg-[#218DFF] text-white shadow'
-                      : 'text-slate-300 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span>{tab.label}</span>
-                </button>
-              )
-            })}
+          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar">
+            <div className="grid grid-cols-4 sm:inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1 min-w-0">
+              {[
+                { id: 'both', label: 'Both', shortLabel: 'Both', icon: Layers },
+                { id: 'heatmap', label: 'Activity Pulse', shortLabel: 'Pulse', icon: Grid3X3 },
+                { id: 'bar', label: 'Branch Graph', shortLabel: 'Graph', icon: BarChart3 },
+                { id: 'profit', label: 'Profit Share', shortLabel: 'Profit', icon: TrendingUp }
+              ].map((tab) => {
+                const Icon = tab.icon
+                const active = viewMode === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setViewMode(tab.id)}
+                    className={`px-2 sm:px-2.5 py-1.5 rounded-lg text-[10px] sm:text-[11px] font-bold flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer transition-all whitespace-nowrap ${
+                      active
+                        ? 'bg-[#218DFF] text-white shadow'
+                        : 'text-slate-300 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0" />
+                    <span className="sm:hidden">{tab.shortLabel}</span>
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Visualizations */}
-      <div className={`grid gap-5 ${viewMode === 'both' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
+      <div className={`grid gap-4 sm:gap-5 ${viewMode === 'both' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
         {/* 1. GitHub-Style Contribution Heatmap */}
         {(viewMode === 'both' || viewMode === 'heatmap') && (
-          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 min-w-0 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="font-orbitron font-bold text-[#9EDCFF]">
                 Daily Contribution Heatmap (Last 24 Weeks)
               </span>
-              <span className="font-mono text-slate-300">
+              <span className="font-mono text-slate-300 whitespace-nowrap">
                 {computed.totalOps} transactions
               </span>
             </div>
@@ -270,9 +275,9 @@ export default function BranchPerformanceCenterPanel({
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
-              <span>Hover any square for daily volume</span>
-              <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 pt-1">
+              <span>Tap or hover any square for daily volume</span>
+              <div className="flex items-center gap-1.5 shrink-0">
                 <span>Less</span>
                 {LEVEL_COLORS.map((cls, idx) => (
                   <span key={idx} className={`w-3 h-3 rounded-[2px] border inline-block ${cls}`} />
@@ -285,12 +290,12 @@ export default function BranchPerformanceCenterPanel({
 
         {/* 2. Best Performing Branch Bar Graph */}
         {(viewMode === 'both' || viewMode === 'bar' || viewMode === 'profit') && (
-          <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3">
-            <div className="flex items-center justify-between text-xs">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 min-w-0 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
               <span className="font-orbitron font-bold text-[#9EDCFF]">
                 {viewMode === 'profit' ? 'Branch Net Profit Comparison' : 'Best Performing Branch Ranking'}
               </span>
-              <span className="font-mono text-emerald-300">
+              <span className="font-mono text-emerald-300 whitespace-nowrap">
                 Total: {formatRWF(computed.totalBranchRev, hideFinancials)}
               </span>
             </div>

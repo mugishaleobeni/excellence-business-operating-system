@@ -836,26 +836,30 @@ export default function CashFlowCurveChart({
           <span className="text-[11px] text-slate-300 font-medium">
             {graphMode === 'cumulative' ? 'Cumulative Reserve:' : 'Net Profit:'}
           </span>
-          <span className="font-orbitron text-xs font-extrabold text-emerald-400">
-            {graphMode === 'cumulative'
-              ? formatRWF(activeData.cumulative, hideFinancials)
-              : `+${formatRWF(activeData.income - activeData.expense, hideFinancials)}`}
-          </span>
+          {(() => {
+            const val = graphMode === 'cumulative' ? activeData.cumulative : activeData.income - activeData.expense
+            return (
+              <span className={`font-orbitron text-xs font-extrabold ${val >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {val > 0 ? '+' : ''}
+                {formatRWF(val, hideFinancials)}
+              </span>
+            )
+          })()}
         </div>
       </div>
 
       {/* SVG GRAPH CANVAS WITH RESPONSIVE Y-AXIS AND INTERACTIVE MODES */}
-      <div className="relative pt-2 sm:pt-4 pb-2 select-none w-full">
-        {/* GRAPH ROW: DEDICATED HTML Y-AXIS SCALE + SVG DRAWING CANVAS */}
+      <div className="relative pt-4 sm:pt-5 pb-2 select-none w-full">
+        {/* GRAPH ROW: DEDICATED HTML Y-AXIS SCALE + HORIZONTALLY SCROLLABLE MOBILE CANVAS */}
         <div className="flex items-stretch gap-1.5 sm:gap-2.5 w-full">
           {/* DEDICATED HTML Y-AXIS SCALE (Crisp true font sizes on mobile & desktop, immune to SVG viewBox scaling) */}
-          <div className="w-14 sm:w-20 flex-shrink-0 relative select-none h-52 sm:h-80 pointer-events-none">
+          <div className="w-12 sm:w-20 flex-shrink-0 relative select-none h-56 sm:h-80 pointer-events-none">
             {/* Currency Indicator at top */}
             <div
-              className="absolute right-1 sm:right-2 transform -translate-y-full pb-1 text-right"
-              style={{ top: `${(paddingTop / svgHeight) * 100}%` }}
+              className="absolute right-1 sm:right-2 text-right"
+              style={{ top: '-12px' }}
             >
-              <span className="font-orbitron text-xs sm:text-sm font-black text-cyan-300 tracking-wider uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              <span className="font-orbitron text-[10px] sm:text-xs font-black text-cyan-300 tracking-wider uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                 RWF
               </span>
             </div>
@@ -871,7 +875,7 @@ export default function CashFlowCurveChart({
                   style={{ top: `${topPct}%` }}
                 >
                   <span
-                    className={`font-orbitron text-[13px] sm:text-base font-black tracking-tight ${
+                    className={`font-orbitron text-[11px] sm:text-sm font-black tracking-tight whitespace-nowrap ${
                       isBaseline ? 'text-slate-200' : 'text-white'
                     } drop-shadow-[0_2px_8px_rgba(0,0,0,1)]`}
                   >
@@ -882,61 +886,68 @@ export default function CashFlowCurveChart({
             })}
           </div>
 
-          {/* SVG DRAWING CANVAS CONTAINER */}
-          <div
-            ref={svgRef}
-            onTouchStart={handleTouchScrub}
-            onTouchMove={handleTouchScrub}
-            className="flex-1 min-w-0 touch-pan-y relative"
-          >
-            {/* DESKTOP-ONLY FLOATING TOOLTIP */}
-            {activePoint && (
+          {/* SCROLLABLE GRAPH + X-AXIS WRAPPER (Smooth horizontal scroll on mobile when 12 months are shown; full width on desktop) */}
+          <div className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
+            <div className={currentChartData.length > 7 ? 'min-w-[580px] sm:min-w-0 w-full' : 'w-full'}>
+              {/* SVG DRAWING CANVAS CONTAINER */}
               <div
-                className="hidden sm:flex absolute z-30 flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
-                style={{
-                  left: `${(activePoint.x / svgWidth) * 100}%`,
-                  top: `${Math.max(4, activePoint.y - 82)}px`,
-                  transform: `translateX(${tooltipTranslateX})`
-                }}
+                ref={svgRef}
+                onTouchStart={handleTouchScrub}
+                onTouchMove={handleTouchScrub}
+                className="w-full touch-pan-x sm:touch-pan-y relative"
               >
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-[#218DFF]" />
-                  <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                    {activeData.label} Inflow:
-                  </span>
-                  <strong className="font-orbitron text-xs sm:text-sm font-extrabold text-white">
-                    {formatRWF(activeData.income, hideFinancials)}
-                  </strong>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 font-bold text-[10px]">
-                    {activeData.change || '+0%'}
-                  </span>
-                </div>
+                {/* DESKTOP-ONLY FLOATING TOOLTIP */}
+                {activePoint && (
+                  <div
+                    className="hidden sm:flex absolute z-30 flex-col items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-[#06143b]/95 border-2 border-[#218DFF]/70 shadow-[0_20px_50px_rgba(0,0,0,0.9),0_0_28px_rgba(33,141,255,0.45)] transition-all duration-150 pointer-events-none backdrop-blur-xl"
+                    style={{
+                      left: `${(activePoint.x / svgWidth) * 100}%`,
+                      top: `${Math.max(4, activePoint.y - 82)}px`,
+                      transform: `translateX(${tooltipTranslateX})`
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#218DFF]" />
+                      <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                        {activeData.label} Inflow:
+                      </span>
+                      <strong className="font-orbitron text-xs sm:text-sm font-extrabold text-white">
+                        {formatRWF(activeData.income, hideFinancials)}
+                      </strong>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 font-bold text-[10px]">
+                        {activeData.change || '+0%'}
+                      </span>
+                    </div>
 
-                <div className="flex items-center gap-3 text-[11px] pt-1 border-t border-white/10 w-full justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-rose-400" />
-                    <span className="text-slate-300">Outflow:</span>
-                    <strong className="text-rose-300 font-bold">
-                      {formatRWF(activeData.expense, hideFinancials)}
-                    </strong>
+                    <div className="flex items-center gap-3 text-[11px] pt-1 border-t border-white/10 w-full justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-400" />
+                        <span className="text-slate-300">Outflow:</span>
+                        <strong className="text-rose-300 font-bold">
+                          {formatRWF(activeData.expense, hideFinancials)}
+                        </strong>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-400">{graphMode === 'cumulative' ? 'Reserve:' : 'Net:'}</span>
+                        {(() => {
+                          const val = graphMode === 'cumulative' ? activeData.cumulative : activeData.income - activeData.expense
+                          return (
+                            <strong className={`font-bold font-orbitron ${val >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {val > 0 ? '+' : ''}
+                              {formatRWF(val, hideFinancials)}
+                            </strong>
+                          )
+                        })()}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-slate-400">{graphMode === 'cumulative' ? 'Reserve:' : 'Net:'}</span>
-                    <strong className="text-emerald-400 font-bold font-orbitron">
-                      {graphMode === 'cumulative'
-                        ? formatRWF(activeData.cumulative, hideFinancials)
-                        : `+${formatRWF(activeData.income - activeData.expense, hideFinancials)}`}
-                    </strong>
-                  </div>
-                </div>
-              </div>
-            )}
+                )}
 
-            <svg
-              viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-              preserveAspectRatio="xMidYMid meet"
-              className="w-full h-52 sm:h-80 overflow-visible"
-            >
+                <svg
+                  viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                  preserveAspectRatio="none"
+                  className="w-full h-56 sm:h-80 overflow-visible"
+                >
               <defs>
                 {/* Pulse Area Gradients (ExBOS Sapphire Theme) */}
                 <linearGradient id="sapphireWaveGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1281,65 +1292,61 @@ export default function CashFlowCurveChart({
                 />
               )
             })}
-          </svg>
-        </div>
-      </div>
+                </svg>
+              </div>
 
-      {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES */}
-      <div className="flex items-start gap-1.5 sm:gap-2.5 w-full pt-3">
-        {/* Spacer to align precisely with left HTML Y-axis scale */}
-        <div className="w-14 sm:w-20 flex-shrink-0" />
-
-        {/* Timeline labels spanning the SVG canvas */}
-        <div
-          className="flex-1 min-w-0 flex items-start justify-between"
-          style={{
-            paddingLeft: `${(paddingLeft / svgWidth) * 100}%`,
-            paddingRight: `${(paddingRight / svgWidth) * 100}%`
-          }}
-        >
-          {currentChartData.map((d, i) => {
-            const isCur = i === safeIndex
-            const moneyVal =
-              graphMode === 'cumulative'
-                ? formatShortMoney(d.cumulative)
-                : graphMode === 'velocity'
-                ? formatShortMoney(d.net)
-                : formatShortMoney(d.income)
-
-            return (
-              <button
-                key={d.label}
-                type="button"
-                onMouseEnter={() => setActiveCurveIndex(i)}
-                onClick={() => setActiveCurveIndex(i)}
-                className="group flex flex-col items-center gap-1.5 cursor-pointer border-0 bg-transparent transition-all p-0 flex-1 min-w-0"
+              {/* X-AXIS TIMELINE LABELS WITH PROMINENT NUMBER RANGE BADGES (Inside same scroll wrapper so bars & labels stay 100% aligned) */}
+              <div
+                className="w-full flex items-start justify-between pt-2.5 gap-1"
+                style={{
+                  paddingLeft: `${(paddingLeft / svgWidth) * 100}%`,
+                  paddingRight: `${(paddingRight / svgWidth) * 100}%`
+                }}
               >
-                <span
-                  className={`font-orbitron text-xs sm:text-sm font-black tracking-wider transition-colors ${
-                    isCur
-                      ? 'text-white scale-105 drop-shadow-[0_0_10px_rgba(33,141,255,0.8)]'
-                      : 'text-slate-200 group-hover:text-white'
-                  }`}
-                >
-                  {d.label}
-                </span>
+                {currentChartData.map((d, i) => {
+                  const isCur = i === safeIndex
+                  const moneyVal =
+                    graphMode === 'cumulative'
+                      ? formatShortMoney(d.cumulative)
+                      : graphMode === 'velocity'
+                      ? formatShortMoney(d.net)
+                      : formatShortMoney(d.income)
 
-                {/* Prominent, readable value badge (e.g. 500k, 1M, 15.2M) */}
-                <span
-                  className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl font-orbitron text-xs sm:text-sm font-black tracking-tight transition-all border whitespace-nowrap shadow-md ${
-                    isCur
-                      ? 'bg-[#218DFF] text-white border-2 border-white shadow-[0_0_18px_rgba(33,141,255,0.9)] scale-110'
-                      : 'bg-[#081f54] text-white border border-[#218DFF]/40 group-hover:bg-[#10348a] group-hover:border-[#218DFF]'
-                  }`}
-                >
-                  {moneyVal}
-                </span>
-              </button>
-            )
-          })}
+                  return (
+                    <button
+                      key={d.label}
+                      type="button"
+                      onMouseEnter={() => setActiveCurveIndex(i)}
+                      onClick={() => setActiveCurveIndex(i)}
+                      className="group flex flex-col items-center gap-1.5 cursor-pointer border-0 bg-transparent transition-all p-0 flex-1 min-w-[38px]"
+                    >
+                      <span
+                        className={`font-orbitron text-[10px] sm:text-xs font-black tracking-wide transition-colors whitespace-nowrap ${
+                          isCur
+                            ? 'text-white scale-105 drop-shadow-[0_0_10px_rgba(33,141,255,0.8)]'
+                            : 'text-slate-200 group-hover:text-white'
+                        }`}
+                      >
+                        {d.label}
+                      </span>
+
+                      {/* Prominent, readable value badge (e.g. 500k, 1M, -1.1M) */}
+                      <span
+                        className={`px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg sm:rounded-xl font-orbitron text-[10px] sm:text-xs font-black tracking-tight transition-all border whitespace-nowrap shadow-md ${
+                          isCur
+                            ? 'bg-[#218DFF] text-white border-2 border-white shadow-[0_0_14px_rgba(33,141,255,0.9)]'
+                            : 'bg-[#081f54] text-white border border-[#218DFF]/40 group-hover:bg-[#10348a] group-hover:border-[#218DFF]'
+                        }`}
+                      >
+                        {moneyVal}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
       </div>
 
       {/* FOOTER ACTIONS & RECORD BUTTON */}
