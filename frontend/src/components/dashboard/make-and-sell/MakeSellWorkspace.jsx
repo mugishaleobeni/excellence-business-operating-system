@@ -21,7 +21,9 @@ const DEFAULT_CATEGORIES = [
 export default function MakeSellWorkspace({
   activeModule = 'Stock',
   activePage = 'Finished Goods',
-  onSwitchPage = null
+  onSwitchPage = null,
+  autoOpenCreate = false,
+  onConsumeAutoOpen = null
 }) {
   const {
     user,
@@ -40,9 +42,41 @@ export default function MakeSellWorkspace({
   // Cashier Role Protection
   const isCashier = user?.role === 'Cashier'
 
-  // Read live buckets directly from ExbosContext (zero un-entered demo fallbacks)
+  // Read live buckets directly from ExbosContext and merge Inventory/Products/FinishedGoods/Stock so
+  // products added via Quick Link, ProductModal, or + New Product drawer always appear immediately.
   const rawMaterials = Array.isArray(recordsMap['RawMaterials']) ? recordsMap['RawMaterials'] : []
-  const finishedGoods = Array.isArray(recordsMap['Inventory']) ? recordsMap['Inventory'] : []
+  const finishedGoods = React.useMemo(() => {
+    const combined = [
+      ...(Array.isArray(recordsMap['Inventory']) ? recordsMap['Inventory'] : []),
+      ...(Array.isArray(recordsMap['Products']) ? recordsMap['Products'] : []),
+      ...(Array.isArray(recordsMap['FinishedGoods']) ? recordsMap['FinishedGoods'] : []),
+      ...(Array.isArray(recordsMap['Stock']) ? recordsMap['Stock'] : [])
+    ]
+    const seen = new Set()
+    const out = []
+    for (const item of combined) {
+      if (!item || typeof item !== 'object') continue
+      const idStr = String(item.id || '')
+      if (!idStr || seen.has(idStr)) continue
+      seen.add(idStr)
+      const stockNum = Number(item.currentStock ?? item.stock ?? item.quantity ?? 0)
+      const costNum = Number(item.costPerUnitRWF ?? item.unitCostRWF ?? item.purchasePriceRWF ?? 0)
+      const priceNum = Number(item.sellingPriceRWF ?? item.sellingPrice ?? item.priceRWF ?? 0)
+      out.push({
+        ...item,
+        name: item.name || item.title || 'Product',
+        title: item.title || item.name || 'Product',
+        currentStock: stockNum,
+        stock: stockNum,
+        quantity: stockNum,
+        costPerUnitRWF: costNum,
+        unitCostRWF: costNum,
+        purchasePriceRWF: costNum,
+        sellingPriceRWF: priceNum
+      })
+    }
+    return out
+  }, [recordsMap])
   const recipes = Array.isArray(recordsMap['Recipes']) ? recordsMap['Recipes'] : []
   const batches = Array.isArray(recordsMap['Production']) ? recordsMap['Production'] : []
   const sales = Array.isArray(recordsMap['Sales']) ? recordsMap['Sales'] : []
@@ -189,6 +223,13 @@ export default function MakeSellWorkspace({
               onSwitchPage('Purchases', 'All Purchases')
             }
           }}
+          onSwitchSubPage={(sub) => {
+            if (onSwitchPage) {
+              onSwitchPage('Stock', sub)
+            }
+          }}
+          autoOpenCreate={autoOpenCreate}
+          onConsumeAutoOpen={onConsumeAutoOpen}
           isCashier={isCashier}
           hideFinancials={hideFinancials}
           addToast={addToast}

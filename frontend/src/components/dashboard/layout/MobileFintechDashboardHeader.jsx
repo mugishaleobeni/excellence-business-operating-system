@@ -82,24 +82,50 @@ export default function MobileFintechDashboardHeader({
     } catch (e) {}
   }
 
+  const archId = currentArch?.id || 'buy-and-sell'
+
+  const resolveProductTarget = () => {
+    if (archId === 'make-and-sell') return { mod: 'Stock', page: 'Finished Goods', label: 'New Product' }
+    if (archId === 'hybrid') return { mod: 'Products & Stock', page: 'All Products', label: 'New Product' }
+    if (archId === 'services') return { mod: 'Services', page: 'Service Catalogue', label: 'New Service' }
+    if (archId === 'agriculture') return { mod: 'Livestock', page: 'Animal Register', label: 'New Animal' }
+    if (archId === 'food-and-hospitality') return { mod: 'Restaurant & Bar', page: 'Menu Items', label: 'New Menu Item' }
+    return { mod: 'Products', page: 'All Products', label: 'New Product' }
+  }
+
+  const resolveSaleTarget = () => {
+    if (archId === 'services') return { mod: 'Jobs & Bookings', page: 'All Jobs', label: 'New Job' }
+    if (archId === 'agriculture') return { mod: 'Sales', page: 'Farm Sales', label: 'New Sale' }
+    if (archId === 'food-and-hospitality') return { mod: 'Restaurant & Bar', page: 'Orders & Kitchen Queue', label: 'New Order' }
+    return { mod: 'Sales', page: 'All Sales', label: 'New Sale' }
+  }
+
+  const prodTarget = resolveProductTarget()
+  const saleTarget = resolveSaleTarget()
+
   const quickLinks = [
     {
       id: 'sale',
-      label: 'New Sale',
+      label: saleTarget.label,
       icon: ShoppingCart,
-      action: () => navigateToModulePage('Sales', 'All Sales', { action: 'create' })
+      action: () => navigateToModulePage(saleTarget.mod, saleTarget.page, { action: 'create' })
     },
     {
       id: 'product',
-      label: 'New Product',
+      label: prodTarget.label,
       icon: Package,
-      action: () => navigateToModulePage('Products', 'Stock', { action: 'create' })
+      action: () => navigateToModulePage(prodTarget.mod, prodTarget.page, { action: 'create' })
     },
     {
       id: 'purchase',
       label: 'New Purchase',
       icon: CreditCard,
-      action: () => navigateToModulePage('Purchases', 'All Purchases', { action: 'create' })
+      action: () =>
+        navigateToModulePage(
+          'Purchases',
+          archId === 'agriculture' ? 'Feed & Input Orders' : 'All Purchases',
+          { action: 'create' }
+        )
     },
     {
       id: 'expense',
@@ -117,7 +143,7 @@ export default function MobileFintechDashboardHeader({
       id: 'reports',
       label: 'Profit & Loss',
       icon: BarChart3,
-      action: () => navigateToModulePage('Reports', 'Profit & Loss (P&L)')
+      action: () => navigateToModulePage('Reports', 'Profit & Loss')
     }
   ]
 

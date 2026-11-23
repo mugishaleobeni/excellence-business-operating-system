@@ -190,19 +190,36 @@ export function useDashboardNavigation({ architectures = [], user = null }) {
   // Atomic Module + Page (+ optional action) Navigation Handler
   const navigateToModulePage = useCallback(
     (mod, page, options = {}) => {
-      const targetNav = navMap[mod] || ['Dashboard']
+      let resolvedMod = mod
+      if (!navMap[resolvedMod]) {
+        if (['Products', 'Stock', 'Products & Stock', 'Inventory'].includes(mod)) {
+          resolvedMod =
+            ['Stock', 'Products', 'Products & Stock', 'Services', 'Livestock', 'Restaurant & Bar'].find(
+              (k) => Boolean(navMap[k])
+            ) || Object.keys(navMap)[0] || 'Overview'
+        } else if (['Sales', 'Jobs & Bookings', 'Services & Jobs'].includes(mod)) {
+          resolvedMod =
+            ['Sales', 'Jobs & Bookings', 'Restaurant & Bar', 'Services & Jobs'].find(
+              (k) => Boolean(navMap[k])
+            ) || Object.keys(navMap)[0] || 'Overview'
+        } else if (!navMap[resolvedMod]) {
+          resolvedMod = Object.keys(navMap)[0] || 'Overview'
+        }
+      }
+      const targetNav = navMap[resolvedMod] || ['Dashboard']
       const targetPage = page && targetNav.includes(page) ? page : targetNav[0] || 'Dashboard'
 
       try {
-        localStorage.setItem(`exbos_active_module_${activeArchId}`, mod)
+        localStorage.setItem(`exbos_active_module_${activeArchId}`, resolvedMod)
         localStorage.setItem(`exbos_active_page_${activeArchId}`, targetPage)
+        localStorage.setItem(`exbos_active_page_${activeArchId}_${resolvedMod}`, targetPage)
       } catch (e) {}
 
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev)
           next.set('arch', activeArchId)
-          next.set('module', mod)
+          next.set('module', resolvedMod)
           next.set('page', targetPage)
           if (options.action) {
             next.set('action', options.action)

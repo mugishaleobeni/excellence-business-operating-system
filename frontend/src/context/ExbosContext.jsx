@@ -832,6 +832,55 @@ export function ExbosProvider({ children }) {
   }
 
   const isHydratedRef = useRef(false)
+  const lastMutationTsRef = useRef(0)
+  const recentlyDeletedIdsRef = useRef(new Set())
+
+  const mergeServerWorkspacesWithLocal = (serverWsMap, localWsMap) => {
+    const cleanBase = createCleanWorkspaces()
+    const mergedOut = { ...cleanBase, ...(localWsMap || {}) }
+    const deletedIds = recentlyDeletedIdsRef.current
+
+    Object.keys(serverWsMap || {}).forEach((archKey) => {
+      const sWs = serverWsMap[archKey]
+      if (!sWs || typeof sWs !== 'object') return
+      const lWs = mergedOut[archKey] || cleanBase[archKey] || {}
+      const sRecs = sWs.records || {}
+      const lRecs = lWs.records || {}
+      const allBuckets = new Set([...Object.keys(lRecs), ...Object.keys(sRecs), 'Inventory', 'Products'])
+      const nextRecords = {}
+
+      allBuckets.forEach((bName) => {
+        const localArr = Array.isArray(lRecs[bName]) ? lRecs[bName] : []
+        const serverArr = Array.isArray(sRecs[bName]) ? sRecs[bName] : []
+        const extraProductArr =
+          bName === 'Inventory'
+            ? [
+                ...(Array.isArray(sRecs['Products']) ? sRecs['Products'] : []),
+                ...(Array.isArray(sRecs['FinishedGoods']) ? sRecs['FinishedGoods'] : []),
+                ...(Array.isArray(sRecs['Stock']) ? sRecs['Stock'] : [])
+              ]
+            : []
+        const seen = new Set()
+        const combined = []
+        for (const item of [...localArr, ...serverArr, ...extraProductArr]) {
+          if (!item || typeof item !== 'object') continue
+          const idStr = String(item.id || '')
+          if (!idStr || seen.has(idStr) || deletedIds.has(idStr)) continue
+          seen.add(idStr)
+          combined.push(item)
+        }
+        nextRecords[bName] = combined
+      })
+
+      mergedOut[archKey] = {
+        ...lWs,
+        ...sWs,
+        metrics: { ...(lWs.metrics || {}), ...(sWs.metrics || {}) },
+        records: nextRecords
+      }
+    })
+    return mergedOut
+  }
 
   const [workspaces, setWorkspaces] = useState(() => {
     if (typeof navigator !== 'undefined' && navigator.onLine) {
@@ -846,25 +895,43 @@ export function ExbosProvider({ children }) {
     return createCleanWorkspaces()
   })
 
-  // Load stored data from Flask + MongoDB Atlas backend on mount and when user changes
+  // Load stored data from Flask + MongoDB Atlas backend on mount, focus, visibilitychange, and live interval (Phone PWA <-> PC PWA sync)
   useEffect(() => {
     let isMounted = true
-    isHydratedRef.current = false
     const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
     const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
-    fetch(resolveStorageUrl(scopeParam), {
-      headers: getAuthHeaders()
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((serverData) => {
-        if (!isMounted) return
-        if (serverData) {
+
+    const fetchAndSyncCloud = (isInitial = false) => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      // Avoid racing right in the middle of a local mutation (within 2.5s)
+      if (!isInitial && Date.now() - lastMutationTsRef.current < 2500) return
+
+      const sep = scopeParam ? '&' : '?'
+      fetch(`${resolveStorageUrl(scopeParam)}${sep}_t=${Date.now()}`, {
+        headers: getAuthHeaders(),
+        cache: 'no-store'
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((serverData) => {
+          if (!isMounted || !serverData) return
           if (serverData.workspaces && typeof serverData.workspaces === 'object') {
             const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
-            setWorkspaces(sanitized)
+            setWorkspaces((prev) => mergeServerWorkspacesWithLocal(sanitized, prev))
           }
           if (Array.isArray(serverData.transactions)) {
-            setTransactions(sanitizeUserTransactions(serverData.transactions))
+            const serverTxs = sanitizeUserTransactions(serverData.transactions)
+            setTransactions((prev) => {
+              const seen = new Set()
+              const out = []
+              for (const tx of [...prev, ...serverTxs]) {
+                if (!tx || !tx.id) continue
+                const tid = String(tx.id)
+                if (seen.has(tid) || recentlyDeletedIdsRef.current.has(tid)) continue
+                seen.add(tid)
+                out.push(tx)
+              }
+              return out
+            })
           }
           if (Array.isArray(serverData.businesses)) {
             setBusinesses(
@@ -887,20 +954,35 @@ export function ExbosProvider({ children }) {
           if (serverData.superAdminBroadcast !== undefined) {
             setSuperAdminBroadcast(serverData.superAdminBroadcast)
           }
-        }
-      })
-      .catch((err) => {
-        console.debug('Server storage fetch notice:', err)
-      })
-      .finally(() => {
-        if (isMounted) {
-          isHydratedRef.current = true
-        }
-      })
+        })
+        .catch((err) => {
+          console.debug('Server storage fetch notice:', err)
+        })
+        .finally(() => {
+          if (isMounted) {
+            isHydratedRef.current = true
+          }
+        })
+    }
+
+    fetchAndSyncCloud(true)
+
+    const onFocusOrVisible = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        fetchAndSyncCloud(false)
+      }
+    }
+    window.addEventListener('focus', onFocusOrVisible)
+    document.addEventListener('visibilitychange', onFocusOrVisible)
+    const syncTimer = setInterval(() => fetchAndSyncCloud(false), 7000)
+
     return () => {
       isMounted = false
+      window.removeEventListener('focus', onFocusOrVisible)
+      document.removeEventListener('visibilitychange', onFocusOrVisible)
+      clearInterval(syncTimer)
     }
-  }, [user?.email])
+  }, [user?.email, user?.ownerScopeKey])
 
   // Persist live user data directly to Flask + MongoDB Atlas backend when online; only cache in browser when offline
   useEffect(() => {
@@ -1226,16 +1308,39 @@ export function ExbosProvider({ children }) {
       }
     }
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
+    const normalizedModule =
+      moduleName === 'Products' || moduleName === 'FinishedGoods' || moduleName === 'Stock'
+        ? 'Inventory'
+        : moduleName
     isHydratedRef.current = true
+    lastMutationTsRef.current = Date.now()
     const recordId =
-      newItem?.id || `${moduleName.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
+      newItem?.id || `${normalizedModule.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
     const todayStr = new Date().toISOString().slice(0, 10)
+    const isProductBucket = normalizedModule === 'Inventory'
+    const prodQty = Number(newItem?.quantity ?? newItem?.currentStock ?? newItem?.stock ?? 0)
+    const prodCost = Number(newItem?.costPerUnitRWF ?? newItem?.unitCostRWF ?? newItem?.purchasePriceRWF ?? 0)
+    const prodPrice = Number(newItem?.sellingPriceRWF ?? newItem?.sellingPrice ?? newItem?.priceRWF ?? 0)
     const entry = {
       id: recordId,
       date: todayStr,
       branchId: newItem?.branchId || activeBranchId || 'main',
-      ...newItem
+      ...newItem,
+      ...(isProductBucket
+        ? {
+            name: newItem?.name || newItem?.title || 'Product',
+            title: newItem?.title || newItem?.name || 'Product',
+            quantity: prodQty,
+            currentStock: prodQty,
+            stock: prodQty,
+            costPerUnitRWF: prodCost,
+            unitCostRWF: prodCost,
+            purchasePriceRWF: prodCost,
+            sellingPriceRWF: prodPrice
+          }
+        : {})
     }
+    moduleName = normalizedModule
 
     setWorkspaces((prev) => {
       const cleanMap = createCleanWorkspaces()
@@ -1430,7 +1535,9 @@ export function ExbosProvider({ children }) {
     }
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
+    lastMutationTsRef.current = Date.now()
     const recIdStr = String(recordId)
+    recentlyDeletedIdsRef.current.add(recIdStr)
 
     // Simultaneously purge from transactions in case the record is linked to cashflow ledger
     const linkedTxIds = transactions

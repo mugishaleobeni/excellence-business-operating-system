@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Package,
   Layers,
@@ -100,15 +101,33 @@ export default function StockWorkspace({
   onUpdateFinishedGoods = null,
   onOpenReceiveStock = null,
   onOpenPriceCalculator = null,
+  onSwitchSubPage = null,
+  autoOpenCreate = false,
+  onConsumeAutoOpen = null,
   isCashier = false,
   hideFinancials = false,
   addToast = null
 }) {
   const { user, demoWorkspaces } = useExbos?.() || {}
+  const [searchParams, setSearchParams] = useSearchParams()
   const activeBizName = user?.businessName || demoWorkspaces?.['make-and-sell']?.businessName || 'ExBOS Make & Sell Enterprise'
 
-  // Immediate local state fallback synchronized with props
+  // Immediate local state fallback synchronized with props so new products display in 0ms
   const [internalCategories, setInternalCategories] = useState(null)
+  const [optimisticProducts, setOptimisticProducts] = useState([])
+
+  const effectiveFinishedGoods = useMemo(() => {
+    const seen = new Set()
+    const list = []
+    for (const item of [...optimisticProducts, ...(finishedGoods || [])]) {
+      if (!item || !item.id) continue
+      const idStr = String(item.id)
+      if (seen.has(idStr)) continue
+      seen.add(idStr)
+      list.push(item)
+    }
+    return list
+  }, [optimisticProducts, finishedGoods])
 
   const activeCategoriesSource = useMemo(() => {
     return internalCategories || categories || []
@@ -191,7 +210,7 @@ export default function StockWorkspace({
 
   // --- Filtering Finished Goods ---
   const filteredFinishedGoods = useMemo(() => {
-    return finishedGoods.filter((item) => {
+    return effectiveFinishedGoods.filter((item) => {
       const q = searchQuery.toLowerCase().trim()
       const matchesSearch =
         !q ||
@@ -224,7 +243,7 @@ export default function StockWorkspace({
 
       return true
     })
-  }, [finishedGoods, searchQuery, selectedCategory, stockTab])
+  }, [effectiveFinishedGoods, searchQuery, selectedCategory, stockTab])
 
   // --- Filtering Raw Materials ---
   const filteredRawMaterials = useMemo(() => {
@@ -252,32 +271,32 @@ export default function StockWorkspace({
 
   // Summary Strips
   const finishedSummary = useMemo(() => {
-    const totalValue = finishedGoods.reduce((sum, p) => {
-      const stock = Number(p.currentStock || p.stock || 0)
+    const totalValue = effectiveFinishedGoods.reduce((sum, p) => {
+      const stock = Number(p.currentStock ?? p.stock ?? p.quantity ?? 0)
       const price = Number(p.sellingPriceRWF || p.sellingPrice || 0)
       return sum + stock * price
     }, 0)
-    const totalUnits = finishedGoods.reduce((sum, p) => sum + (Number(p.currentStock || p.stock || 0)), 0)
-    const expiring = finishedGoods.filter((p) => {
+    const totalUnits = effectiveFinishedGoods.reduce((sum, p) => sum + (Number(p.currentStock ?? p.stock ?? p.quantity ?? 0)), 0)
+    const expiring = effectiveFinishedGoods.filter((p) => {
       const bb = p.bestBeforeDate || p.expiryDate
       if (!bb) return false
       const diff = Math.ceil((new Date(bb) - now) / (1000 * 60 * 60 * 24))
       return diff >= 0 && diff <= 30
     }).length
-    const expired = finishedGoods.filter((p) => {
+    const expired = effectiveFinishedGoods.filter((p) => {
       const bb = p.bestBeforeDate || p.expiryDate
       if (!bb) return false
       const diff = Math.ceil((new Date(bb) - now) / (1000 * 60 * 60 * 24))
       return diff < 0
     }).length
-    const fresh = finishedGoods.filter((p) => {
+    const fresh = effectiveFinishedGoods.filter((p) => {
       const bb = p.bestBeforeDate || p.expiryDate
       if (!bb) return true
       const diff = Math.ceil((new Date(bb) - now) / (1000 * 60 * 60 * 24))
       return diff > 30
     }).length
     return { totalValue, totalUnits, expiring, expired, fresh }
-  }, [finishedGoods])
+  }, [effectiveFinishedGoods])
 
   const rawSummary = useMemo(() => {
     const totalValue = rawMaterials.reduce((sum, m) => {
@@ -414,6 +433,7 @@ export default function StockWorkspace({
     setProdCostPerUnit('')
     setProdSellingPrice('')
     setProdShelfLifeDays(4)
+    setProdBestBeforeDate(new Date(Date.now() + 4 * 86400000).toISOString().slice(0, 10))
     setProdReorderLevel(20)
     setProdOpeningStock(0)
     setProdBatchCode(`B-${Math.floor(100 + Math.random() * 900)}`)
@@ -421,6 +441,36 @@ export default function StockWorkspace({
     setDrawerType('product')
     setDrawerOpen(true)
   }
+
+  // Auto-open + New Product drawer when triggered from Mobile Quick Links or Overview Quick Actions
+  useEffect(() => {
+    const urlAction = searchParams.get('action')
+    if (autoOpenCreate || urlAction === 'create') {
+      if (activeSubPage === 'Raw Materials') {
+        handleOpenNewMaterial()
+      } else if (activeSubPage === 'Categories') {
+        setEditingCategory(null)
+        setNewCategoryName('')
+        setNewCategoryDesc('')
+        setCategoryModalOpen(true)
+      } else {
+        handleOpenNewProduct()
+      }
+      if (urlAction === 'create') {
+        setSearchParams(
+          (prev) => {
+            const next = new URLSearchParams(prev)
+            next.delete('action')
+            return next
+          },
+          { replace: true }
+        )
+      }
+      if (onConsumeAutoOpen) {
+        onConsumeAutoOpen()
+      }
+    }
+  }, [autoOpenCreate, searchParams, activeSubPage])
 
   // Open Raw Material Drawer
   const handleOpenNewMaterial = () => {
@@ -445,34 +495,71 @@ export default function StockWorkspace({
       return
     }
 
+    const stockQty = Number(prodOpeningStock) || 0
+    const sellPrice = Number(prodSellingPrice) || 0
+    const unitCost =
+      prodCostPerUnit !== ''
+        ? Number(prodCostPerUnit)
+        : editItem?.costPerUnitRWF || Math.round(sellPrice * 0.6)
+    const bbDate =
+      prodBestBeforeDate ||
+      new Date(Date.now() + (Number(prodShelfLifeDays) || 4) * 86400000).toISOString().slice(0, 10)
+
     const newProd = {
       id: editItem ? editItem.id : `PROD-${Date.now()}`,
       name: prodName.trim(),
-      category: prodCategory,
-      unit: prodUnit,
-      sellingPriceRWF: Number(prodSellingPrice) || 0,
-      costPerUnitRWF: prodCostPerUnit !== '' ? Number(prodCostPerUnit) : (editItem?.costPerUnitRWF || Math.round((Number(prodSellingPrice) || 0) * 0.6)),
+      title: prodName.trim(),
+      category: prodCategory || categoryNames[0] || 'General',
+      unit: prodUnit || 'pcs',
+      sellingPriceRWF: sellPrice,
+      costPerUnitRWF: unitCost,
+      unitCostRWF: unitCost,
+      purchasePriceRWF: unitCost,
+      amountRWF: sellPrice * stockQty,
       shelfLifeDays: Number(prodShelfLifeDays) || 4,
       minimumStockLevel: Number(prodReorderLevel) || 20,
-      currentStock: Number(prodOpeningStock) || 0,
-      stock: Number(prodOpeningStock) || 0,
-      batchCode: prodBatchCode,
-      bestBeforeDate: new Date(Date.now() + (Number(prodShelfLifeDays) || 4) * 86400000).toISOString().slice(0, 10)
+      lowStockAlert: Number(prodReorderLevel) || 20,
+      currentStock: stockQty,
+      stock: stockQty,
+      quantity: stockQty,
+      batchCode: prodBatchCode || `B-${Math.floor(100 + Math.random() * 900)}`,
+      bestBeforeDate: bbDate,
+      status:
+        stockQty <= 0
+          ? 'Out of Stock'
+          : stockQty <= (Number(prodReorderLevel) || 20)
+          ? 'Low Stock'
+          : 'In Stock',
+      date: editItem?.date || new Date().toISOString().slice(0, 10)
+    }
+
+    setOptimisticProducts((prev) =>
+      editItem
+        ? prev.map((p) => (p.id === editItem.id ? newProd : p))
+        : [newProd, ...prev.filter((p) => p.id !== newProd.id)]
+    )
+
+    // Ensure filters do not hide the newly created product
+    setSelectedCategory('All')
+    setStockTab('All')
+    setSearchQuery('')
+    if (activeSubPage !== 'Finished Goods' && onSwitchSubPage) {
+      onSwitchSubPage('Finished Goods')
     }
 
     if (onUpdateFinishedGoods) {
       if (editItem) {
-        onUpdateFinishedGoods(finishedGoods.map((p) => (p.id === editItem.id ? newProd : p)))
+        onUpdateFinishedGoods(effectiveFinishedGoods.map((p) => (p.id === editItem.id ? newProd : p)))
       } else {
-        onUpdateFinishedGoods([newProd, ...finishedGoods])
+        onUpdateFinishedGoods([newProd, ...effectiveFinishedGoods.filter((p) => p.id !== newProd.id)])
       }
     }
 
     if (addToast) {
       addToast({
         type: 'success',
-        title: 'Product Saved',
-        message: `Finished good "${newProd.name}" saved successfully.`
+        title: editItem ? 'Product Updated' : 'Product Added',
+        message: `"${newProd.name}" (${stockQty} ${newProd.unit}) is now live in Finished Goods.`
       })
     }
 
@@ -1710,52 +1797,53 @@ export default function StockWorkspace({
         </div>
       )}
 
-      {/* --- DRAWER (Right-side drawer over Panel 3, max 8 visible fields) --- */}
+      {/* --- DRAWER (Mobile-responsive full-screen sheet on phones, right-side drawer on desktop) --- */}
       {drawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden flex justify-end animate-in fade-in">
+        <div className="fixed inset-0 z-[120] overflow-hidden flex justify-end animate-in fade-in">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm cursor-pointer"
             onClick={() => setDrawerOpen(false)}
           />
 
-          <div className="relative w-full max-w-md bg-[#071330] border-l border-white/15 p-6 shadow-2xl flex flex-col justify-between overflow-y-auto">
-            <div className="space-y-5">
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <div>
-                  <span className="text-[10px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider block">
-                    {drawerType === 'product' ? 'Stock › Finished Goods' : 'Stock › Raw Materials'}
-                  </span>
-                  <h3 className="font-orbitron text-xl font-bold text-white">
-                    {editItem ? 'Edit Item' : drawerType === 'product' ? '+ New Product' : '+ New Material'}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setDrawerOpen(false)}
-                  className="p-2 rounded-xl bg-white/10 text-slate-300 hover:text-white cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+          <div className="relative w-full sm:max-w-md h-[100dvh] max-h-[100dvh] bg-[#071330] sm:border-l border-white/15 shadow-2xl flex flex-col justify-between overflow-hidden">
+            {/* Sticky Drawer Header */}
+            <div className="flex items-center justify-between border-b border-white/15 px-4 sm:px-6 py-4 shrink-0 bg-[#040C26]/90">
+              <div>
+                <span className="text-[10px] font-orbitron font-bold text-[#9EDCFF] uppercase tracking-wider block">
+                  {drawerType === 'product' ? 'Stock › Finished Goods' : 'Stock › Raw Materials'}
+                </span>
+                <h3 className="font-orbitron text-lg sm:text-xl font-bold text-white">
+                  {editItem ? 'Edit Item' : drawerType === 'product' ? '+ New Product' : '+ New Material'}
+                </h3>
               </div>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
+            {/* Scrollable Drawer Body */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-5">
               {/* Form: Product */}
               {drawerType === 'product' && (
-                <div className="space-y-3.5 text-xs">
+                <div className="space-y-4 text-xs">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Product Name *</label>
+                    <label className="block text-slate-200 font-bold mb-1.5">Product Name *</label>
                     <input
                       type="text"
                       value={prodName}
                       onChange={(e) => setProdName(e.target.value)}
                       placeholder="e.g. Sandwich Loaf (800g)"
-                      className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Category</label>
+                      <label className="block text-slate-200 font-bold mb-1.5">Category</label>
                       <CustomSelect
                         value={prodCategory}
                         onChange={setProdCategory}
@@ -1763,7 +1851,7 @@ export default function StockWorkspace({
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Unit of Measure</label>
+                      <label className="block text-slate-200 font-bold mb-1.5">Unit of Measure</label>
                       <CustomSelect
                         value={prodUnit}
                         onChange={setProdUnit}
@@ -1777,38 +1865,38 @@ export default function StockWorkspace({
                   </div>
 
                   {/* Cost, Selling Price & Direct Profit Comparison */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">
-                        Raw Material / Unit Cost (RWF)
+                      <label className="block text-slate-200 font-bold mb-1.5">
+                        Unit Production Cost (RWF)
                       </label>
                       <input
                         type="number"
                         value={prodCostPerUnit}
                         onChange={(e) => setProdCostPerUnit(e.target.value)}
-                        placeholder="e.g. 81400"
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                        placeholder="e.g. 800"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">
+                      <label className="block text-slate-200 font-bold mb-1.5">
                         Selling Price (RWF) <span className="text-rose-400">*</span>
                       </label>
                       <input
                         type="number"
                         value={prodSellingPrice}
                         onChange={(e) => setProdSellingPrice(e.target.value)}
-                        placeholder="e.g. 145000"
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                        placeholder="e.g. 1500"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
                       />
                     </div>
                   </div>
 
                   {/* Instant Direct Profit & Margin Calculator Card */}
                   {Number(prodSellingPrice) > 0 && (
-                    <div className="p-3.5 rounded-xl bg-sky-500/10 border border-sky-400/25 flex items-center justify-between text-xs">
+                    <div className="p-3.5 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-between text-xs">
                       <div>
-                        <span className="text-slate-400 block text-[11px]">Direct Profit / Unit:</span>
+                        <span className="text-slate-300 block text-[11px]">Direct Profit / Unit:</span>
                         <span className={`font-mono font-bold text-sm ${
                           Number(prodSellingPrice) - Number(prodCostPerUnit || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}>
@@ -1817,7 +1905,7 @@ export default function StockWorkspace({
                         </span>
                       </div>
                       <div className="text-right">
-                        <span className="text-slate-400 block text-[11px]">Gross Margin:</span>
+                        <span className="text-slate-300 block text-[11px]">Gross Margin:</span>
                         <span className="font-mono font-bold text-sm text-sky-300">
                           {Math.round(((Number(prodSellingPrice) - Number(prodCostPerUnit || 0)) / Number(prodSellingPrice)) * 100)}%
                         </span>
@@ -1825,9 +1913,33 @@ export default function StockWorkspace({
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Shelf Life (Days)</label>
+                      <label className="block text-slate-200 font-bold mb-1.5">Product Quantity (In Stock) *</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={prodOpeningStock}
+                        onChange={(e) => setProdOpeningStock(e.target.value)}
+                        placeholder="e.g. 50"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1.5">Reorder Level Alert</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={prodReorderLevel}
+                        onChange={(e) => setProdReorderLevel(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-200 font-bold mb-1.5">Shelf Life (Days)</label>
                       <input
                         type="number"
                         min="1"
@@ -1837,11 +1949,11 @@ export default function StockWorkspace({
                           setProdShelfLifeDays(d)
                           setProdBestBeforeDate(new Date(Date.now() + d * 86400000).toISOString().slice(0, 10))
                         }}
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Best-Before / Expiry Date</label>
+                      <label className="block text-slate-200 font-bold mb-1.5">Best-Before / Expiry Date</label>
                       <input
                         type="date"
                         value={prodBestBeforeDate}
@@ -1852,7 +1964,7 @@ export default function StockWorkspace({
                             if (diff > 0) setProdShelfLifeDays(diff)
                           }
                         }}
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#040C26] border border-white/20 text-white text-sm focus:outline-none focus:border-[#218DFF]"
                       />
                     </div>
                   </div>
@@ -1879,30 +1991,6 @@ export default function StockWorkspace({
                       )}
                     </div>
                   )}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Product Quantity (In Stock) *</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={prodOpeningStock}
-                        onChange={(e) => setProdOpeningStock(e.target.value)}
-                        placeholder="e.g. 50"
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Reorder Level Threshold</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={prodReorderLevel}
-                        onChange={(e) => setProdReorderLevel(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-[#040C26] border border-white/15 text-white focus:outline-none focus:border-[#218DFF]"
-                      />
-                    </div>
-                  </div>
 
                   {/* More Options Toggle */}
                   <div>
@@ -2018,19 +2106,19 @@ export default function StockWorkspace({
               )}
             </div>
 
-            {/* Drawer Footer Actions */}
-            <div className="pt-4 border-t border-white/10 flex items-center gap-3">
+            {/* Sticky Drawer Footer Actions (Always visible on mobile & desktop) */}
+            <div className="px-4 sm:px-6 py-4 pb-6 sm:pb-4 border-t border-white/15 bg-[#040C26]/95 shrink-0 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => (drawerType === 'product' ? handleSaveProduct(false) : handleSaveMaterial(false))}
-                className="flex-1 btn-sapphire-clean py-2.5 rounded-xl text-xs font-bold cursor-pointer shadow-lg"
+                className="flex-1 btn-sapphire-clean py-3 rounded-xl text-xs sm:text-sm font-bold cursor-pointer shadow-lg"
               >
-                Save
+                {editItem ? 'Update Item' : drawerType === 'product' ? 'Save Product' : 'Save Material'}
               </button>
               <button
                 type="button"
                 onClick={() => (drawerType === 'product' ? handleSaveProduct(true) : handleSaveMaterial(true))}
-                className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/15 cursor-pointer"
+                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs sm:text-sm font-bold border border-white/15 cursor-pointer"
               >
                 Save &amp; Add Another
               </button>

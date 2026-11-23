@@ -16,6 +16,16 @@ if (
   import.meta.env.PROD
 ) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {})
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        reg.update().catch(() => {})
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            reg.update().catch(() => {})
+          }
+        })
+      })
+      .catch(() => {})
   })
 }

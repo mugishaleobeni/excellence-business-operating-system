@@ -61,6 +61,8 @@ export default function SubscriptionBillingView({
   }
 
   const [upgradeModalPlan, setUpgradeModalPlan] = useState(null)
+  const [selectedCardPlan, setSelectedCardPlan] = useState(null)
+  const [copiedMoMo, setCopiedMoMo] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('MTN MoMo Business')
   const [paymentReference, setPaymentReference] = useState('')
   const [payerPhone, setPayerPhone] = useState(user?.phone || '')
@@ -96,7 +98,21 @@ export default function SubscriptionBillingView({
     badge: p.badge
   }))
 
+  const handleCopyPaymentNumber = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText('0781963981').catch(() => {})
+    }
+    setCopiedMoMo(true)
+    addToast?.({
+      type: 'success',
+      title: 'Payment Number Copied',
+      message: 'Official ExBOS payment number 0781 963 981 copied to clipboard.'
+    })
+    setTimeout(() => setCopiedMoMo(false), 3000)
+  }
+
   const handleSelectPlan = async (planObj) => {
+    setSelectedCardPlan(planObj)
     if (planObj.id === currentPlan) return
     if (planObj.id === 'Free') {
       if (updateUserProfile) {
@@ -203,6 +219,45 @@ export default function SubscriptionBillingView({
           <UsageMeter label="Staff Logins" used={usage.staffUsed ?? 0} limit={limits.maxStaff} />
           <UsageMeter label="Catalog Items" used={usage.productsUsed ?? 0} limit={limits.maxProducts} />
           <UsageMeter label="Monthly Sales" used={usage.monthlySalesUsed ?? 0} limit={limits.maxMonthlySales} />
+        </div>
+      </div>
+
+      {/* Official Payment Numbers Banner (Always visible + updates for selected plan) */}
+      <div className="exbos-glass-card p-5 rounded-2xl border border-[#218DFF]/40 bg-gradient-to-r from-[#0A2786]/60 via-[#071544]/80 to-[#03091F]/90 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] font-orbitron uppercase tracking-wider text-[#9EDCFF] font-bold block">
+              {selectedCardPlan
+                ? `Selected Plan: ${selectedCardPlan.name} (${selectedCardPlan.priceRWF} RWF ${selectedCardPlan.period})`
+                : 'Official Payment & Instant Activation Numbers'}
+            </span>
+            <h3 className="font-orbitron text-sm sm:text-base font-extrabold text-white mt-0.5">
+              MTN MoMo &amp; Airtel Money: <span className="text-emerald-300 font-mono">0781 963 981</span> (+250 781 963 981)
+            </h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCopyPaymentNumber}
+              className="px-3.5 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold cursor-pointer transition"
+            >
+              {copiedMoMo ? '✓ Number Copied (0781 963 981)' : '📋 Copy Number (0781 963 981)'}
+            </button>
+            <a
+              href="tel:*182*1*1*0781963981%23"
+              className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold no-underline"
+            >
+              📞 Dial MoMo
+            </a>
+            <a
+              href="https://wa.me/250781963981"
+              target="_blank"
+              rel="noreferrer"
+              className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold no-underline"
+            >
+              💬 WhatsApp Proof
+            </a>
+          </div>
         </div>
       </div>
 
@@ -340,18 +395,38 @@ export default function SubscriptionBillingView({
               <X className="w-4 h-4" />
             </button>
 
-            <div>
-              <span className="inline-flex items-center gap-1 text-[10px] font-orbitron uppercase text-[#9EDCFF] font-bold">
-                <Lock className="w-3 h-3" /> Verified Plan Upgrade
-              </span>
-              <h3 className="font-orbitron font-bold text-lg mt-1">
-                Upgrade to {upgradeModalPlan.name}
-              </h3>
-              <p className="text-xs text-slate-300 mt-1">
-                Send <strong>{upgradeModalPlan.priceRWF} RWF</strong> via MTN MoMo Business (
-                <code className="text-[#9EDCFF]">+250 781 963 981</code>) or Bank Transfer, then paste your transaction reference below for instant activation.
-              </p>
-            </div>
+              <div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-orbitron uppercase text-[#9EDCFF] font-bold">
+                  <Lock className="w-3 h-3" /> Verified Plan Upgrade
+                </span>
+                <h3 className="font-orbitron font-bold text-lg mt-1">
+                  Upgrade to {upgradeModalPlan.name} ({upgradeModalPlan.priceRWF} RWF)
+                </h3>
+                <div className="mt-2.5 p-3.5 rounded-2xl bg-[#03091F]/90 border border-[#218DFF]/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#9EDCFF]">Official Payment Number:</span>
+                    <span className="font-mono text-sm font-extrabold text-emerald-300">0781 963 981</span>
+                  </div>
+                  <div className="text-[11px] text-slate-300">
+                    Send <strong>{upgradeModalPlan.priceRWF} RWF</strong> to <strong>+250 781 963 981</strong> (MTN MoMo / Airtel Money), then enter your transaction reference ID below.
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCopyPaymentNumber}
+                      className="px-3 py-1.5 rounded-lg bg-[#218DFF]/25 hover:bg-[#218DFF]/40 border border-[#9EDCFF]/40 text-white text-[11px] font-bold cursor-pointer"
+                    >
+                      {copiedMoMo ? '✓ Copied 0781 963 981' : '📋 Copy 0781 963 981'}
+                    </button>
+                    <a
+                      href="tel:*182*1*1*0781963981%23"
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200 text-[11px] font-bold no-underline"
+                    >
+                      📞 Dial *182*1*1*0781963981#
+                    </a>
+                  </div>
+                </div>
+              </div>
 
             <form onSubmit={handleSubmitUpgradeRequest} className="space-y-3.5 text-xs">
               <div>

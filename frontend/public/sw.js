@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exbos-pwa-v1'
+const CACHE_NAME = 'exbos-pwa-v2'
 const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/logo/exboslogo.png']
 
 self.addEventListener('install', (event) => {
@@ -26,7 +26,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
 
   // Never cache backend API calls or cross-origin requests — always hit live network
-  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) {
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api')) {
     return
   }
 

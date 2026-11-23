@@ -47,7 +47,7 @@ def get_storage_snapshot():
     db = get_db()
     scope_key = _resolve_scope_key(db)
 
-    # 1. Assemble all 6 architecture workspaces
+    # 1. Assemble all 6 architecture workspaces and union with db.module_records
     workspaces_map = get_default_workspaces()
     cursor = db.workspaces.find({"scopeKey": scope_key})
     for ws_doc in cursor:
@@ -64,6 +64,28 @@ def get_storage_snapshot():
                     records_obj.setdefault(b, [])
             clean_ws["records"] = records_obj
             workspaces_map[arch_id] = {**workspaces_map.get(arch_id, {}), **clean_ws}
+
+    # Ensure every record in db.module_records for this tenant is present in the snapshot
+    if scope_key and scope_key != "default":
+        mod_cursor = db.module_records.find({"scopeKey": scope_key}).sort("updated_at", -1)
+        for mdoc in mod_cursor:
+            clean_m = serialize_doc(mdoc)
+            clean_m.pop("_id", None)
+            clean_m.pop("scopeKey", None)
+            m_arch = clean_m.get("architectureId") or "buy-and-sell"
+            m_bucket = clean_m.get("bucket") or "Inventory"
+            m_id = str(clean_m.get("id") or "")
+            if not m_id or m_arch not in workspaces_map:
+                continue
+            ws_records = workspaces_map[m_arch].setdefault("records", create_empty_record_buckets())
+            target_buckets = [m_bucket]
+            if m_bucket in ("Products", "FinishedGoods", "Stock", "Inventory"):
+                if "Inventory" not in target_buckets:
+                    target_buckets.append("Inventory")
+            for tb in target_buckets:
+                b_list = ws_records.setdefault(tb, [])
+                if not any(str(x.get("id") or "") == m_id for x in b_list if isinstance(x, dict)):
+                    b_list.insert(0, clean_m)
 
     # 2. Load recent financial ledger transactions
     tx_query = {"scopeKey": scope_key} if scope_key != "default" else {}
@@ -154,14 +176,48 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
             if isinstance(incoming_records, dict) and existing_ws:
                 existing_records = existing_ws.get("records") or {}
                 merged_records = dict(existing_records)
+                # Query live IDs in db.module_records for this architecture so a stale snapshot from
+                # another device (e.g. PC vs Phone PWA) never wipes out records added on the other device.
+                live_mod_docs = list(
+                    db.module_records.find(
+                        {"scopeKey": scope_key, "architectureId": arch_id}
+                    )
+                )
+                live_by_bucket: dict[str, dict[str, dict]] = {}
+                for ldoc in live_mod_docs:
+                    c_doc = serialize_doc(ldoc)
+                    c_doc.pop("_id", None)
+                    c_doc.pop("scopeKey", None)
+                    b_name = c_doc.get("bucket") or "Inventory"
+                    r_id = str(c_doc.get("id") or "")
+                    if r_id:
+                        live_by_bucket.setdefault(b_name, {})[r_id] = c_doc
+                        if b_name in ("Products", "FinishedGoods", "Stock"):
+                            live_by_bucket.setdefault("Inventory", {})[r_id] = c_doc
+
                 for bucket_name, bucket_items in incoming_records.items():
                     if not isinstance(bucket_items, list):
                         continue
-                    if len(bucket_items) > 0 or len(existing_records.get(bucket_name) or []) == 0:
-                        merged_records[bucket_name] = bucket_items
-                        if len(bucket_items) > 0:
+                    seen_ids: set[str] = set()
+                    combined_bucket: list[dict] = []
+                    for item in bucket_items:
+                        if not isinstance(item, dict):
+                            continue
+                        iid = str(item.get("id") or "")
+                        if iid:
+                            seen_ids.add(iid)
+                        combined_bucket.append(item)
+                    # Preserve any live cloud records from db.module_records not yet present in this device's snapshot
+                    for live_id, live_item in live_by_bucket.get(bucket_name, {}).items():
+                        if live_id not in seen_ids:
+                            combined_bucket.insert(0, live_item)
+                            seen_ids.add(live_id)
+
+                    if len(combined_bucket) > 0 or len(existing_records.get(bucket_name) or []) == 0:
+                        merged_records[bucket_name] = combined_bucket
+                        if len(combined_bucket) > 0:
                             _sync_bucket_to_module_records(
-                                db, scope_key, arch_id, bucket_name, bucket_items, now_iso
+                                db, scope_key, arch_id, bucket_name, combined_bucket, now_iso
                             )
                 ws_data = {**ws_data, "records": merged_records}
             elif isinstance(incoming_records, dict):

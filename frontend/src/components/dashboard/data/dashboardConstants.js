@@ -75,11 +75,13 @@ export const MODULE_SHORT_LABELS = {
 export const DASHBOARD_QUICK_ACTIONS = {
   'make-and-sell': [
     { label: 'New Sale', module: 'Sales', page: 'All Sales' },
-    { label: 'New Run', module: 'Production', page: 'Runs' },
+    { label: 'New Product', module: 'Stock', page: 'Finished Goods' },
+    { label: 'New Run', module: 'Stock', page: 'Batch Runs' },
     { label: 'New Purchase', module: 'Purchases', page: 'All Purchases' }
   ],
   'buy-and-sell': [
     { label: 'New Sale', module: 'Sales', page: 'All Sales' },
+    { label: 'New Product', module: 'Products', page: 'All Products' },
     { label: 'New Purchase', module: 'Purchases', page: 'All Purchases' },
     { label: 'New Expense', module: 'Expenses', page: 'All Expenses' }
   ],

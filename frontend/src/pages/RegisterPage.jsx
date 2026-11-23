@@ -1167,7 +1167,7 @@ export default function RegisterPage() {
                       onClick={() => setForm({ ...form, planTier: plan.tier })}
                       className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-3 ${
                         selected
-                          ? 'bg-gradient-to-b from-[#1045CA] to-[#071544] text-white border-[#9EDCFF] shadow-sapphire-glow'
+                          ? 'bg-gradient-to-b from-[#1045CA] to-[#071544] text-white border-[#9EDCFF] shadow-sapphire-glow ring-2 ring-[#9EDCFF]'
                           : 'bg-white/75 dark:bg-[#071544]/65 border-blue-200 dark:border-[#9EDCFF]/20 text-white'
                       }`}
                     >
@@ -1185,6 +1185,89 @@ export default function RegisterPage() {
                   )
                 })}
               </div>
+
+              {/* Official Payment Number Card Shown Immediately When User Selects a Plan */}
+              {(() => {
+                const activePlanObj =
+                  pricingPlans.find((p) => p.tier === form.planTier) || pricingPlans[0] || { tier: form.planTier, priceRWF: 0 }
+                const isPaidSelection = Number(activePlanObj.priceRWF || 0) > 0
+                return (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-[#071544]/90 border-2 border-[#218DFF]/60 text-white space-y-3 shadow-xl">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/15 pb-3">
+                      <div>
+                        <span className="text-[10px] font-orbitron uppercase tracking-wider text-[#9EDCFF] font-bold block">
+                          {isPaidSelection
+                            ? `Selected Paid Plan · ${activePlanObj.name || form.planTier}`
+                            : 'Selected Plan · Forever Free (0 RWF)'}
+                        </span>
+                        <h4 className="font-orbitron text-sm sm:text-base font-extrabold text-white mt-0.5">
+                          {isPaidSelection
+                            ? `Pay ${formatRWF(activePlanObj.priceRWF)} / month via Official ExBOS Number`
+                            : 'Official ExBOS Billing & Support Number'}
+                        </h4>
+                      </div>
+                      <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono text-xs font-bold">
+                        +250 781 963 981
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                      <div className="p-3 rounded-xl bg-white/10 border border-white/15 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-amber-300 block">
+                          MTN MoMo Business
+                        </span>
+                        <div className="font-mono text-sm font-extrabold text-white">0781 963 981</div>
+                        <div className="text-[11px] text-slate-300">Dial *182*1*1*0781963981#</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white/10 border border-white/15 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-rose-300 block">
+                          Airtel Money Rwanda
+                        </span>
+                        <div className="font-mono text-sm font-extrabold text-white">0781 963 981</div>
+                        <div className="text-[11px] text-slate-300">Send to +250 781 963 981</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white/10 border border-white/15 space-y-1">
+                        <span className="text-[10px] uppercase font-bold text-emerald-300 block">
+                          WhatsApp Instant Activation
+                        </span>
+                        <div className="font-mono text-sm font-extrabold text-white">+250 781 963 981</div>
+                        <div className="text-[11px] text-slate-300">Send MoMo reference for 1-click unlock</div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (navigator.clipboard) {
+                            navigator.clipboard.writeText('0781963981').catch(() => {})
+                          }
+                          showToast('Official payment number 0781 963 981 copied to clipboard!', 'Number Copied')
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a73e8] text-white text-xs font-bold cursor-pointer transition"
+                      >
+                        📋 Copy Payment Number (0781 963 981)
+                      </button>
+                      <a
+                        href="tel:*182*1*1*0781963981%23"
+                        className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold no-underline"
+                      >
+                        📞 Dial MoMo on Phone
+                      </a>
+                      <a
+                        href={`https://wa.me/250781963981?text=${encodeURIComponent(
+                          `Hello ExBOS, I selected the ${form.planTier} plan for ${form.businessName || 'my business'} (${form.email}).`
+                        )}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold no-underline"
+                      >
+                        💬 WhatsApp Billing (+250 781 963 981)
+                      </a>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div className="pt-4 flex items-center justify-between">
                 <button

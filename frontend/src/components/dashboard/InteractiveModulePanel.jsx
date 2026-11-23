@@ -174,6 +174,7 @@ export default function InteractiveModulePanel({
   const bucketKey = useMemo(() => {
     if (
       activeModule === 'Products' ||
+      activeModule === 'Stock' ||
       activeModule === 'Products & Stock' ||
       activeModule === 'Farm Inventory' ||
       activeModule === 'Ingredients & Stock' ||
@@ -597,6 +598,14 @@ export default function InteractiveModulePanel({
   useEffect(() => {
     if (searchParams.get('action') === 'create') {
       setEditRow(null)
+      if (
+        activeModule === 'Products' ||
+        activeModule === 'Stock' ||
+        activeModule === 'Products & Stock' ||
+        activeModule === 'Inventory'
+      ) {
+        setForceProductModal(true)
+      }
       setModalOpen(true)
       setSearchParams(
         (prev) => {
@@ -607,7 +616,7 @@ export default function InteractiveModulePanel({
         { replace: true }
       )
     }
-  }, [searchParams, setSearchParams])
+  }, [searchParams, setSearchParams, activeModule])
 
   // Form fields
   const [title, setTitle] = useState('')
@@ -748,6 +757,7 @@ export default function InteractiveModulePanel({
 
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [forceProductModal, setForceProductModal] = useState(false)
+  const [receiveStockMode, setReceiveStockMode] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryNameInput, setCategoryNameInput] = useState('')
   const [categoryDescInput, setCategoryDescInput] = useState('')
@@ -1067,33 +1077,29 @@ export default function InteractiveModulePanel({
     activePage === 'Cost Categories'
 
   const isProductForm =
-    forceProductModal ||
-    (!editRow &&
-      (activeModule === 'Products' ||
-        activeModule === 'Products & Stock' ||
-        activeModule === 'Farm Inventory' ||
-        activeModule === 'Ingredients & Stock') &&
-      (activePage === 'All Products' ||
-        activePage === 'Finished Goods' ||
-        activePage === 'Raw Materials' ||
-        activePage === 'Farm Inputs' ||
-        activePage === 'Kitchen Ingredients' ||
-        activePage === 'Harvested Stock' ||
-        (activePage.includes('Low Stock') && !purchaseProductId)))
+    !receiveStockMode &&
+    (forceProductModal ||
+      activeModule === 'Products' ||
+      activeModule === 'Stock' ||
+      activeModule === 'Products & Stock' ||
+      activeModule === 'Farm Inventory' ||
+      activeModule === 'Ingredients & Stock') &&
+    !isCategoriesPage
 
   const isSaleForm =
+    !isProductForm &&
     !editRow &&
     (activeModule === 'Sales' ||
       activePage === 'All Sales' ||
       activePage === 'Farm Sales')
 
   const isPurchaseForm =
-    !forceProductModal &&
-    !editRow &&
-    (activeModule === 'Purchases' ||
-      activePage === 'All Purchases' ||
-      activePage === 'Feed & Input Orders' ||
-      (activeModule === 'Products' && (activePage === 'Stock' || purchaseProductId)))
+    !isProductForm &&
+    (receiveStockMode ||
+      (!editRow &&
+        (activeModule === 'Purchases' ||
+          activePage === 'All Purchases' ||
+          activePage === 'Feed & Input Orders')))
 
   const isCustomerForm = activeModule === 'Customers'
   const isSupplierForm = activeModule === 'Suppliers'
@@ -1197,6 +1203,8 @@ export default function InteractiveModulePanel({
 
   // One-click Reorder action for Low Stock items (ODT Section 4)
   const handleOpenReorder = (item) => {
+    setForceProductModal(false)
+    setReceiveStockMode(true)
     setPurchaseProductId(item.id)
     setPurchaseItemTitle(item.title)
     setPurchaseUnit(item.unit || 'piece')
@@ -1890,14 +1898,20 @@ export default function InteractiveModulePanel({
   if (
     activeArchId === 'make-and-sell' &&
     (activeModule === 'Stock' ||
+     activeModule === 'Products' ||
      activeModule === 'Production' ||
      (activeModule === 'Overview' && activePage === 'Production Alerts'))
   ) {
     return (
       <MakeSellWorkspace
-        activeModule={activeModule}
-        activePage={activePage}
+        activeModule={activeModule === 'Products' ? 'Stock' : activeModule}
+        activePage={activePage === 'All Products' || activePage === 'Stock' ? 'Finished Goods' : activePage}
         onSwitchPage={onSwitchPage}
+        autoOpenCreate={modalOpen}
+        onConsumeAutoOpen={() => {
+          setModalOpen(false)
+          setForceProductModal(false)
+        }}
       />
     )
   }
@@ -2069,6 +2083,7 @@ export default function InteractiveModulePanel({
           formatRWF={formatRWF}
           onNewProduct={() => {
             setEditRow(null)
+            setReceiveStockMode(false)
             setForceProductModal(true)
             setModalOpen(true)
           }}
@@ -2076,6 +2091,7 @@ export default function InteractiveModulePanel({
           onReceiveStock={() => {
             setEditRow(null)
             setForceProductModal(false)
+            setReceiveStockMode(true)
             setPurchaseProductId('')
             setPurchaseItemTitle('')
             setPurchaseQuantity('1')
@@ -2557,25 +2573,38 @@ export default function InteractiveModulePanel({
       {/* Modals */}
       <ProductModal
         isOpen={modalOpen && isProductForm}
-        onClose={() => { setModalOpen(false); setEditRow(null); setForceProductModal(false); }}
+        onClose={() => { setModalOpen(false); setEditRow(null); setForceProductModal(false); setReceiveStockMode(false); }}
         editRow={editRow}
         activeArchId={activeArchId}
         activePage={activePage}
         categoryOptions={allCategories}
         onAddCategory={handleAddCategory}
         onSaveProduct={(payload, isEdit) => {
+          const normalizedProduct = {
+            ...payload,
+            name: payload.name || payload.title,
+            title: payload.title || payload.name,
+            quantity: Number(payload.quantity ?? payload.currentStock ?? payload.stock ?? 0),
+            currentStock: Number(payload.currentStock ?? payload.quantity ?? payload.stock ?? 0),
+            stock: Number(payload.stock ?? payload.quantity ?? payload.currentStock ?? 0),
+            costPerUnitRWF: Number(payload.costPerUnitRWF ?? payload.unitCostRWF ?? payload.purchasePriceRWF ?? 0),
+            unitCostRWF: Number(payload.unitCostRWF ?? payload.purchasePriceRWF ?? payload.costPerUnitRWF ?? 0),
+            purchasePriceRWF: Number(payload.purchasePriceRWF ?? payload.unitCostRWF ?? payload.costPerUnitRWF ?? 0),
+            sellingPriceRWF: Number(payload.sellingPriceRWF ?? payload.sellingPrice ?? 0)
+          }
           if (isEdit) {
-            updateDemoRecord(activeArchId, bucketKey, payload.id, payload)
+            updateDemoRecord(activeArchId, 'Inventory', normalizedProduct.id, normalizedProduct)
           } else {
-            addDemoRecord(activeArchId, bucketKey, payload)
+            addDemoRecord(activeArchId, 'Inventory', normalizedProduct)
           }
           setModalOpen(false)
           setEditRow(null)
           setForceProductModal(false)
+          setReceiveStockMode(false)
           addToast && addToast({
             type: "success",
             title: isEdit ? "Product Updated" : "Product Created",
-            message: `Product "${payload.title}" saved successfully.`
+            message: `Product "${normalizedProduct.title}" saved and added to your active catalog.`
           })
         }}
       />
@@ -2650,7 +2679,7 @@ export default function InteractiveModulePanel({
 
       <PurchaseModal
         isOpen={modalOpen && isPurchaseForm}
-        onClose={() => { setModalOpen(false); setEditRow(null); }}
+        onClose={() => { setModalOpen(false); setEditRow(null); setReceiveStockMode(false); }}
         recordedProducts={activeArchId === 'make-and-sell' ? rawMaterialsForPurchase : recordedProducts}
         existingSuppliers={existingSuppliers}
         activeArchId={activeArchId}
