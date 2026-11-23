@@ -231,27 +231,63 @@
     width: 100%;
     border-collapse: collapse;
     margin: 10px 0 14px 0;
-    font-size: 8.8pt;
+    font-size: 8.5pt;
     page-break-inside: avoid;
+  }
+  table.data-table.multi-page {
+    page-break-inside: auto;
+  }
+  table.data-table.multi-page thead {
+    display: table-header-group;
+  }
+  table.data-table.multi-page tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
   }
   table.data-table th {
     background: #071544;
     color: #FFFFFF;
     text-align: left;
-    padding: 8px 10px;
+    padding: 7px 9px;
     font-weight: 700;
-    font-size: 8.2pt;
+    font-size: 7.9pt;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.45px;
   }
   table.data-table td {
-    padding: 7.5px 10px;
+    padding: 6.5px 9px;
     border-bottom: 1px solid #E2E8F0;
     vertical-align: top;
     color: #1E293B;
   }
   table.data-table tr:nth-child(even) td {
     background: #F8FAFC;
+  }
+  code {
+    font-family: Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 8.2pt;
+    background: #EFF6FF;
+    color: #0A2786;
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .rel-chain {
+    background: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    border-left: 4px solid #0A2786;
+    border-radius: 0 10px 10px 0;
+    padding: 10px 14px;
+    margin: 8px 0 12px 0;
+    page-break-inside: avoid;
+    font-size: 8.8pt;
+  }
+  .rel-chain-title {
+    font-weight: 800;
+    color: #071544;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    font-size: 8.2pt;
+    letter-spacing: 0.5px;
   }
 
   /* TOC */
@@ -374,6 +410,8 @@
   <div class="toc-item"><span><strong>Chapter 10.</strong> Documents, Quotations, Invoices, WhatsApp &amp; Email Sharing</span><span>Section 10</span></div>
   <div class="toc-item"><span><strong>Chapter 11.</strong> Multi-Branch Control, Stock Transfers &amp; Team Role Permissions</span><span>Section 11</span></div>
   <div class="toc-item"><span><strong>Chapter 12.</strong> Subscription Plans, Mobile Money Billing &amp; Super Admin Governance</span><span>Section 12</span></div>
+  <div class="toc-item"><span><strong>Chapter 13.</strong> Complete Navigation &amp; Sub-Page Reference (All 6 Architectures + Super Admin)</span><span>Section 13</span></div>
+  <div class="toc-item"><span><strong>Chapter 14.</strong> Complete Saved Input Fields &amp; Cross-Module Data Relationship Map</span><span>Section 14</span></div>
 </div>
 
 <!-- ==================== CHAPTER 1 ==================== -->
@@ -700,6 +738,277 @@
   <li><strong>Real-Time Account Suspension &amp; Permanent Deletion:</strong> Suspending a user immediately enforces a live server-side block across every API call and automatically logs the user out within seconds even while they are actively working. Administrators can also permanently delete non-admin accounts and all associated tenant data with an immutable audit log entry.</li>
   <li><strong>System Health &amp; Auto-Reported Error Inbox:</strong> Run 1-click live diagnostics across MongoDB Atlas, Email/2FA, WhatsApp API, and monitor automatic frontend/backend error reports.</li>
 </ul>
+
+<!-- ==================== CHAPTER 13 ==================== -->
+<div class="page-break"></div>
+<h2><span class="chapter-num">13</span> Complete Navigation &amp; Sub-Page Reference</h2>
+<p>
+  Every ExBOS workspace organizes tools into a left sidebar (desktop) and a bottom quick-bar plus <em>More</em> drawer
+  (mobile). Selecting any top-level module opens its dedicated sub-pages. Below is the complete, exact reference of
+  what every navigation item and sub-page does across all 6 Business Architectures and the Super Admin Console.
+</p>
+
+<h3>13.1 Top Header Bar &amp; Global Controls</h3>
+<table class="data-table multi-page">
+  <thead>
+    <tr>
+      <th style="width:24%;">Control / Navigation</th>
+      <th style="width:76%;">Exact Purpose &amp; Behavior</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Branch Switcher</strong></td>
+      <td>Allows Main HQ owners to switch live context between <em>Main HQ</em> and any created sub-branch (protected by optional Owner PIN). All KPIs, stock, sales, and charts filter immediately to the active branch.</td>
+    </tr>
+    <tr>
+      <td><strong>Language Switcher</strong></td>
+      <td>Switches the entire UI, labels, and currency-in-words instantaneously between <strong>English</strong> and <strong>Kinyarwanda</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>Business Alerts Bell</strong></td>
+      <td>Opens the live Business Alerts drawer listing low-stock products, unpaid customer credit balances, overdue supplier bills, and system notifications with 1-click navigation to resolve them.</td>
+    </tr>
+    <tr>
+      <td><strong>Mobile Bottom Bar</strong></td>
+      <td>Provides thumb-accessible shortcuts to <em>Overview</em>, <em>Sales</em>, <em>Products/Stock</em>, <em>Expenses</em>, and <em>More</em> (which opens all remaining modules, Reports, Documents, Integrations, and Settings).</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>13.2 Core Workspace Navigation (Common Modules Across Architectures)</h3>
+<table class="data-table multi-page">
+  <thead>
+    <tr>
+      <th style="width:18%;">Primary Menu</th>
+      <th style="width:26%;">Sub-Pages</th>
+      <th style="width:56%;">What Each Page Does</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Overview</strong></td>
+      <td>Dashboard<br />Where Is My Money<br />Architecture Alerts</td>
+      <td><strong>Dashboard:</strong> Live KPIs (Revenue, Profit, Cash, Stock Value), Interactive Cash Flow Curve Chart (4 modes, Days/Weeks/Months), Branch Activity Heatmap &amp; Best Performer, Mobile Quick Links, and Recent Live Executions.<br /><strong>Where Is My Money:</strong> 8-bucket reconciliation separating spendable cash (Cash, MoMo, Bank) from non-spendable stock, customer receivables, supplier payables, and Available Purchasing Budget.<br /><strong>Alerts / Activity Summary:</strong> Architecture-specific operational watchlist (Production Alerts, Dead Stock, Upcoming Bookings, Survival Runway, Live Kitchen &amp; Rooms).</td>
+    </tr>
+    <tr>
+      <td><strong>Products / Stock</strong></td>
+      <td>All Products<br />Stock<br />Low Stock<br />Categories</td>
+      <td><strong>All Products:</strong> Master item catalog with SKU/barcode scanner, cost price, selling price, unit margin, and current quantity.<br /><strong>Stock:</strong> Live stock valuation and manual stock adjustments.<br /><strong>Low Stock:</strong> Filtered list of every item at or below its <code>lowStockAlert</code> threshold.<br /><strong>Categories:</strong> Group items by department/category for faster POS lookup and reporting.</td>
+    </tr>
+    <tr>
+      <td><strong>Sales</strong></td>
+      <td>All Sales<br />Sales Trends</td>
+      <td><strong>All Sales:</strong> Record POS/counter/credit sales, scan barcodes, print or WhatsApp receipts, track Paid / Part-Paid / Unpaid status, and view profit per sale.<br /><strong>Sales Trends:</strong> Visual breakdown of top-selling products, daily/monthly revenue momentum, and payment channel split.</td>
+    </tr>
+    <tr>
+      <td><strong>Purchases</strong></td>
+      <td>All Purchases<br />Unpaid Purchases<br />Purchase Returns</td>
+      <td><strong>All Purchases:</strong> Record restock purchases and open Purchase Orders with live Intelligent Purchasing &amp; Financial Awareness checks (affordability, stock velocity, open PO duplication, lower supplier price, 1-click Side Money top-up).<br /><strong>Unpaid Purchases:</strong> Outstanding supplier bills with 1-click <em>Pay Supplier</em> partial/full settlement.<br /><strong>Purchase Returns:</strong> Log damaged or returned supplier stock and adjust payables.</td>
+    </tr>
+    <tr>
+      <td><strong>Customers</strong></td>
+      <td>Customer Directory<br />Outstanding Balances</td>
+      <td><strong>Customer Directory:</strong> Contact book (phone, email, account type, preferred products, purchase history).<br /><strong>Outstanding Balances:</strong> Live customer credit ledger showing every unpaid or part-paid sale with 1-click <em>Record Payment</em> debt collection.</td>
+    </tr>
+    <tr>
+      <td><strong>Suppliers</strong></td>
+      <td>All Suppliers<br />Amounts Owed</td>
+      <td><strong>All Suppliers:</strong> Vendor directory with phone, email, location, category, and historical unit prices.<br /><strong>Amounts Owed:</strong> Consolidated supplier payables ledger synced automatically with Unpaid/Part-Paid purchases.</td>
+    </tr>
+    <tr>
+      <td><strong>Expenses</strong></td>
+      <td>All Expenses<br />Expense Categories</td>
+      <td><strong>All Expenses:</strong> Log rent, salaries, electricity, transport, internet, maintenance, and other operating costs (Paid or Unpaid Scheduled).<br /><strong>Expense Categories:</strong> Categorized breakdown of operating spend feeding Net Profit and the 15% operational safety reserve.</td>
+    </tr>
+    <tr>
+      <td><strong>Reports</strong></td>
+      <td>Sales Report<br />Stock Report<br />Purchases Report<br />Profit &amp; Loss<br />Cash Movement<br />Customer Debts<br />Supplier Debts<br />RRA Tax Center</td>
+      <td><strong>Sales / Stock / Purchases Reports:</strong> Deep operational audits including open PO commitments, valuation, and margins.<br /><strong>Profit &amp; Loss:</strong> Automated Revenue &minus; COGS = Gross Profit &minus; Operating Expenses = Net Profit.<br /><strong>Cash Movement:</strong> Channel-by-channel inflow/outflow reconciliation.<br /><strong>Customer &amp; Supplier Debts:</strong> Aging and settlement views.<br /><strong>RRA Tax Center:</strong> Output/Input VAT, 3% Turnover Tax estimate, CSV annex downloads, and 1-click Accountant Email Pack (when opted in).</td>
+    </tr>
+    <tr>
+      <td><strong>Documents</strong></td>
+      <td>Overview, Invoices, Receipts, Quotations, Purchase Orders, Statements, Sent History, Templates</td>
+      <td>Create branded commercial documents, convert Quotations to Invoices in 1 click, generate printable PDFs and public verification links, and audit every WhatsApp/Email dispatch in <em>Sent History</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>Integrations</strong></td>
+      <td>Gmail<br />Google Drive<br />WhatsApp</td>
+      <td>Configure business email delivery for invoices/tax packs, cloud document backup, and 1-click WhatsApp Business sharing for receipts and payment reminders.</td>
+    </tr>
+    <tr>
+      <td><strong>Settings</strong></td>
+      <td>Business Profile<br />Team &amp; Permissions<br />Branches Control<br />RRA Tax &amp; EBM<br />Subscription</td>
+      <td>Update business identity, toggle 2-Step Email Verification (2FA), invite staff with role permissions, create/freeze sub-branches &amp; transfer stock, configure optional RRA TIN/VAT settings, and manage subscription plans &amp; MoMo payment proofs.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>13.3 Architecture-Specific Navigation Menus</h3>
+<table class="data-table multi-page">
+  <thead>
+    <tr>
+      <th style="width:19%;">Architecture</th>
+      <th style="width:27%;">Specialized Menus &amp; Sub-Pages</th>
+      <th style="width:54%;">Specialized Operational Function</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>01. Make &amp; Sell</strong></td>
+      <td><strong>Stock:</strong> Finished Goods, Raw Materials, Batch Runs, Recipes &amp; Formulas, Low Stock, Categories<br /><strong>Reports:</strong> Production &amp; Yield, Sales &amp; Margins</td>
+      <td>Define Recipes / Bill of Materials (BOM) linking raw materials to finished products; execute Batch Runs that automatically check raw material shortages, deduct ingredients, calculate true unit production cost, and add finished units to stock.</td>
+    </tr>
+    <tr>
+      <td><strong>03. Service-Based</strong></td>
+      <td><strong>Services:</strong> Service Catalogue, Consumables &amp; Supplies, Service Categories<br /><strong>Jobs &amp; Bookings:</strong> All Jobs, Bookings &amp; Calendar, In Progress, Completed &amp; Invoiced<br /><strong>Settings:</strong> Staff &amp; Commissions</td>
+      <td>Manage non-stock services with base pricing and staff commission rates, schedule client appointments, track work-in-progress tickets, collect upfront deposits, deduct used consumables, and invoice completed jobs.</td>
+    </tr>
+    <tr>
+      <td><strong>04. Agriculture &amp; Livestock</strong></td>
+      <td><strong>Overview:</strong> Survival Runway &amp; AI Advice<br /><strong>Livestock:</strong> Animal Register, Feed Management, Breeding &amp; Births, Health &amp; Vet Care, Daily Production, Livestock Sales &amp; Profit<br /><strong>Purchases:</strong> Feed &amp; Input Orders<br /><strong>Settings:</strong> Farm Profile, Survival Period Settings</td>
+      <td>Register individual animals or herd batches across 18 species, log daily kg of feed consumed (auto-deducting feed stock), track mating and gestation birth countdowns, record vaccinations/vet treatments, log daily milk/egg/harvest yields, and monitor farm cash survival runway.</td>
+    </tr>
+    <tr>
+      <td><strong>05. Food &amp; Hospitality</strong></td>
+      <td><strong>Overview:</strong> Live Kitchen &amp; Rooms<br /><strong>Restaurant &amp; Bar:</strong> Menu Items, Orders &amp; Kitchen Queue, Tables &amp; Bills<br /><strong>Rooms &amp; Lodging:</strong> Rooms Register, Reservations &amp; Check-In, Guest Folios<br /><strong>Ingredients &amp; Stock:</strong> Kitchen Ingredients, Low Stock &amp; Waste<br /><strong>Settings:</strong> Restaurant &amp; Rooms Setup, Staff &amp; Shifts</td>
+      <td>Run live dine-in/takeaway kitchen queues linked to table bills, manage hotel/guesthouse room availability, check-ins, and guest folios, track raw kitchen ingredients and spoilage/waste logs, and unify dining + lodging cash flow.</td>
+    </tr>
+    <tr>
+      <td><strong>06. Hybrid Business</strong></td>
+      <td><strong>Overview:</strong> Activity Summary<br /><strong>Products &amp; Stock:</strong> All Products, Track Stock (On/Off), Low Stock Alerts<br /><strong>Services &amp; Jobs:</strong> Service Catalogue, Job Schedule<br /><strong>Expenses:</strong> Categories &amp; Activity Tags<br /><strong>Settings:</strong> Business Activities (On/Off), Dashboard Layout</td>
+      <td>Enable or disable multiple business lines under one login, mark items as stock-tracked or non-stock services, process mixed product + service sales in a single cart without double-counting revenue, and tag expenses by business activity.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>13.4 Super Admin Console Navigation (<code>/super-admin</code>)</h3>
+<table class="data-table multi-page">
+  <thead>
+    <tr>
+      <th style="width:24%;">Super Admin Tab</th>
+      <th style="width:76%;">Governance Controls &amp; Live Data Displayed</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Overview &amp; Analytics</strong></td>
+      <td>Real-time KPIs: Total Businesses, Active vs. Suspended Users, Paid MRR (strictly excluding complimentary grants), Pending Upgrades, and Plan Distribution.</td>
+    </tr>
+    <tr>
+      <td><strong>Users &amp; Access</strong></td>
+      <td>Searchable registry of all accounts showing plan, billing type, live renewal countdown (days/hours left), submitted payment confirmation SMS message copy &amp; screenshot proof, plus 1-click actions: <em>+30d Renew</em>, <em>Change Plan</em>, <em>Revoke Payment</em>, <em>Suspend / Reactivate</em> (with instant live logout enforcement), and <em>Delete User</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>Subscriptions &amp; Billing</strong></td>
+      <td>Queue of pending upgrade requests displaying user payment reference, exact pasted MoMo/Airtel SMS confirmation text, and payment screenshot preview with 1-click <em>Approve (30 Days)</em> or <em>Reject</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>Plan Limits &amp; Features</strong></td>
+      <td>Live editor for Free, Bronze, Silver, and Gold monthly prices (RWF), branch caps, staff caps, product/sales quotas, and feature flags.</td>
+    </tr>
+    <tr>
+      <td><strong>Broadcasts</strong></td>
+      <td>Send targeted in-app announcements or branded ExBOS email broadcasts to all businesses or specific subscription tiers.</td>
+    </tr>
+    <tr>
+      <td><strong>System Health &amp; Error Inbox</strong></td>
+      <td>Run live connectivity checks (MongoDB Atlas, SMTP/Email Outbox, WhatsApp API) and inspect the <em>Auto-Reported User Errors Inbox</em> capturing frontend React crashes and 5xx backend errors with stack traces and <em>Mark Resolved</em> controls.</td>
+    </tr>
+    <tr>
+      <td><strong>Audit Logs</strong></td>
+      <td>Immutable timestamped ledger recording every administrative approval, payment revocation, suspension, deletion, and plan change.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ==================== CHAPTER 14 ==================== -->
+<div class="page-break"></div>
+<h2><span class="chapter-num">14</span> Saved Input Fields &amp; Cross-Module Data Relationships</h2>
+<p>
+  ExBOS is not a collection of disconnected forms—every field you save is stored in a tenant-isolated MongoDB
+  collection and automatically updates related stock balances, debt ledgers, cash channels, financial reports, and
+  purchasing budgets. This chapter lists every saved input field and maps exactly how they connect to one another.
+</p>
+
+<h3>14.1 Complete Saved Input Fields by Form &amp; Collection</h3>
+<table class="data-table multi-page">
+  <thead>
+    <tr>
+      <th style="width:19%;">Form / Collection</th>
+      <th style="width:43%;">Exact Saved Input Fields</th>
+      <th style="width:38%;">Direct Relationships &amp; Automated Effects</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Products / Inventory</strong><br /><code>products</code> &amp; <code>module_records:Inventory</code></td>
+      <td><code>id</code>, <code>title</code>, <code>sku</code> / <code>barcode</code>, <code>category</code>, <code>unit</code>, <code>purchasePriceRWF</code> (<code>unitCostRWF</code>), <code>sellingPriceRWF</code>, <code>expectedUnitProfitRWF</code>, <code>expectedMarginPct</code>, <code>quantity</code> (<code>currentStock</code>), <code>lowStockAlert</code>, <code>isApproximateQty</code>, <code>approximateThresholds</code>, <code>expiryDate</code>, <code>status</code>, <code>branchId</code>, <code>date</code></td>
+      <td>Referenced by <strong>Sales</strong> (auto-fills selling price &amp; checks stock), <strong>Purchases</strong> (updates <code>quantity</code> &amp; latest <code>purchasePriceRWF</code> on receipt), <strong>Low Stock Alerts</strong> (triggers when <code>quantity &le; lowStockAlert</code>), and <strong>Where Is My Money</strong> (computes <em>Stock Value = &Sigma; quantity &times; purchasePriceRWF</em>).</td>
+    </tr>
+    <tr>
+      <td><strong>Sales / POS</strong><br /><code>module_records:Sales</code> &amp; <code>transactions</code></td>
+      <td><code>id</code>, <code>productId</code>, <code>productTitle</code>, <code>quantity</code>, <code>unitPriceRWF</code>, <code>amountRWF</code>, <code>paidAmountRWF</code>, <code>remainingAmountRWF</code>, <code>paymentMethod</code>, <code>paymentStatus</code> (<code>Paid</code> / <code>Part-Paid</code> / <code>Unpaid</code>), <code>customerName</code>, <code>customerPhone</code>, <code>customerTin</code>, <code>ebmReceiptNumber</code>, <code>vatAmountRWF</code>, <code>costOfGoodsRWF</code>, <code>profitRWF</code>, <code>branchId</code>, <code>date</code></td>
+      <td><strong>1.</strong> Deducts <code>quantity</code> from linked <code>Inventory.quantity</code>.<br /><strong>2.</strong> Posts <code>TX-&lt;id&gt;</code> inflow to <code>transactions</code> for <code>paidAmountRWF</code> in the chosen Cash/MoMo/Bank channel.<br /><strong>3.</strong> Adds <code>remainingAmountRWF</code> to linked <strong>Customer</strong> <code>balanceOwedRWF</code>.<br /><strong>4.</strong> Feeds <em>Cash Flow Curve</em>, <em>Profit &amp; Loss</em> (Revenue &amp; COGS), <em>Where Is My Money</em>, <em>Sales Velocity</em> (Purchasing Engine), and <em>RRA Sales Annex / Output VAT</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>Purchases &amp; POs</strong><br /><code>module_records:Purchases</code> &amp; <code>transactions</code></td>
+      <td><code>id</code>, <code>productId</code>, <code>productTitle</code>, <code>quantity</code>, <code>orderedQuantity</code>, <code>receivedQuantity</code>, <code>deliveryStatus</code> (<code>Received</code> / <code>Ordered</code> / <code>Partially Received</code>), <code>unit</code>, <code>unitPriceRWF</code>, <code>subtotalRWF</code>, <code>taxAmountRWF</code>, <code>additionalChargesRWF</code>, <code>amountRWF</code>, <code>paidAmountRWF</code>, <code>remainingAmountRWF</code>, <code>paymentMethod</code>, <code>paymentStatus</code>, <code>sideMoneyAddedRWF</code>, <code>sideMoneySource</code>, <code>supplierName</code>, <code>supplierPhone</code>, <code>supplierLocation</code>, <code>expiryDate</code>, <code>auditTrail</code>, <code>branchId</code>, <code>date</code></td>
+      <td><strong>1.</strong> Evaluates live <em>Available Purchasing Budget</em> before saving.<br /><strong>2.</strong> If <code>sideMoneyAddedRWF &gt; 0</code>, posts an audited <em>Owner Side Money / Capital Top-Up</em> inflow first.<br /><strong>3.</strong> Increments <code>Inventory.quantity</code> ONLY by <code>receivedQuantity</code> (never for unreceived Open POs) and updates unit cost.<br /><strong>4.</strong> Posts cash outflow for <code>paidAmountRWF</code>, adds <code>remainingAmountRWF</code> to <strong>Supplier</strong> <code>balanceOwedRWF</code>, reserves Open PO commitments in budget, and feeds <em>RRA Purchases Annex / Claimable Input VAT</em>.</td>
+    </tr>
+    <tr>
+      <td><strong>Customers</strong><br /><code>module_records:Customers</code></td>
+      <td><code>id</code>, <code>name</code> / <code>title</code>, <code>phone</code>, <code>email</code>, <code>category</code> (Account Type), <code>balanceOwedRWF</code>, <code>preferredProducts</code>, <code>notes</code>, <code>status</code>, <code>branchId</code></td>
+      <td>Linked by name/phone to <strong>Sales</strong> and <strong>Documents</strong>. <code>balanceOwedRWF</code> rises automatically on Unpaid/Part-Paid sales and decreases on <em>Record Payment</em> (which posts a new Cash/MoMo/Bank inflow to <code>transactions</code> and updates <em>Where Is My Money &rarr; Owed to Me</em>).</td>
+    </tr>
+    <tr>
+      <td><strong>Suppliers</strong><br /><code>module_records:Suppliers</code></td>
+      <td><code>id</code>, <code>supplierName</code> / <code>title</code>, <code>phone</code>, <code>email</code>, <code>location</code>, <code>category</code>, <code>balanceOwedRWF</code>, <code>notes</code>, <code>status</code>, <code>branchId</code></td>
+      <td>Linked to <strong>Purchases</strong>. Stores historical unit prices so the Purchasing Engine can alert you when a cheaper supplier exists. <code>balanceOwedRWF</code> increases on Unpaid/Part-Paid purchases and drops on <em>Pay Supplier</em> without double-deducting invoice cost.</td>
+    </tr>
+    <tr>
+      <td><strong>Expenses</strong><br /><code>module_records:Expenses</code> &amp; <code>transactions</code></td>
+      <td><code>id</code>, <code>title</code>, <code>category</code>, <code>activityTag</code> (Hybrid), <code>amountRWF</code>, <code>paymentMethod</code>, <code>status</code> (<code>Paid</code> / <code>Unpaid Scheduled</code>), <code>branchId</code>, <code>date</code></td>
+      <td>Paid expenses post an immediate cash outflow to <code>transactions</code> (Cash/MoMo/Bank), reduce <strong>Net Profit</strong> in <em>Profit &amp; Loss</em>, and calculate the 15% <em>Reserved Operational Funds</em> inside the Purchasing Engine. Unpaid scheduled expenses are reserved directly against spendable budget.</td>
+    </tr>
+    <tr>
+      <td><strong>Specialized Modules</strong><br />(Production, Services, Livestock, Hospitality)</td>
+      <td><strong>Make &amp; Sell:</strong> Recipe <code>finishedProductId</code>, <code>ingredients[]</code>, <code>yieldQty</code>; Batch <code>recipeId</code>, <code>batchMultiplier</code>, <code>batchCostRWF</code>.<br /><strong>Services:</strong> <code>serviceName</code>, <code>basePriceRWF</code>, <code>commissionPct</code>, <code>assignedStaff</code>, <code>depositRWF</code>, <code>jobStatus</code>.<br /><strong>Livestock:</strong> <code>tagId</code>, <code>species</code>, <code>breed</code>, <code>weightKg</code>, <code>matingDate</code>, <code>expectedBirthDate</code>, <code>feedId</code>, <code>kgUsed</code>, <code>yieldType</code>.<br /><strong>Hospitality:</strong> <code>menuItemId</code>, <code>tableNo</code>, <code>roomNumber</code>, <code>nightlyRateRWF</code>, <code>checkIn</code>, <code>checkOut</code>, <code>folioBalanceRWF</code>.</td>
+      <td>Each specialized record feeds the exact same unified financial core: Production Batches deduct Raw Materials and add Finished Goods; Service Jobs &amp; Room Folios post deposits and invoices to Sales/Cash; Feed Logs deduct kg from Feed Inventory; Vet Care and Kitchen Waste feed Expenses and Profit &amp; Loss.</td>
+    </tr>
+    <tr>
+      <td><strong>Documents &amp; RRA Tax Profile</strong><br /><code>documents</code>, <code>tax_profiles</code></td>
+      <td><strong>Documents:</strong> <code>docType</code>, <code>docNumber</code>, <code>clientName</code>, <code>clientPhone</code>, <code>clientTin</code>, <code>lineItems[]</code>, <code>subtotalRWF</code>, <code>vatRWF</code>, <code>totalRWF</code>, <code>shareToken</code>, <code>sentHistory[]</code>.<br /><strong>Tax Profile:</strong> <code>rraEnabled</code>, <code>tin</code> (9-digit), <code>regime</code>, <code>vatRegistered</code>, <code>ebmEnabled</code>, <code>accountantEmail</code>.</td>
+      <td>Converting a <em>Quotation</em> to an <em>Invoice</em> preserves all line items and links to Sales/Customer balances. Toggling <code>rraEnabled</code> controls visibility of TIN/EBM fields on Sales and activates <em>RRA Tax Center</em> VAT/Turnover calculations and CSV exports.</td>
+    </tr>
+    <tr>
+      <td><strong>Users, Subscriptions &amp; Branches</strong><br /><code>users</code>, <code>subscription_requests</code>, <code>branches</code></td>
+      <td><strong>User/Billing:</strong> <code>fullName</code>, <code>email</code>, <code>phone</code>, <code>businessName</code>, <code>architectureId</code>, <code>role</code>, <code>ownerScopeKey</code>, <code>assignedBranchId</code>, <code>accountStatus</code>, <code>suspensionReason</code>, <code>plan</code>, <code>billingType</code>, <code>paidAt</code>, <code>subscriptionExpiry</code>, <code>paymentMethod</code>, <code>paymentReference</code>, <code>paymentMessageCopy</code>, <code>paymentScreenshot</code>.<br /><strong>Branch:</strong> <code>id</code>, <code>name</code>, <code>location</code>, <code>status</code> (<code>Active</code> / <code>Frozen</code>), <code>requirePinForMainSwitch</code>, <code>permissions</code> (<code>canDeleteRecords</code>, <code>canEditPrices</code>, <code>canViewProfitReports</code>, <code>maxExpenseLimitRWF</code>), <code>manager</code>.</td>
+      <td><code>ownerScopeKey</code> enforces strict tenant isolation across every API endpoint. <code>assignedBranchId</code> and <code>permissions</code> restrict branch managers to their exact branch and rules. <code>accountStatus == 'suspended'</code> immediately blocks all API calls and auto-logs out active sessions. <code>subscriptionExpiry</code> drives live renewal countdowns and feature limits.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>14.2 End-to-End Data Relationship Flows (How Everything Connects)</h3>
+<div class="rel-chain">
+  <div class="rel-chain-title">Flow 1 — Purchasing &amp; Restocking Cycle</div>
+  <strong>Supplier</strong> + <strong>Product</strong> &rarr; <strong>Purchase / Open PO</strong> (checked against <em>Available Purchasing Budget</em>; optional <em>Owner Side Money Top-Up</em>) &rarr; If <code>Received</code>: adds to <strong>Inventory Stock</strong> &amp; updates Unit Cost; If <code>Ordered</code>: reserves <strong>Open PO Commitment</strong> &rarr; Posts <code>paidAmountRWF</code> outflow to <strong>Cash / MoMo / Bank</strong> &rarr; Posts <code>remainingAmountRWF</code> to <strong>Supplier Payables (Money I Owe)</strong> &rarr; Feeds <strong>RRA Input VAT</strong>.
+</div>
+
+<div class="rel-chain">
+  <div class="rel-chain-title">Flow 2 — Sales, Profit &amp; Customer Credit Cycle</div>
+  <strong>Product</strong> (Cost + Price) + <strong>Customer</strong> &rarr; <strong>Sale</strong> &rarr; Automatically deducts <strong>Inventory Stock</strong> &rarr; Calculates <code>COGS</code> &amp; <code>Gross Profit</code> &rarr; Posts <code>paidAmountRWF</code> inflow to <strong>Cash / MoMo / Bank</strong> &rarr; Posts <code>remainingAmountRWF</code> to <strong>Customer Receivables (Owed to Me)</strong> &rarr; Updates <strong>Cash Flow Curve</strong>, <strong>Branch Activity Heatmap</strong>, <strong>Sales Velocity</strong>, and <strong>RRA Output VAT / Turnover Tax</strong>.
+</div>
+
+<div class="rel-chain">
+  <div class="rel-chain-title">Flow 3 — Expenses, Reserves &amp; Executive Financial Clarity</div>
+  <strong>Paid Expenses</strong> &rarr; Deduct from <strong>Cash / MoMo / Bank</strong> and reduce <strong>Net Profit</strong> &rarr; Establish the 15% <strong>Operational Safety Reserve</strong> (+ <strong>Unpaid Scheduled Bills</strong>) &rarr; Combined with <strong>Cash Channels</strong> and <strong>Open POs</strong> inside <strong>Where Is My Money?</strong> to compute your exact <strong>Available Purchasing Budget</strong> in real time.
+</div>
+
+<div class="rel-chain">
+  <div class="rel-chain-title">Flow 4 — Multi-Branch Consolidation &amp; Platform Governance</div>
+  Every record carries <code>ownerScopeKey</code> + <code>branchId</code> &rarr; Sub-branch staff see only their assigned <code>branchId</code> under HQ <code>permissions</code> &rarr; Main HQ rolls up all branches into <strong>Branch Activity &amp; Best Performer</strong> &rarr; Super Admin governs <code>plan</code>, <code>paymentMessageCopy</code>/<code>paymentScreenshot</code>, <code>subscriptionExpiry</code>, and live <code>accountStatus</code> enforcement.
+</div>
 
 </body>
 </html>

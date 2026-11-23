@@ -19,6 +19,8 @@
 10. [Documents, Quotations, Invoices, WhatsApp & Email Sharing](#10-documents-quotations-invoices--sharing)
 11. [Multi-Branch Control, Stock Transfers & Team Role Permissions](#11-multi-branch-control--team-permissions)
 12. [Subscription Plans, Mobile Money Billing & Super Admin Governance](#12-subscription-plans-billing--super-admin-governance)
+13. [Complete Navigation & Sub-Page Reference (All 6 Architectures + Super Admin)](#13-complete-navigation--sub-page-reference)
+14. [Complete Saved Input Fields & Cross-Module Data Relationship Map](#14-saved-input-fields--cross-module-data-relationships)
 
 ---
 
@@ -135,3 +137,65 @@ Separates **Cash in Hand**, **Mobile Money**, **Bank Accounts**, **Stock & Mater
   - **Instant Real-Time Suspension:** Suspending a user immediately blocks API access and logs them out even while actively working.
   - **Permanent User Deletion** with immutable audit logging.
   - **System Health Diagnostics & Auto-Reported Error Inbox.**
+
+---
+
+## 13. Complete Navigation & Sub-Page Reference
+
+### 13.1 Global Top Bar & Mobile Controls
+- **Branch Switcher:** Switch live context between *Main HQ* and any sub-branch (with optional Owner PIN lock).
+- **Language Switcher:** Toggle instantaneously between **English** and **Kinyarwanda**.
+- **Business Alerts Bell:** Opens live low-stock, unpaid customer credit, and overdue supplier bill alerts.
+- **Mobile Bottom Bar:** Instant shortcuts to *Overview*, *Sales*, *Products/Stock*, *Expenses*, and *More*.
+
+### 13.2 Core Workspace Navigation (Shared Modules)
+| Primary Menu | Sub-Pages | What Each Page Does |
+|---|---|---|
+| **Overview** | Dashboard, Where Is My Money, Architecture Alerts | KPIs, 4-mode Cash Flow Curve Chart, Branch Activity Heatmap & Best Performer, 8-bucket cash reconciliation, and live operational alerts. |
+| **Products / Stock** | All Products, Stock, Low Stock, Categories | Master item catalog with camera barcode scanner, cost/selling prices, stock valuation, low-stock threshold alerts, and categories. |
+| **Sales** | All Sales, Sales Trends | POS & credit sales recording, receipts, payment channel split, Paid/Part-Paid/Unpaid tracking, and revenue momentum charts. |
+| **Purchases** | All Purchases, Unpaid Purchases, Purchase Returns | Restock purchases & Open POs with Intelligent Purchasing Engine (budget check, stock velocity, open PO check, cheaper supplier alert, 1-click Side Money top-up), supplier settlements, and returns. |
+| **Customers** | Customer Directory, Outstanding Balances | Customer profiles, purchase history, and live credit ledger with 1-click debt collection. |
+| **Suppliers** | All Suppliers, Amounts Owed | Vendor profiles, historical unit pricing, and consolidated supplier payables ledger. |
+| **Expenses** | All Expenses, Expense Categories | Operating cost logging (Paid & Unpaid Scheduled) feeding Net Profit and the 15% operational safety reserve. |
+| **Reports** | Sales, Stock, Purchases, Profit & Loss, Cash Movement, Customer Debts, Supplier Debts, RRA Tax Center | Full financial statements, debt aging, cash channel audits, and optional RRA VAT/Turnover Tax CSV exports & Accountant Email Pack. |
+| **Documents** | Overview, Invoices, Receipts, Quotations, Purchase Orders, Statements, Sent History, Templates | Branded document builder, 1-click Quote-to-Invoice conversion, PDF/WhatsApp/Email sharing, and public verification links. |
+| **Integrations** | Gmail, Google Drive, WhatsApp | Email SMTP delivery, cloud backup, and 1-click WhatsApp Business sharing. |
+| **Settings** | Business Profile, Team & Permissions, Branches Control, RRA Tax & EBM, Subscription | Business profile, 2FA toggle, staff roles, multi-branch creation/freeze/stock transfers, optional RRA TIN setup, and MoMo billing. |
+
+### 13.3 Architecture-Specific Navigation
+- **01. Make & Sell:** `Stock` (*Finished Goods, Raw Materials, Batch Runs, Recipes & Formulas, Low Stock, Categories*) and `Reports` (*Production & Yield, Sales & Margins*).
+- **03. Service-Based:** `Services` (*Service Catalogue, Consumables & Supplies, Service Categories*), `Jobs & Bookings` (*All Jobs, Bookings & Calendar, In Progress, Completed & Invoiced*), and `Settings` (*Staff & Commissions*).
+- **04. Agriculture & Livestock:** `Overview` (*Survival Runway & AI Advice*), `Livestock` (*Animal Register, Feed Management, Breeding & Births, Health & Vet Care, Daily Production, Livestock Sales & Profit*), `Purchases` (*Feed & Input Orders*), and `Settings` (*Farm Profile, Survival Period Settings*).
+- **05. Food & Hospitality:** `Overview` (*Live Kitchen & Rooms*), `Restaurant & Bar` (*Menu Items, Orders & Kitchen Queue, Tables & Bills*), `Rooms & Lodging` (*Rooms Register, Reservations & Check-In, Guest Folios*), `Ingredients & Stock` (*Kitchen Ingredients, Low Stock & Waste*), and `Settings` (*Restaurant & Rooms Setup, Staff & Shifts*).
+- **06. Hybrid Business:** `Overview` (*Activity Summary*), `Products & Stock` (*All Products, Track Stock On/Off, Low Stock Alerts*), `Services & Jobs` (*Service Catalogue, Job Schedule*), `Expenses` (*Categories & Activity Tags*), and `Settings` (*Business Activities On/Off, Dashboard Layout*).
+
+### 13.4 Super Admin Console (`/super-admin`)
+- **Overview & Analytics:** Total businesses, active vs. suspended users, Paid MRR (excluding complimentary grants), and pending upgrades.
+- **Users & Access:** Searchable user table with live renewal countdown, submitted payment SMS copy & screenshot viewer, `+30d Renew`, `Revoke Payment`, `Suspend / Reactivate` (instant live logout), and `Delete User`.
+- **Subscriptions & Billing:** Pending upgrade approval queue showing payment reference, SMS confirmation message, and screenshot proof.
+- **Plan Limits & Features:** Live editor for Free, Bronze, Silver, and Gold pricing, branch/staff/product/sales limits, and feature flags.
+- **Broadcasts:** Send in-app or branded email announcements to all users or specific tiers.
+- **System Health & Error Inbox:** Live MongoDB/Email/WhatsApp diagnostics and Auto-Reported User Errors Inbox with stack traces.
+- **Audit Logs:** Immutable log of every administrative action.
+
+---
+
+## 14. Saved Input Fields & Cross-Module Data Relationships
+
+### 14.1 Saved Input Fields by Module & Collection
+- **Products (`products` / `Inventory`):** `id`, `title`, `sku`/`barcode`, `category`, `unit`, `purchasePriceRWF` (`unitCostRWF`), `sellingPriceRWF`, `expectedUnitProfitRWF`, `expectedMarginPct`, `quantity` (`currentStock`), `lowStockAlert`, `isApproximateQty`, `approximateThresholds`, `expiryDate`, `status`, `branchId`, `date`.
+- **Sales (`Sales` + `transactions`):** `id`, `productId`, `productTitle`, `quantity`, `unitPriceRWF`, `amountRWF`, `paidAmountRWF`, `remainingAmountRWF`, `paymentMethod`, `paymentStatus`, `customerName`, `customerPhone`, `customerTin`, `ebmReceiptNumber`, `vatAmountRWF`, `costOfGoodsRWF`, `profitRWF`, `branchId`, `date`.
+- **Purchases & POs (`Purchases` + `transactions`):** `id`, `productId`, `productTitle`, `quantity`, `orderedQuantity`, `receivedQuantity`, `deliveryStatus` (`Received` | `Ordered` | `Partially Received`), `unit`, `unitPriceRWF`, `subtotalRWF`, `taxAmountRWF`, `additionalChargesRWF`, `amountRWF`, `paidAmountRWF`, `remainingAmountRWF`, `paymentMethod`, `paymentStatus`, `sideMoneyAddedRWF`, `sideMoneySource`, `supplierName`, `supplierPhone`, `supplierLocation`, `expiryDate`, `auditTrail`, `branchId`, `date`.
+- **Customers (`Customers`):** `id`, `name`/`title`, `phone`, `email`, `category`, `balanceOwedRWF`, `preferredProducts`, `notes`, `status`, `branchId`.
+- **Suppliers (`Suppliers`):** `id`, `supplierName`/`title`, `phone`, `email`, `location`, `category`, `balanceOwedRWF`, `notes`, `status`, `branchId`.
+- **Expenses (`Expenses` + `transactions`):** `id`, `title`, `category`, `activityTag`, `amountRWF`, `paymentMethod`, `status` (`Paid` | `Unpaid Scheduled`), `branchId`, `date`.
+- **Specialized Architecture Fields:** Recipes/BOM & Production Batches (`finishedProductId`, `ingredients[]`, `batchMultiplier`, `batchCostRWF`); Services/Jobs (`serviceName`, `basePriceRWF`, `commissionPct`, `depositRWF`, `jobStatus`); Livestock (`tagId`, `species`, `matingDate`, `expectedBirthDate`, `feedId`, `kgUsed`, `yieldType`); Hospitality (`menuItemId`, `tableNo`, `roomNumber`, `nightlyRateRWF`, `checkIn`, `checkOut`, `folioBalanceRWF`).
+- **Documents & RRA Tax Profile (`documents`, `tax_profiles`):** `docType`, `docNumber`, `clientName`, `clientTin`, `lineItems[]`, `vatRWF`, `totalRWF`, `shareToken`, `sentHistory[]`; `rraEnabled`, `tin`, `regime`, `vatRegistered`, `ebmEnabled`, `accountantEmail`.
+- **Users, Billing & Branches (`users`, `subscription_requests`, `branches`):** `fullName`, `email`, `phone`, `businessName`, `architectureId`, `role`, `ownerScopeKey`, `assignedBranchId`, `accountStatus`, `suspensionReason`, `plan`, `billingType`, `paidAt`, `subscriptionExpiry`, `paymentMethod`, `paymentReference`, `paymentMessageCopy`, `paymentScreenshot`; Branch `id`, `name`, `location`, `status`, `requirePinForMainSwitch`, `permissions` (`canDeleteRecords`, `canEditPrices`, `canViewProfitReports`, `maxExpenseLimitRWF`), `manager`.
+
+### 14.2 Cross-Module Data Relationship Flows
+1. **Purchasing Flow:** `Supplier` + `Product` -> `Purchase / Open PO` (evaluated against *Available Purchasing Budget*; optional *Owner Side Money Top-Up* inflow) -> `Inventory.quantity` increases ONLY on `Received`/`Partially Received` -> `paidAmountRWF` deducts from Cash/MoMo/Bank -> `remainingAmountRWF` increases `Supplier.balanceOwedRWF` -> feeds *RRA Input VAT*.
+2. **Sales Flow:** `Product` + `Customer` -> `Sale` -> deducts `Inventory.quantity` -> computes `COGS` & `Gross Profit` -> `paidAmountRWF` increases Cash/MoMo/Bank -> `remainingAmountRWF` increases `Customer.balanceOwedRWF` -> updates *Cash Flow Curve*, *Branch Heatmap*, *Sales Velocity*, and *RRA Output VAT*.
+3. **Expenses & Cash Clarity Flow:** `Paid Expenses` deduct from Cash/MoMo/Bank, reduce *Net Profit*, and establish the 15% *Operational Safety Reserve* (+ *Unpaid Scheduled Bills*) -> combined with Cash Channels & Open POs inside *Where Is My Money?* to calculate your live *Available Purchasing Budget*.
+4. **Multi-Branch & Governance Flow:** Every record is tagged with `ownerScopeKey` + `branchId` -> sub-branch managers see only their branch under HQ `permissions` -> Main HQ rolls up all branches -> Super Admin governs `plan`, `paymentMessageCopy`/`paymentScreenshot`, `subscriptionExpiry`, and live `accountStatus` suspension enforcement.
