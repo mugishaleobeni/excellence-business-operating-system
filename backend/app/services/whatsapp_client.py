@@ -1,3 +1,4 @@
+import base64
 import logging
 import os
 import re
@@ -144,6 +145,57 @@ def is_meta_configured() -> bool:
     return bool(token and phone_id)
 
 
+def download_meta_media_as_data_uri(
+    media_id: str,
+    max_bytes: int = 4 * 1024 * 1024,
+) -> Optional[dict[str, Any]]:
+    """
+    Download an incoming WhatsApp media file (e.g. MoMo/Airtel payment screenshot) from Meta Graph API
+    and return a base64 data URI compatible with Super Admin's payment screenshot viewer.
+    """
+    clean_id = str(media_id or "").strip()
+    token = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+    if not clean_id or not token:
+        return None
+
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        meta_resp = requests.get(
+            f"https://graph.facebook.com/v20.0/{clean_id}",
+            headers=headers,
+            timeout=12,
+        )
+        if not meta_resp.ok:
+            logger.warning("Meta media lookup failed for %s: HTTP %s", clean_id, meta_resp.status_code)
+            return None
+        meta_json = meta_resp.json() if meta_resp.content else {}
+        media_url = str(meta_json.get("url") or "").strip()
+        mime_type = str(meta_json.get("mime_type") or "image/jpeg").strip()
+        if not media_url:
+            return None
+
+        bin_resp = requests.get(media_url, headers=headers, timeout=15)
+        if not bin_resp.ok or not bin_resp.content:
+            logger.warning("Meta media download failed for %s: HTTP %s", clean_id, bin_resp.status_code)
+            return None
+        content = bin_resp.content
+        if len(content) > max_bytes:
+            logger.warning("Meta media %s exceeds %d bytes limit (%d bytes)", clean_id, max_bytes, len(content))
+            return {"mediaId": clean_id, "mimeType": mime_type, "sizeBytes": len(content), "tooLarge": True, "dataUri": ""}
+
+        b64 = base64.b64encode(content).decode("ascii")
+        return {
+            "mediaId": clean_id,
+            "mimeType": mime_type,
+            "sizeBytes": len(content),
+            "tooLarge": False,
+            "dataUri": f"data:{mime_type};base64,{b64}",
+        }
+    except Exception as exc:
+        logger.warning("Failed to download Meta media %s: %s", clean_id, exc)
+        return None
+
+
 def build_welcome_message(
     business_name: str,
     architecture_id: str = "buy-and-sell",
@@ -160,10 +212,10 @@ def build_welcome_message(
             "Subiza *Umubare* w'ibyo ushaka:\n"
             "*1.* Reba Ibicuruzwa n'Ububiko\n"
             "*2.* Andika Igurisha (Intambwe ku ntambwe)\n"
-            "*3.* Andika Irangura / Kongera Ububiko\n"
+            "*3.* Andika Ibyaranguwe / Kongera Ububiko\n"
             "*4.* Andika Amafaranga Yakoreshejwe\n"
-            "*5.* Raporo y'Ubucuruzi (Inyungu, Ububiko)\n"
-            "*6.* Abakiriya Batarishyura n'Ibutsa\n"
+            "*5.* Raporo y'Ubucuruzi (Inyungu, Ububiko ,...)\n"
+            "*6.* Abakiriya Batarishyura no kubibutsa\n"
             "*7.* Emeza Ubwishyu bw'Umukiriya\n"
             "*8.* Ongeramo Igicuruzwa Gishya\n"
             "*9.* Hindura Ururimi (English / Kinyarwanda)\n"

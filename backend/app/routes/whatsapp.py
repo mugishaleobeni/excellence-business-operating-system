@@ -8,6 +8,7 @@ from app.database import get_db
 from app.services.whatsapp_client import (
     build_wa_me_link,
     build_welcome_message,
+    download_meta_media_as_data_uri,
     get_session_window_status,
     get_whatsapp_delivery_config,
     is_meta_configured,
@@ -111,6 +112,7 @@ def receive_meta_webhook():
                 from_phone = msg.get("from", "")
                 msg_type = msg.get("type", "text")
                 text_body = ""
+                media_data = None
                 if msg_type == "text":
                     text_body = (msg.get("text") or {}).get("body", "")
                 elif msg_type == "interactive":
@@ -120,16 +122,52 @@ def receive_meta_webhook():
                         or (inter.get("list_reply") or {}).get("id")
                         or ""
                     )
+                elif msg_type == "image":
+                    img_obj = msg.get("image") or {}
+                    media_id = str(img_obj.get("id") or "").strip()
+                    caption = str(img_obj.get("caption") or "").strip()
+                    text_body = caption
+                    downloaded = download_meta_media_as_data_uri(media_id) if media_id else None
+                    media_data = {
+                        "type": "image",
+                        "mediaId": media_id,
+                        "caption": caption,
+                        "mimeType": (downloaded or {}).get("mimeType") or img_obj.get("mime_type") or "image/jpeg",
+                        "dataUri": (downloaded or {}).get("dataUri") or "",
+                        "tooLarge": bool((downloaded or {}).get("tooLarge")),
+                    }
+                elif msg_type == "document":
+                    doc_obj = msg.get("document") or {}
+                    doc_mime = str(doc_obj.get("mime_type") or "").lower()
+                    if doc_mime.startswith("image/"):
+                        media_id = str(doc_obj.get("id") or "").strip()
+                        caption = str(doc_obj.get("caption") or "").strip()
+                        text_body = caption
+                        downloaded = download_meta_media_as_data_uri(media_id) if media_id else None
+                        media_data = {
+                            "type": "image",
+                            "mediaId": media_id,
+                            "caption": caption,
+                            "mimeType": (downloaded or {}).get("mimeType") or doc_mime,
+                            "dataUri": (downloaded or {}).get("dataUri") or "",
+                            "tooLarge": bool((downloaded or {}).get("tooLarge")),
+                        }
 
-                if from_phone and text_body:
+                if from_phone and (text_body or media_data):
                     record_inbound_session(db, from_phone)
                     db.whatsapp_messages.insert_one({
                         "direction": "inbound",
                         "from": normalize_phone(from_phone),
-                        "message": text_body,
+                        "message": text_body or "[Image Attachment]",
+                        "hasMedia": bool(media_data),
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     })
-                    engine_res = handle_incoming_whatsapp_message(db, from_phone, text_body)
+                    engine_res = handle_incoming_whatsapp_message(
+                        db,
+                        from_phone,
+                        text_body,
+                        media_data=media_data,
+                    )
                     send_res = send_whatsapp_message(
                         from_phone,
                         engine_res["reply"],
@@ -210,15 +248,34 @@ def simulate_whatsapp_command():
     db = get_db()
     payload = request.get_json(silent=True) or {}
     text = (payload.get("message") or "").strip()
-    if not text:
-        return error_response("Message text is required.", status_code=400)
+    image_data_uri = (payload.get("imageDataUri") or "").strip()
+    if not text and not image_data_uri:
+        return error_response("Message text or imageDataUri is required.", status_code=400)
 
-    user_doc = _resolve_active_user(db)
-    if not user_doc:
+    media_data = None
+    if image_data_uri:
+        media_data = {
+            "type": "image",
+            "mediaId": "sim-image",
+            "caption": text,
+            "mimeType": "image/jpeg",
+            "dataUri": image_data_uri,
+            "tooLarge": False,
+        }
+
+    is_unregistered_sim = bool(payload.get("unregistered"))
+    user_doc = None if is_unregistered_sim else _resolve_active_user(db)
+    if not is_unregistered_sim and not user_doc:
         return error_response("No active business user found.", status_code=404)
 
-    from_phone = payload.get("phone") or user_doc.get("phone") or "+250788000000"
-    res = handle_incoming_whatsapp_message(db, from_phone, text, user_doc=user_doc)
+    from_phone = payload.get("phone") or (user_doc or {}).get("phone") or "+250788000000"
+    res = handle_incoming_whatsapp_message(
+        db,
+        from_phone,
+        text,
+        user_doc=user_doc,
+        media_data=media_data,
+    )
     return success_response(data=res, message="WhatsApp command processed.")
 
 

@@ -849,9 +849,11 @@ def handle_incoming_whatsapp_message(
     from_phone: str,
     text: str,
     user_doc: Optional[dict[str, Any]] = None,
+    media_data: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """
     Executive guided WhatsApp POS & Operations Engine.
+    - Unregistered numbers enter the full 7-step ExBOS Account Setup & Account Linking engine.
     - Recognizes natural greetings without error messages.
     - Walks users step-by-step through Sales (product -> qty -> payment -> VERIFY BEFORE SAVING),
       Purchases, Expenses, and New Products.
@@ -870,12 +872,13 @@ def handle_incoming_whatsapp_message(
                 break
 
     if not user_doc:
-        reply = (
-            "Welcome to *EXCELLENCE BOS* Official WhatsApp.\n\n"
-            "This phone number is not yet linked to an ExBOS business account.\n"
-            "Open *Dashboard -> Integrations -> WhatsApp* to link your number."
+        from app.services.whatsapp_onboarding import handle_unregistered_whatsapp_message
+        return handle_unregistered_whatsapp_message(
+            db,
+            normalized_phone,
+            clean_text,
+            media_data=media_data,
         )
-        return {"reply": reply, "action": "unlinked_user"}
 
     scope_key = (user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
     arch_id = user_doc.get("architectureId") or "buy-and-sell"
