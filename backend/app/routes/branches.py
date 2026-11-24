@@ -761,6 +761,24 @@ def complete_branch_manager_invite(token: str):
             text_body=owner_email_text,
         )
 
+    # 3) Send live WhatsApp alert to owner's registered Meta recipient number(s)
+    try:
+        from app.services.whatsapp_client import notify_registered_whatsapp_recipients
+        wa_alert_text = (
+            f"*EXCELLENCE BOS — Branch Security Alert*\n"
+            f"Branch Manager *{full_name}* ({manager_email}) has successfully set up their account for *{branch_name}*.\n"
+            f"Status: Active & Branch-Locked."
+        )
+        notify_registered_whatsapp_recipients(
+            db,
+            alert_type="branchManagerActivated",
+            message_text=wa_alert_text,
+            scope_key=scope_key,
+            target_roles=["owner", "super_admin"],
+        )
+    except Exception as exc:
+        logger.debug("Optional WhatsApp branch activation alert skipped: %s", exc)
+
     access_token = create_access_token(identity=manager_email)
     safe_user = {k: v for k, v in user_doc.items() if k not in ("password_hash", "_id")}
 

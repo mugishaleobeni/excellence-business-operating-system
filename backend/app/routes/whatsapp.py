@@ -6,9 +6,15 @@ from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
 from app.database import get_db
 from app.services.whatsapp_client import (
+    build_wa_me_link,
     build_welcome_message,
+    get_session_window_status,
+    get_whatsapp_delivery_config,
     is_meta_configured,
     normalize_phone,
+    notify_registered_whatsapp_recipients,
+    record_inbound_session,
+    save_whatsapp_delivery_config,
     send_whatsapp_message,
 )
 from app.services.whatsapp_engine import (
@@ -116,6 +122,7 @@ def receive_meta_webhook():
                     )
 
                 if from_phone and text_body:
+                    record_inbound_session(db, from_phone)
                     db.whatsapp_messages.insert_one({
                         "direction": "inbound",
                         "from": normalize_phone(from_phone),
@@ -287,4 +294,256 @@ def verify_payment_route():
         return error_response(res.get("error", "Verification failed."), status_code=404)
 
     return success_response(data=res, message="Customer payment verified and ledger updated.")
+
+
+def _send_whatsapp_message(db, scope_key: str, to_phone: str, message_text: str) -> bool:
+    """Helper used by branches.py and other modules to send a WhatsApp notification."""
+    res = send_whatsapp_message(
+        to_phone,
+        message_text,
+        db=db,
+        metadata={"scopeKey": scope_key},
+    )
+    return bool(res.get("sent"))
+
+
+def _build_live_business_summary_text(db, user_doc: dict, arch_id: str) -> str:
+    """Build a crisp, emoji-free executive WhatsApp summary of live business numbers."""
+    scope_key = str(user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
+    biz_name = user_doc.get("businessName") or user_doc.get("name") or "ExBOS Business"
+    ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0}) or {}
+    records = ws.get("records") or {}
+    sales = list(records.get("Sales") or [])
+    expenses = list(records.get("Expenses") or [])
+    products = list(records.get("Products") or records.get("Inventory") or [])
+
+    total_sales = sum(float(s.get("amountRWF") or 0) for s in sales)
+    total_paid = sum(float(s.get("paidAmountRWF") if s.get("paidAmountRWF") is not None else s.get("amountRWF") or 0) for s in sales)
+    total_unpaid = sum(float(s.get("remainingAmountRWF") or 0) for s in sales)
+    total_expenses = sum(float(e.get("amountRWF") or 0) for e in expenses)
+    net_cash = total_paid - total_expenses
+    low_stock = [
+        p for p in products
+        if float(p.get("quantity") if p.get("quantity") is not None else p.get("currentStock") or 0)
+        <= float(p.get("lowStockAlert") or 5)
+    ]
+
+    return (
+        f"*EXCELLENCE BOS — Live Business Summary*\n"
+        f"Business: *{biz_name}*\n"
+        f"Total Sales: *{int(round(total_sales)):,} RWF* ({len(sales)} records)\n"
+        f"Payments Received: *{int(round(total_paid)):,} RWF*\n"
+        f"Customer Credit Owed: *{int(round(total_unpaid)):,} RWF*\n"
+        f"Total Expenses: *{int(round(total_expenses)):,} RWF*\n"
+        f"Net Cash Position: *{int(round(net_cash)):,} RWF*\n"
+        f"Low-Stock Alerts: *{len(low_stock)} item(s)*\n\n"
+        f"Reply *0* for Menu or *5* for Full Report."
+    )
+
+
+@whatsapp_bp.route("/config", methods=["GET"])
+def get_whatsapp_config_route():
+    """Return Hybrid Sandbox/Production config, Webhook info, Registered Recipients (with 24h window), and recent logs."""
+    db = get_db()
+    user_doc = _resolve_active_user(db)
+    cfg = get_whatsapp_delivery_config(db)
+    official_num = os.getenv("WHATSAPP_OFFICIAL_NUMBER", "+250 792 946 680")
+    verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN", "exbos-whatsapp-verify-2026")
+    public_api_base = (request.host_url or "https://exbos.onrender.com/").rstrip("/")
+    webhook_url = f"{public_api_base}/api/v1/whatsapp/webhook"
+
+    enriched_recipients = []
+    for rec in cfg.get("registeredRecipients") or []:
+        phone = normalize_phone(rec.get("phone", ""))
+        if not phone:
+            continue
+        win = get_session_window_status(db, phone)
+        enriched_recipients.append({
+            **rec,
+            "phone": phone,
+            "sessionWindowOpen": win["sessionWindowOpen"],
+            "windowHoursLeft": win["hoursRemaining"],
+            "lastInboundAt": win["lastInboundAt"],
+        })
+
+    recent_logs = list(
+        db.whatsapp_messages.find({}, {"_id": 0}).sort("timestamp", -1).limit(15)
+    )
+
+    return success_response(
+        data={
+            "mode": cfg.get("mode", "sandbox"),
+            "metaConfigured": is_meta_configured(),
+            "officialNumber": official_num,
+            "webhookUrl": webhook_url,
+            "verifyToken": verify_token,
+            "registeredRecipients": enriched_recipients,
+            "alerts": cfg.get("alerts") or {},
+            "recentLogs": recent_logs,
+            "activeUserEmail": (user_doc or {}).get("email", ""),
+        },
+        message="WhatsApp hybrid config loaded.",
+    )
+
+
+@whatsapp_bp.route("/config", methods=["PATCH"])
+def update_whatsapp_config_route():
+    """Toggle Sandbox vs Production mode and automated WhatsApp alert switches."""
+    db = get_db()
+    payload = request.get_json(silent=True) or {}
+    cfg = get_whatsapp_delivery_config(db)
+
+    if "mode" in payload:
+        next_mode = str(payload.get("mode") or "sandbox").strip().lower()
+        if next_mode not in ("sandbox", "production"):
+            return error_response("Mode must be 'sandbox' or 'production'.", status_code=400)
+        cfg["mode"] = next_mode
+
+    if isinstance(payload.get("alerts"), dict):
+        merged_alerts = dict(cfg.get("alerts") or {})
+        for k, v in payload["alerts"].items():
+            merged_alerts[k] = bool(v)
+        cfg["alerts"] = merged_alerts
+
+    saved = save_whatsapp_delivery_config(db, cfg)
+    return success_response(data=saved, message=f"WhatsApp mode updated to {saved['mode'].upper()}.")
+
+
+@whatsapp_bp.route("/recipients", methods=["POST"])
+def add_registered_recipient_route():
+    """Register a Meta-verified test/recipient phone number (up to 5 in Meta Sandbox, unlimited in Production)."""
+    db = get_db()
+    user_doc = _resolve_active_user(db)
+    payload = request.get_json(silent=True) or {}
+    phone = normalize_phone(payload.get("phone") or "")
+    if not phone or len(phone) < 10:
+        return error_response("Please enter a valid WhatsApp phone number (e.g. +250788123456).", status_code=400)
+
+    label = str(payload.get("label") or "").strip() or "Registered Recipient"
+    role = str(payload.get("role") or "owner").strip().lower()
+    if role not in ("owner", "super_admin", "staff", "tester"):
+        role = "owner"
+
+    scope_key = str((user_doc or {}).get("ownerScopeKey") or (user_doc or {}).get("email") or "").strip().lower()
+    cfg = get_whatsapp_delivery_config(db)
+    recipients = [
+        r for r in (cfg.get("registeredRecipients") or [])
+        if normalize_phone(r.get("phone", "")) != phone
+    ]
+    recipients.insert(0, {
+        "phone": phone,
+        "label": label,
+        "role": role,
+        "scopeKey": scope_key,
+        "addedAt": datetime.now(timezone.utc).isoformat(),
+    })
+    cfg["registeredRecipients"] = recipients
+    save_whatsapp_delivery_config(db, cfg)
+    win = get_session_window_status(db, phone)
+
+    return success_response(
+        data={
+            "recipient": {
+                **recipients[0],
+                "sessionWindowOpen": win["sessionWindowOpen"],
+                "windowHoursLeft": win["hoursRemaining"],
+                "lastInboundAt": win["lastInboundAt"],
+            },
+            "count": len(recipients),
+        },
+        message=f"Registered {phone} ({label}) for live Meta WhatsApp delivery.",
+        status_code=201,
+    )
+
+
+@whatsapp_bp.route("/recipients/<path:phone>", methods=["DELETE"])
+def remove_registered_recipient_route(phone: str):
+    """Remove a phone number from the Registered Recipients list."""
+    db = get_db()
+    target = normalize_phone(phone)
+    cfg = get_whatsapp_delivery_config(db)
+    before = len(cfg.get("registeredRecipients") or [])
+    cfg["registeredRecipients"] = [
+        r for r in (cfg.get("registeredRecipients") or [])
+        if normalize_phone(r.get("phone", "")) != target
+    ]
+    save_whatsapp_delivery_config(db, cfg)
+    return success_response(
+        data={"removed": before - len(cfg["registeredRecipients"]), "phone": target},
+        message=f"Removed {target} from registered recipients.",
+    )
+
+
+@whatsapp_bp.route("/test-send", methods=["POST"])
+def test_send_whatsapp_route():
+    """Send a live test WhatsApp message (custom text, hello_world template, or live summary) to a recipient."""
+    db = get_db()
+    user_doc = _resolve_active_user(db)
+    payload = request.get_json(silent=True) or {}
+    to_phone = normalize_phone(payload.get("phone") or (user_doc or {}).get("phone") or "")
+    if not to_phone:
+        return error_response("Destination phone number is required.", status_code=400)
+
+    test_type = str(payload.get("testType") or "custom").strip().lower()
+    arch_id = payload.get("architectureId") or (user_doc or {}).get("architectureId") or "buy-and-sell"
+    force_template = test_type == "template"
+
+    if test_type == "summary" and user_doc:
+        message_text = _build_live_business_summary_text(db, user_doc, arch_id)
+    elif test_type == "template":
+        message_text = "Meta hello_world template ping from ExBOS."
+    else:
+        message_text = str(payload.get("message") or "").strip() or (
+            "Hello from EXCELLENCE BOS! Your Meta WhatsApp Sandbox connection is active. "
+            "Reply '0' to open your live ExBOS Business Menu."
+        )
+
+    delivery = send_whatsapp_message(
+        to_phone,
+        message_text,
+        db=db,
+        metadata={"type": f"test_{test_type}", "userEmail": (user_doc or {}).get("email", "")},
+        force_template=force_template,
+    )
+    return success_response(
+        data=delivery,
+        message=f"WhatsApp test processed ({delivery.get('status')}).",
+    )
+
+
+@whatsapp_bp.route("/daily-summary", methods=["POST"])
+def send_daily_summary_route():
+    """Send a live Executive Business Summary to all registered owner WhatsApp numbers."""
+    db = get_db()
+    user_doc = _resolve_active_user(db)
+    if not user_doc:
+        return error_response("Authenticated business user not found.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    arch_id = payload.get("architectureId") or user_doc.get("architectureId") or "buy-and-sell"
+    scope_key = str(user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
+    summary_text = _build_live_business_summary_text(db, user_doc, arch_id)
+
+    deliveries = notify_registered_whatsapp_recipients(
+        db,
+        alert_type="dailySummary",
+        message_text=summary_text,
+        scope_key=scope_key,
+        target_roles=["owner", "super_admin"],
+    )
+    if not deliveries:
+        fallback_phone = normalize_phone(user_doc.get("phone") or "")
+        return success_response(
+            data={
+                "deliveries": [],
+                "summaryText": summary_text,
+                "waMeLink": build_wa_me_link(fallback_phone, summary_text) if fallback_phone else "",
+            },
+            message="No registered WhatsApp recipients found yet. Add your phone to Registered Recipients first.",
+        )
+
+    return success_response(
+        data={"deliveries": deliveries, "summaryText": summary_text},
+        message=f"Live business summary sent to {len(deliveries)} registered recipient(s).",
+    )
 

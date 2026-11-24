@@ -3,6 +3,7 @@ import { useExbos } from '../../context/ExbosContext'
 import { formatRWF } from '../../utils/currencyWords'
 import { printReportDocument } from '../../utils/printDocument'
 import { exbosApi } from '../../utils/apiClient'
+import WhatsAppSandboxControlPanel from './integrations/WhatsAppSandboxControlPanel'
 import {
   Folder,
   FileText,
@@ -828,6 +829,9 @@ export default function DocumentsAndIntegrationsPanel({
             </button>
           </form>
         </div>
+
+        {/* D. Meta WhatsApp Hybrid Sandbox, Registered Recipients & Live Alerts Center */}
+        <WhatsAppSandboxControlPanel activeArchId={activeArchId} />
       </div>
       )}
     </div>

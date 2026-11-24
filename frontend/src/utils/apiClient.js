@@ -260,6 +260,17 @@ export const exbosApi = {
     apiRequest(withScope('/whatsapp/reminders/send'), { method: 'POST', body: payload }),
   whatsappVerifyPayment: (payload = {}) =>
     apiRequest(withScope('/whatsapp/reminders/verify'), { method: 'POST', body: payload }),
+  whatsappGetConfig: () => apiRequest(withScope('/whatsapp/config')),
+  whatsappUpdateConfig: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/config'), { method: 'PATCH', body: payload }),
+  whatsappAddRecipient: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/recipients'), { method: 'POST', body: payload }),
+  whatsappRemoveRecipient: (phone) =>
+    apiRequest(withScope(`/whatsapp/recipients/${encodeURIComponent(phone)}`), { method: 'DELETE' }),
+  whatsappTestSend: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/test-send'), { method: 'POST', body: payload }),
+  whatsappSendDailySummary: (payload = {}) =>
+    apiRequest(withScope('/whatsapp/daily-summary'), { method: 'POST', body: payload }),
   getBranches: () => apiRequest(withScope('/branches')),
   createBranch: (payload = {}) =>
     apiRequest(withScope('/branches'), { method: 'POST', body: payload }),

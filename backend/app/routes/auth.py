@@ -1307,6 +1307,26 @@ def submit_subscription_upgrade_request():
         },
     )
 
+    # Notify Super Admin's registered WhatsApp recipient number(s) immediately
+    try:
+        from app.services.whatsapp_client import notify_registered_whatsapp_recipients
+        wa_pay_alert = (
+            f"*EXCELLENCE BOS — New Payment Proof Submitted*\n"
+            f"Business: *{req_doc['businessName']}* ({owner_scope})\n"
+            f"Requested Plan: *{req_doc['requestedPlan']}* ({int(round(req_doc['amountRWF'])):,} RWF)\n"
+            f"Method: {payment_method}\n"
+            f"Ref: {payment_reference}\n"
+            f"Open /super-admin to verify and approve."
+        )
+        notify_registered_whatsapp_recipients(
+            db,
+            alert_type="paymentProofSubmitted",
+            message_text=wa_pay_alert,
+            target_roles=["super_admin"],
+        )
+    except Exception as exc:
+        logger.debug("Optional Super Admin WhatsApp payment alert skipped: %s", exc)
+
     return success_response(
         data=req_doc,
         message=f"Upgrade request for {requested_plan.title()} submitted (Ref: {payment_reference}). Your plan will activate as soon as Super Admin verifies payment.",
