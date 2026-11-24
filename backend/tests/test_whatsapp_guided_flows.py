@@ -282,6 +282,49 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             self.assertIn("+250788222333", r_by_name["reply"])
 
 
+    def test_edit_product_name_and_delete_product_with_verification(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # 1. Option 1 -> lists products and prompts to pick one to Edit or Delete
+            r_list = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_list["action"], "list_products")
+            self.assertIn("airtel router 4g", r_list["reply"])
+
+            # 2. Pick product #1 -> Manage Product menu -> Choose 1 (Edit Product Name)
+            r_mgr = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_mgr["action"], "catalog_product_action")
+            self.assertIn("Edit Product Name", r_mgr["reply"])
+            self.assertIn("Delete Product Permanently", r_mgr["reply"])
+
+            r_ask_name = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_ask_name["action"], "catalog_edit_name")
+
+            r_ver_name = handle_incoming_whatsapp_message(db, self.owner_phone, "Airtel 5G Smart Router", self.user_doc)
+            self.assertEqual(r_ver_name["action"], "confirm_product_edit")
+            self.assertIn("VERIFY BEFORE SAVING", r_ver_name["reply"])
+            self.assertIn("Airtel 5G Smart Router", r_ver_name["reply"])
+
+            # Confirm YES -> name updated in MongoDB
+            r_saved = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_saved["action"], "product_updated")
+            ws_after_edit = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(ws_after_edit["records"]["Products"][0]["title"], "Airtel 5G Smart Router")
+
+            # 3. Now Delete product #2 ('mac book 2025') via Option 1 -> 2 -> 5 -> YES
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            r_ver_del = handle_incoming_whatsapp_message(db, self.owner_phone, "5", self.user_doc)
+            self.assertEqual(r_ver_del["action"], "confirm_product_delete")
+            self.assertIn("DELETE PRODUCT PERMANENTLY", r_ver_del["reply"])
+
+            r_del = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_del["action"], "product_deleted")
+            ws_after_del = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws_after_del["records"]["Products"]), 1)
+            self.assertEqual(ws_after_del["records"]["Products"][0]["id"], "PRD-1")
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -598,6 +598,92 @@ def _adjust_product_stock(
     return updated_qty
 
 
+def _update_catalog_product(
+    db: Any,
+    scope_key: str,
+    arch_id: str,
+    product_id: str,
+    bucket: str,
+    updates: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Update a product's name, prices, or stock quantity in workspaces.records."""
+    if not product_id or db is None:
+        return None
+    ws = _get_or_init_workspace(db, scope_key, arch_id)
+    records = ws.get("records") or {}
+    buckets_to_check = [bucket] if bucket else []
+    for b in ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]:
+        if b not in buckets_to_check:
+            buckets_to_check.append(b)
+
+    updated_item: Optional[dict[str, Any]] = None
+    for b in buckets_to_check:
+        items = list(records.get(b) or [])
+        changed = False
+        for idx, item in enumerate(items):
+            if str(item.get("id") or "") == str(product_id):
+                next_item = dict(item)
+                if "name" in updates:
+                    next_item["title"] = updates["name"]
+                    next_item["name"] = updates["name"]
+                if "sellingPriceRWF" in updates:
+                    next_item["sellingPriceRWF"] = float(updates["sellingPriceRWF"])
+                    next_item["amountRWF"] = float(updates["sellingPriceRWF"])
+                if "costPriceRWF" in updates:
+                    next_item["purchasePriceRWF"] = float(updates["costPriceRWF"])
+                    next_item["unitCostRWF"] = float(updates["costPriceRWF"])
+                if "quantity" in updates:
+                    q = float(updates["quantity"])
+                    q_clean = int(q) if q.is_integer() else round(q, 2)
+                    next_item["quantity"] = q_clean
+                    next_item["currentStock"] = q_clean
+                next_item["updated_at"] = datetime.now(timezone.utc).isoformat()
+                items[idx] = next_item
+                updated_item = next_item
+                changed = True
+                break
+        if changed:
+            records[b] = items
+            db.workspaces.update_one(
+                {"scopeKey": scope_key, "architectureId": arch_id},
+                {"$set": {"records": records, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            break
+    return updated_item
+
+
+def _delete_catalog_product(
+    db: Any,
+    scope_key: str,
+    arch_id: str,
+    product_id: str,
+    bucket: str = "",
+) -> bool:
+    """Permanently delete a product from workspaces.records."""
+    if not product_id or db is None:
+        return False
+    ws = _get_or_init_workspace(db, scope_key, arch_id)
+    records = ws.get("records") or {}
+    buckets_to_check = [bucket] if bucket else []
+    for b in ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]:
+        if b not in buckets_to_check:
+            buckets_to_check.append(b)
+
+    removed = False
+    for b in buckets_to_check:
+        items = list(records.get(b) or [])
+        filtered = [item for item in items if str(item.get("id") or "") != str(product_id)]
+        if len(filtered) != len(items):
+            records[b] = filtered
+            removed = True
+    if removed:
+        db.workspaces.update_one(
+            {"scopeKey": scope_key, "architectureId": arch_id},
+            {"$set": {"records": records, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+    return removed
+
+
 def _t(lang: str, en: str, rw: str) -> str:
     return rw if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda") else en
 
@@ -1845,25 +1931,374 @@ def handle_incoming_whatsapp_message(
             "action": "confirm_product",
         }
 
-    # --- FAST-PATH READ COMMANDS ---
-    if upper_text in ("1", "PRODUCTS", "STOCK", "ITEMS", "CATALOG"):
+    # --- MANAGE EXISTING PRODUCTS (EDIT NAME / PRICE / STOCK & DELETE PRODUCT) ---
+    def _product_manage_menu(pdata: dict[str, Any]) -> str:
+        pname = str(pdata.get("productTitle") or "")
+        pqty = pdata.get("quantity", 0)
+        psell = _fmt_rwf(pdata.get("sellingPriceRWF") or 0)
+        pcost = _fmt_rwf(pdata.get("costPriceRWF") or 0)
+        return _t(
+            lang,
+            (
+                f"*MANAGE PRODUCT — {pname}*\n"
+                "--------------------------------\n"
+                f"- Selling Price: *{psell}*\n"
+                f"- Cost Price: *{pcost}*\n"
+                f"- Current Stock: *{pqty} unit(s)*\n"
+                "--------------------------------\n"
+                "Choose an action:\n"
+                "*1.* Edit Product Name\n"
+                "*2.* Edit Selling Price (RWF)\n"
+                "*3.* Edit Cost Price (RWF)\n"
+                "*4.* Edit Stock Quantity\n"
+                "*5.* Delete Product Permanently\n"
+                "*0.* Cancel / Main Menu"
+            ),
+            (
+                f"*CUNGA IGICURUZWA — {pname}*\n"
+                "--------------------------------\n"
+                f"- Igiciro cyo Kugurisha: *{psell}*\n"
+                f"- Igiciro cy'Irangura: *{pcost}*\n"
+                f"- Ububiko Buriho: *{pqty}*\n"
+                "--------------------------------\n"
+                "Hitamo igikorwa:\n"
+                "*1.* Hindura Izina ry'Igicuruzwa\n"
+                "*2.* Hindura Igiciro cyo Kugurisha (RWF)\n"
+                "*3.* Hindura Igiciro cy'Irangura (RWF)\n"
+                "*4.* Hindura Umubare mu Bubiko\n"
+                "*5.* Siba Igicuruzwa Burundu\n"
+                "*0.* Hagarika / Ahabanza"
+            ),
+        )
+
+    if current_step == "catalog_manage_pick":
+        ws = _get_or_init_workspace(db, scope_key, arch_id, business_name)
+        catalog = _catalog_items(ws, arch_id)
+        chosen = None
+        if clean_text.isdigit():
+            idx = int(clean_text) - 1
+            if 0 <= idx < len(catalog[:15]):
+                chosen = catalog[idx]
+        else:
+            chosen = _fuzzy_match_product(catalog, clean_text)
+
+        if not chosen:
+            return {
+                "reply": _t(
+                    lang,
+                    "Product not found. Reply with a *product number* from the list, type the product name, or reply *0* for Main Menu.",
+                    "Igicuruzwa nticyabonetse. Subiza *umubare* uri ku rutonde, wandike izina ryacyo, cyangwa *0* usubire ahabanza.",
+                ),
+                "action": "catalog_manage_pick_retry",
+            }
+        pdata = {
+            "productId": str(chosen.get("id") or ""),
+            "bucket": str(chosen.get("_bucket") or buckets["primary_catalog"]),
+            "productTitle": str(chosen.get("title") or chosen.get("name") or ""),
+            "sellingPriceRWF": float(chosen.get("sellingPriceRWF") or chosen.get("amountRWF") or 0),
+            "costPriceRWF": float(chosen.get("purchasePriceRWF") or chosen.get("unitCostRWF") or 0),
+            "quantity": float(chosen.get("quantity") if chosen.get("quantity") is not None else chosen.get("currentStock") or 0),
+        }
+        if step_data.get("intent") == "delete":
+            set_session("confirm_product_delete", pdata)
+            return {
+                "reply": _format_verification_card(
+                    "DELETE PRODUCT PERMANENTLY",
+                    [
+                        (_t(lang, "Product Name", "Izina ry'Igicuruzwa"), pdata["productTitle"]),
+                        (_t(lang, "Selling Price", "Igiciro cyo Kugurisha"), _fmt_rwf(pdata["sellingPriceRWF"])),
+                        (_t(lang, "Current Stock", "Ububiko Buriho"), f"{int(pdata['quantity']) if pdata['quantity'].is_integer() else pdata['quantity']}"),
+                        (_t(lang, "Action", "Igikorwa"), _t(lang, "Permanent Removal from Catalog", "Gisibwa Burundu mu Bubiko")),
+                    ],
+                    lang=lang,
+                    title_rw="SIBA IGICURUZWA BURUNDU",
+                ),
+                "action": "confirm_product_delete",
+            }
+        set_session("catalog_product_action", pdata)
+        return {"reply": _product_manage_menu(pdata), "action": "catalog_product_action"}
+
+    if current_step == "catalog_product_action":
+        if clean_text == "1":
+            set_session("catalog_edit_name", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Current Name: *{step_data['productTitle']}*\nEnter the *new Product Name* (or *0* to cancel):",
+                    f"Izina Ririho: *{step_data['productTitle']}*\nAndika *Izina Rishya ry'Igicuruzwa* (cyangwa *0* uhagarike):",
+                ),
+                "action": "catalog_edit_name",
+            }
+        if clean_text == "2":
+            set_session("catalog_edit_sell_price", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Current Selling Price: *{_fmt_rwf(step_data['sellingPriceRWF'])}*\nEnter the *new Selling Price (RWF)*:",
+                    f"Igiciro cyo Kugurisha Kiriho: *{_fmt_rwf(step_data['sellingPriceRWF'])}*\nAndika *Igiciro Rishya cyo Kugurisha (RWF)*:",
+                ),
+                "action": "catalog_edit_sell_price",
+            }
+        if clean_text == "3":
+            set_session("catalog_edit_cost_price", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Current Cost Price: *{_fmt_rwf(step_data['costPriceRWF'])}*\nEnter the *new Cost Price (RWF)*:",
+                    f"Igiciro cy'Irangura Kiriho: *{_fmt_rwf(step_data['costPriceRWF'])}*\nAndika *Igiciro Rishya cy'Irangura (RWF)*:",
+                ),
+                "action": "catalog_edit_cost_price",
+            }
+        if clean_text == "4":
+            set_session("catalog_edit_qty", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Current Stock: *{step_data['quantity']}*\nEnter the *new Stock Quantity* (e.g. *10* or *0*):",
+                    f"Ububiko Buriho: *{step_data['quantity']}*\nAndika *Umubare Mushya mu Bubiko* (urugero: *10* cyangwa *0*):",
+                ),
+                "action": "catalog_edit_qty",
+            }
+        if clean_text == "5":
+            set_session("confirm_product_delete", step_data)
+            qty_val = float(step_data.get("quantity") or 0)
+            return {
+                "reply": _format_verification_card(
+                    "DELETE PRODUCT PERMANENTLY",
+                    [
+                        (_t(lang, "Product Name", "Izina ry'Igicuruzwa"), str(step_data.get("productTitle") or "")),
+                        (_t(lang, "Selling Price", "Igiciro cyo Kugurisha"), _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
+                        (_t(lang, "Current Stock", "Ububiko Buriho"), f"{int(qty_val) if qty_val.is_integer() else qty_val}"),
+                        (_t(lang, "Action", "Igikorwa"), _t(lang, "Permanent Removal from Catalog", "Gisibwa Burundu mu Bubiko")),
+                    ],
+                    lang=lang,
+                    title_rw="SIBA IGICURUZWA BURUNDU",
+                ),
+                "action": "confirm_product_delete",
+            }
+        return {
+            "reply": _t(lang, "Reply *1–5* to edit or delete this product, or *0* to cancel.", "Subiza *1–5* uhindure cyangwa usibe iki gicuruzwa, cyangwa *0* uhagarike."),
+            "action": "catalog_product_action_retry",
+        }
+
+    if current_step == "catalog_edit_name":
+        if len(clean_text) < 2:
+            return {
+                "reply": _t(lang, "Please enter a valid product name (at least 2 characters).", "Andika izina ry'igicuruzwa ryemewe (nibura inyuguti 2)."),
+                "action": "catalog_edit_name_retry",
+            }
+        step_data["editField"] = "name"
+        step_data["newValue"] = clean_text
+        set_session("confirm_product_edit", step_data)
+        return {
+            "reply": _format_verification_card(
+                "UPDATE PRODUCT NAME",
+                [
+                    (_t(lang, "Old Name", "Izina Rya Kera"), str(step_data["productTitle"])),
+                    (_t(lang, "New Name", "Izina Rishya"), clean_text),
+                ],
+                lang=lang,
+                title_rw="HINDURA IZINA RY'IGICURUZWA",
+            ),
+            "action": "confirm_product_edit",
+        }
+
+    if current_step == "catalog_edit_sell_price":
+        val = _parse_positive_number(clean_text)
+        if val is None:
+            return {
+                "reply": _t(lang, "Please enter a valid Selling Price in RWF (e.g. *15000*).", "Andika igiciro cyemewe mu RWF (urugero: *15000*)."),
+                "action": "catalog_edit_sell_price_retry",
+            }
+        step_data["editField"] = "sellingPriceRWF"
+        step_data["newValue"] = val
+        set_session("confirm_product_edit", step_data)
+        return {
+            "reply": _format_verification_card(
+                "UPDATE SELLING PRICE",
+                [
+                    (_t(lang, "Product", "Igicuruzwa"), str(step_data["productTitle"])),
+                    (_t(lang, "Old Selling Price", "Igiciro Cya Kera"), _fmt_rwf(step_data["sellingPriceRWF"])),
+                    (_t(lang, "New Selling Price", "Igiciro Gishya"), _fmt_rwf(val)),
+                ],
+                lang=lang,
+                title_rw="HINDURA IGICIRO CYO KUGURISHA",
+            ),
+            "action": "confirm_product_edit",
+        }
+
+    if current_step == "catalog_edit_cost_price":
+        val = _parse_positive_number(clean_text)
+        if val is None:
+            return {
+                "reply": _t(lang, "Please enter a valid Cost Price in RWF (e.g. *10000*).", "Andika igiciro cy'irangura cyemewe mu RWF (urugero: *10000*)."),
+                "action": "catalog_edit_cost_price_retry",
+            }
+        step_data["editField"] = "costPriceRWF"
+        step_data["newValue"] = val
+        set_session("confirm_product_edit", step_data)
+        return {
+            "reply": _format_verification_card(
+                "UPDATE COST PRICE",
+                [
+                    (_t(lang, "Product", "Igicuruzwa"), str(step_data["productTitle"])),
+                    (_t(lang, "Old Cost Price", "Igiciro Cya Kera"), _fmt_rwf(step_data["costPriceRWF"])),
+                    (_t(lang, "New Cost Price", "Igiciro Gishya"), _fmt_rwf(val)),
+                ],
+                lang=lang,
+                title_rw="HINDURA IGICIRO CY'IRANGURA",
+            ),
+            "action": "confirm_product_edit",
+        }
+
+    if current_step == "catalog_edit_qty":
+        raw_q = clean_text.replace(",", "").strip()
+        try:
+            q_val = float(raw_q)
+            if q_val < 0:
+                raise ValueError("negative")
+        except ValueError:
+            return {
+                "reply": _t(lang, "Please enter a valid stock quantity (0 or more).", "Andika umubare w'ububiko wemewe (0 cyangwa hejuru)."),
+                "action": "catalog_edit_qty_retry",
+            }
+        step_data["editField"] = "quantity"
+        step_data["newValue"] = q_val
+        set_session("confirm_product_edit", step_data)
+        return {
+            "reply": _format_verification_card(
+                "UPDATE STOCK QUANTITY",
+                [
+                    (_t(lang, "Product", "Igicuruzwa"), str(step_data["productTitle"])),
+                    (_t(lang, "Old Stock", "Ububiko Bwa Kera"), f"{step_data['quantity']}"),
+                    (_t(lang, "New Stock", "Ububiko Bushya"), f"{int(q_val) if q_val.is_integer() else q_val}"),
+                ],
+                lang=lang,
+                title_rw="HINDURA UMUBARE MU BUBIKO",
+            ),
+            "action": "confirm_product_edit",
+        }
+
+    if current_step == "confirm_product_edit":
+        if upper_text in EDIT_WORDS:
+            set_session("catalog_product_action", step_data)
+            return {"reply": _product_manage_menu(step_data), "action": "catalog_product_action"}
+        if upper_text not in CONFIRM_WORDS:
+            return {
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to confirm and save, *EDIT* to change another detail, or *NO* to cancel.",
+                    "Subiza *YEGO* wemeze ubike, *HINDURA* ukosore, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_product_edit_confirmation",
+            }
+        field = str(step_data.get("editField") or "")
+        new_val = step_data.get("newValue")
+        updated = _update_catalog_product(
+            db,
+            scope_key,
+            arch_id,
+            product_id=str(step_data.get("productId") or ""),
+            bucket=str(step_data.get("bucket") or ""),
+            updates={field: new_val},
+        )
         set_session(None)
+        if not updated:
+            return {
+                "reply": _t(lang, "Could not update product (it may have been removed). Reply *1* to view products.", "Ntibyashobotse guhindura igicuruzwa. Subiza *1* urebe ibicuruzwa."),
+                "action": "product_update_failed",
+            }
+        final_name = updated.get("title") or updated.get("name") or step_data.get("productTitle")
+        return {
+            "reply": _t(
+                lang,
+                f"*PRODUCT UPDATED IN EXBOS*\n- Product: *{final_name}*\n- Selling Price: *{_fmt_rwf(updated.get('sellingPriceRWF') or 0)}*\n- Stock: *{updated.get('quantity', 0)} unit(s)*\n\nReply *1* to manage products or *0* for Main Menu.",
+                f"*IGICURUZWA CYAHINDUWE MURI EXBOS*\n- Igicuruzwa: *{final_name}*\n- Igiciro: *{_fmt_rwf(updated.get('sellingPriceRWF') or 0)}*\n- Ububiko: *{updated.get('quantity', 0)}*\n\nSubiza *1* ucunge ibicuruzwa cyangwa *0* usubire ahabanza.",
+            ),
+            "action": "product_updated",
+            "productId": step_data.get("productId"),
+        }
+
+    if current_step == "confirm_product_delete":
+        if upper_text not in CONFIRM_WORDS:
+            return {
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to permanently delete this product, or *NO* to cancel.",
+                    "Subiza *YEGO* usibe iki gicuruzwa burundu, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_product_delete_confirmation",
+            }
+        deleted = _delete_catalog_product(
+            db,
+            scope_key,
+            arch_id,
+            product_id=str(step_data.get("productId") or ""),
+            bucket=str(step_data.get("bucket") or ""),
+        )
+        set_session(None)
+        if not deleted:
+            return {
+                "reply": _t(lang, "Product was not found or already deleted. Reply *1* to view catalog.", "Igicuruzwa nticyabonetse cyangwa cyamaze gusibwa. Subiza *1*."),
+                "action": "product_delete_failed",
+            }
+        return {
+            "reply": _t(
+                lang,
+                f"*PRODUCT DELETED FROM EXBOS*\nRemoved: *{step_data.get('productTitle', '')}*\n\nReply *1* to view remaining products or *0* for Main Menu.",
+                f"*IGICURUZWA CYASIBWE MURI EXBOS*\nCyasibwe: *{step_data.get('productTitle', '')}*\n\nSubiza *1* urebe ibicuruzwa bisigaye cyangwa *0* usubire ahabanza.",
+            ),
+            "action": "product_deleted",
+            "productId": step_data.get("productId"),
+        }
+
+    # --- FAST-PATH READ COMMANDS ---
+    if upper_text in ("1", "PRODUCTS", "STOCK", "ITEMS", "CATALOG", "EDIT PRODUCT", "DELETE PRODUCT", "MANAGE PRODUCTS"):
         ws = _get_or_init_workspace(db, scope_key, arch_id, business_name)
         items = _catalog_items(ws, arch_id)
         if not items:
+            set_session(None)
             return {
-                "reply": f"*{business_name} Catalog* is currently empty.\nReply *8* to add your first product.",
+                "reply": _t(
+                    lang,
+                    f"*{business_name} Catalog* is currently empty.\nReply *8* to add your first product.",
+                    f"Ububiko bwa *{business_name}* burimo ubusa.\nSubiza *8* wongeremo igicuruzwa cya mbere.",
+                ),
                 "action": "list_products_empty",
             }
-        lines = [f"*{business_name} — Database Items ({len(items)} total):*"]
+        intent = "delete" if upper_text == "DELETE PRODUCT" else "manage"
+        set_session("catalog_manage_pick", {"intent": intent})
+        lines = [
+            _t(
+                lang,
+                f"*{business_name} — Products & Live Stock ({len(items)} total):*",
+                f"*{business_name} — Ibicuruzwa n'Ububiko ({len(items)} byose):*",
+            )
+        ]
         for idx, item in enumerate(items[:15], start=1):
             name = item.get("title") or item.get("name") or item.get("id")
             qty = item.get("quantity") if item.get("quantity") is not None else item.get("currentStock", 0)
             price = item.get("sellingPriceRWF") or item.get("amountRWF") or item.get("unitCostRWF") or 0
-            lines.append(f"*{idx}.* {name} — Stock: *{qty}* | {_fmt_rwf(price)}")
+            stock_lbl = "Ububiko" if str(lang).lower() == "rw" else "Stock"
+            lines.append(f"*{idx}.* {name} — {stock_lbl}: *{qty}* | {_fmt_rwf(price)}")
         if len(items) > 15:
             lines.append(f"...and {len(items) - 15} more in your ExBOS Dashboard.")
-        lines.append("\nReply *2* to record a Sale or *0* for Main Menu.")
+        if intent == "delete":
+            lines.append(
+                _t(
+                    lang,
+                    "\nReply with a *product number* (e.g. *1*) or name to *Delete* it, or *0* to cancel.",
+                    "\nSubiza *umubare w'igicuruzwa* (urugero: *1*) cyangwa izina kugira ngo *Ugisibe*, cyangwa *0* uhagarike.",
+                )
+            )
+        else:
+            lines.append(
+                _t(
+                    lang,
+                    "\nReply with a *product number* (e.g. *1*) or name to *Edit Name / Price / Stock or Delete*, or *0* for Main Menu.",
+                    "\nSubiza *umubare w'igicuruzwa* (urugero: *1*) cyangwa izina kugira ngo *Uhindure Izina / Igiciro / Ububiko cyangwa Usibe*, cyangwa *0* usubire ahabanza.",
+                )
+            )
         return {"reply": "\n".join(lines), "action": "list_products", "count": len(items)}
 
     if upper_text in ("5", "REPORT", "REPORTS", "PNL", "SUMMARY", "MONEY"):
