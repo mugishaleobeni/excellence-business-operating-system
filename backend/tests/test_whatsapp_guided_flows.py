@@ -273,6 +273,14 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             self.assertEqual(r_rem_direct["action"], "confirm_reminder")
             self.assertIn("+250788222333", r_rem_direct["reply"])
 
+            # C. Bare 'REMIND' -> user types customer name directly ('Marie') -> goes straight to confirm_reminder
+            handle_incoming_whatsapp_message(db, self.owner_phone, "0", self.user_doc)
+            r_bare = handle_incoming_whatsapp_message(db, self.owner_phone, "REMIND", self.user_doc)
+            self.assertEqual(r_bare["action"], "remind_pick_customer")
+            r_by_name = handle_incoming_whatsapp_message(db, self.owner_phone, "Marie", self.user_doc)
+            self.assertEqual(r_by_name["action"], "confirm_reminder")
+            self.assertIn("+250788222333", r_by_name["reply"])
+
 
 if __name__ == "__main__":
     unittest.main()
