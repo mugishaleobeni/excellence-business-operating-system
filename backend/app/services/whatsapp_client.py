@@ -148,9 +148,29 @@ def build_welcome_message(
     business_name: str,
     architecture_id: str = "buy-and-sell",
     official_number: str = "+250 792 946 680",
+    lang: str = "en",
 ) -> str:
-    """Build the official ExBOS executive WhatsApp menu."""
+    """Build the official ExBOS executive WhatsApp menu in English or Kinyarwanda."""
     arch_label = ARCH_LABELS.get(architecture_id, "Buy & Sell")
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return (
+            f"*EXCELLENCE BOS — Sisitemu y'Ubucuruzi*\n"
+            f"Ubucuruzi: *{business_name}* ({arch_label})\n"
+            "--------------------------------\n"
+            "Subiza *Umubare* w'ibyo ushaka:\n"
+            "*1.* Reba Ibicuruzwa n'Ububiko\n"
+            "*2.* Andika Igurisha (Intambwe ku ntambwe)\n"
+            "*3.* Andika Irangura / Kongera Ububiko\n"
+            "*4.* Andika Amafaranga Yakoreshejwe\n"
+            "*5.* Raporo y'Ubucuruzi (Inyungu, Ububiko)\n"
+            "*6.* Abakiriya Batarishyura n'Ibutsa\n"
+            "*7.* Emeza Ubwishyu bw'Umukiriya\n"
+            "*8.* Ongeramo Igicuruzwa Gishya\n"
+            "*9.* Hindura Ururimi (English / Kinyarwanda)\n"
+            "*0.* Ahabanza / Hagarika\n"
+            "--------------------------------\n"
+            "Buri gikorwa kibanze kigusaba *Kugenzura (YEGO / HINDURA / OYA)* mbere yo kubikwa."
+        )
     return (
         f"*EXCELLENCE BOS — Official Business Console*\n"
         f"Business: *{business_name}* ({arch_label})\n"
@@ -164,9 +184,10 @@ def build_welcome_message(
         "*6.* Unpaid Customers & Reminders\n"
         "*7.* Verify Customer Payment\n"
         "*8.* Add New Product\n"
+        "*9.* Change Language (English / Kinyarwanda)\n"
         "*0.* Main Menu / Cancel\n"
         "--------------------------------\n"
-        "Every entry shows a *Verification Summary* before saving to your database."
+        "Every entry shows a *Verification Summary* (*YES / EDIT / NO*) before saving."
     )
 
 

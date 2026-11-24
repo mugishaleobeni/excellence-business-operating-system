@@ -596,32 +596,135 @@ def _adjust_product_stock(
     return updated_qty
 
 
-def _format_verification_card(title: str, rows: list[tuple[str, str]]) -> str:
-    """Render a clear, executive verification prompt before writing anything to MongoDB."""
-    lines = [
-        f"*VERIFY BEFORE SAVING — {title}*",
-        "--------------------------------",
-    ]
+def _t(lang: str, en: str, rw: str) -> str:
+    return rw if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda") else en
+
+
+def _format_verification_card(title_en: str, rows: list[tuple[str, str]], lang: str = "en", title_rw: Optional[str] = None) -> str:
+    """Render a clear, executive verification prompt with YES / EDIT / NO options before writing to MongoDB."""
+    is_rw = str(lang or "en").lower() in ("rw", "kin", "kinyarwanda")
+    header = f"*GENZURA MBERE YO KUBIKA — {title_rw or title_en}*" if is_rw else f"*VERIFY BEFORE SAVING — {title_en}*"
+    lines = [header, "--------------------------------"]
     for label, val in rows:
         lines.append(f"- {label}: *{val}*")
-    lines.extend([
-        "--------------------------------",
-        "Reply *YES* to confirm and save to ExBOS.",
-        "Reply *NO* (or *0*) to cancel.",
-    ])
+    lines.append("--------------------------------")
+    if is_rw:
+        lines.extend([
+            "Subiza *YEGO* (cyangwa *YES*) wemeze ubike muri ExBOS.",
+            "Subiza *HINDURA* (cyangwa *EDIT*) ugire icyo ukosora.",
+            "Subiza *OYA* (cyangwa *0*) uhagarike.",
+        ])
+    else:
+        lines.extend([
+            "Reply *YES* to confirm and save to ExBOS.",
+            "Reply *EDIT* to change any detail before saving.",
+            "Reply *NO* (or *0*) to cancel.",
+        ])
     return "\n".join(lines)
 
 
-def _format_product_picker(business_name: str, catalog: list[dict[str, Any]], action_label: str) -> str:
-    lines = [f"*{business_name} — Select Product for {action_label}:*"]
+def _format_product_picker(business_name: str, catalog: list[dict[str, Any]], action_label: str, lang: str = "en") -> str:
+    is_rw = str(lang or "en").lower() in ("rw", "kin", "kinyarwanda")
+    lines = [
+        f"*{business_name} — Hitamo Igicuruzwa ({action_label}):*"
+        if is_rw
+        else f"*{business_name} — Select Product for {action_label}:*"
+    ]
     for idx, item in enumerate(catalog[:15], start=1):
         name = item.get("title") or item.get("name") or item.get("id")
         qty = item.get("quantity") if item.get("quantity") is not None else item.get("currentStock", 0)
         price = item.get("sellingPriceRWF") or item.get("amountRWF") or item.get("unitCostRWF") or 0
-        lines.append(f"*{idx}.* {name} — Stock: *{qty}* | {_fmt_rwf(price)}")
-    lines.append("\nReply with the *product number* (e.g. *1*) or type the product name.")
-    lines.append("Reply *0* to cancel.")
+        stock_word = "Ububiko" if is_rw else "Stock"
+        lines.append(f"*{idx}.* {name} — {stock_word}: *{qty}* | {_fmt_rwf(price)}")
+    if is_rw:
+        lines.append("\nSubiza *umubare w'igicuruzwa* (urugero: *1*) cyangwa wandike izina ryacyo.")
+        lines.append("Subiza *0* uhagarike.")
+    else:
+        lines.append("\nReply with the *product number* (e.g. *1*) or type the product name.")
+        lines.append("Reply *0* to cancel.")
     return "\n".join(lines)
+
+
+def _sale_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
+    qty = float(step_data.get("qty") or 1)
+    qty_disp = int(qty) if qty.is_integer() else qty
+    rem_stock = max(0.0, float(step_data.get("availableStock") or 0) - qty)
+    rem_disp = int(rem_stock) if rem_stock.is_integer() else rem_stock
+    pm_name = str(step_data.get("paymentMethod") or "Cash")
+    pm_status = str(step_data.get("paymentStatus") or "Paid in Full")
+    cust_name = str(step_data.get("customerName") or "Walk-in Client")
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return [
+            ("Igicuruzwa", str(step_data.get("productTitle") or "")),
+            ("Umubare", f"{qty_disp}"),
+            ("Ibisigara mu Bubiko", f"{rem_disp}"),
+            ("Igiciro kuri Kimwe", _fmt_rwf(step_data.get("unitPriceRWF") or 0)),
+            ("Igiteranyo", _fmt_rwf(step_data.get("totalAmountRWF") or 0)),
+            ("Ubwishyu", f"{pm_name} ({pm_status})"),
+            ("Umukiriya", cust_name),
+        ]
+    return [
+        ("Product", str(step_data.get("productTitle") or "")),
+        ("Quantity", f"{qty_disp} unit(s)"),
+        ("Stock After Sale", f"{rem_disp} unit(s)"),
+        ("Unit Price", _fmt_rwf(step_data.get("unitPriceRWF") or 0)),
+        ("Total Amount", _fmt_rwf(step_data.get("totalAmountRWF") or 0)),
+        ("Payment", f"{pm_name} ({pm_status})"),
+        ("Customer", cust_name),
+    ]
+
+
+def _purchase_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
+    qty = float(step_data.get("qty") or 1)
+    amt = float(step_data.get("totalAmountRWF") or 0)
+    qty_disp = int(qty) if qty.is_integer() else qty
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return [
+            ("Igicuruzwa", str(step_data.get("productTitle") or "")),
+            ("Umubare", f"{qty_disp}"),
+            ("Igiciro kuri Kimwe", _fmt_rwf(amt / qty if qty else amt)),
+            ("Igiteranyo cy'Irangura", _fmt_rwf(amt)),
+            ("Ububiko", "Byakiriwe (Byongera ububiko)"),
+        ]
+    return [
+        ("Item", str(step_data.get("productTitle") or "")),
+        ("Quantity", f"{qty_disp} unit(s)"),
+        ("Unit Cost", _fmt_rwf(amt / qty if qty else amt)),
+        ("Total Cost", _fmt_rwf(amt)),
+        ("Delivery Status", "Received (Updates Stock)"),
+    ]
+
+
+def _expense_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return [
+            ("Igisobanuro", str(step_data.get("title") or "")),
+            ("Amafaranga", _fmt_rwf(step_data.get("amountRWF") or 0)),
+            ("Uko Bihagaze", "Yishyuwe"),
+        ]
+    return [
+        ("Description", str(step_data.get("title") or "")),
+        ("Amount", _fmt_rwf(step_data.get("amountRWF") or 0)),
+        ("Status", "Paid"),
+    ]
+
+
+def _product_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
+    qty = float(step_data.get("quantity") or 0)
+    qty_disp = int(qty) if qty.is_integer() else qty
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return [
+            ("Izina ry'Igicuruzwa", str(step_data.get("name") or "")),
+            ("Igiciro cyo Kugurisha", _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
+            ("Igiciro cy'Irangura", _fmt_rwf(step_data.get("costPriceRWF") or 0)),
+            ("Ububiko bw'Itangiriro", f"{qty_disp}"),
+        ]
+    return [
+        ("Product Name", str(step_data.get("name") or "")),
+        ("Selling Price", _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
+        ("Cost Price", _fmt_rwf(step_data.get("costPriceRWF") or 0)),
+        ("Opening Stock", f"{qty_disp} unit(s)"),
+    ]
 
 
 GREETING_WORDS = {
@@ -631,6 +734,7 @@ GREETING_WORDS = {
 }
 
 CONFIRM_WORDS = {"YES", "Y", "CONFIRM", "OK", "YEGO", "SAVE", "SURE"}
+EDIT_WORDS = {"EDIT", "CHANGE", "MODIFY", "UPDATE", "HINDURA", "KOSORA"}
 CANCEL_WORDS = {"NO", "N", "CANCEL", "STOP", "OYA", "ABORT"}
 
 PAYMENT_OPTIONS = {
@@ -689,6 +793,21 @@ def handle_incoming_whatsapp_message(
     business_name = user_doc.get("businessName") or user_doc.get("name") or "ExBOS Business"
     buckets = ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])
 
+    # Load preferred WhatsApp language ('en' or 'rw') from user profile
+    lang = str(user_doc.get("whatsappLanguage") or user_doc.get("language") or "en").strip().lower()
+    if lang not in ("en", "rw"):
+        lang = "rw" if lang in ("kin", "kinyarwanda") else "en"
+
+    def set_user_language(next_lang: str) -> str:
+        clean_l = "rw" if str(next_lang).lower() in ("rw", "kin", "kinyarwanda", "2") else "en"
+        if user_doc.get("email"):
+            db.users.update_one(
+                {"email": user_doc["email"]},
+                {"$set": {"whatsappLanguage": clean_l, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+        user_doc["whatsappLanguage"] = clean_l
+        return clean_l
+
     session = db.whatsapp_sessions.find_one({"phone": normalized_phone}, {"_id": 0}) or {}
     current_step = session.get("step")
     step_data = dict(session.get("data") or {})
@@ -710,6 +829,59 @@ def handle_incoming_whatsapp_message(
                 upsert=True,
             )
 
+    # Instant Language Switch Commands (work from anywhere)
+    if upper_text in ("LANG", "LANGUAGE", "URURIMI", "9") and current_step is None:
+        set_session("choose_language", {})
+        return {
+            "reply": (
+                "*Change Language / Hindura Ururimi*\n"
+                "--------------------------------\n"
+                "*1.* English\n"
+                "*2.* Kinyarwanda\n"
+                "--------------------------------\n"
+                "Reply *1* for English or *2* for Kinyarwanda."
+            ),
+            "action": "choose_language",
+        }
+    if upper_text in ("ENGLISH", "EN"):
+        lang = set_user_language("en")
+        set_session(None)
+        return {
+            "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en"),
+            "action": "language_changed",
+            "language": "en",
+        }
+    if upper_text in ("KINYARWANDA", "RW", "KIN"):
+        lang = set_user_language("rw")
+        set_session(None)
+        return {
+            "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw"),
+            "action": "language_changed",
+            "language": "rw",
+        }
+
+    if current_step == "choose_language":
+        if clean_text in ("1", "EN", "en", "English", "ENGLISH"):
+            lang = set_user_language("en")
+            set_session(None)
+            return {
+                "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en"),
+                "action": "language_changed",
+                "language": "en",
+            }
+        if clean_text in ("2", "RW", "rw", "KIN", "Kinyarwanda", "KINYARWANDA"):
+            lang = set_user_language("rw")
+            set_session(None)
+            return {
+                "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw"),
+                "action": "language_changed",
+                "language": "rw",
+            }
+        return {
+            "reply": "Reply *1* for English or *2* for Kinyarwanda (or *0* to cancel).",
+            "action": "choose_language_retry",
+        }
+
     # Global reset / natural greeting
     if (
         upper_text in GREETING_WORDS
@@ -720,7 +892,7 @@ def handle_incoming_whatsapp_message(
     ):
         set_session(None)
         return {
-            "reply": build_welcome_message(business_name, arch_id),
+            "reply": build_welcome_message(business_name, arch_id, lang=lang),
             "action": "menu",
         }
 
@@ -728,19 +900,51 @@ def handle_incoming_whatsapp_message(
     if current_step and upper_text in CANCEL_WORDS:
         set_session(None)
         return {
-            "reply": "Action cancelled. No changes were saved to your ExBOS database.\n\nReply *0* for Main Menu.",
+            "reply": _t(
+                lang,
+                "Action cancelled. No changes were saved to your ExBOS database.\n\nReply *0* for Main Menu.",
+                "Igikorwa cyahagaritswe. Nta na kimwe cyabitswe muri ExBOS.\n\nSubiza *0* usubire ahabanza.",
+            ),
             "action": "cancelled",
         }
 
     # =========================================================================
-    # STEP-BY-STEP GUIDED SESSIONS WITH MANDATORY VERIFICATION BEFORE SAVING
+    # STEP-BY-STEP GUIDED SESSIONS WITH VERIFICATION (YES / EDIT / NO)
     # =========================================================================
 
-    # --- A. CONFIRMATION GATE: SALE ---
+    # --- A. CONFIRMATION & EDIT GATE: SALE ---
     if current_step == "confirm_sale":
+        if upper_text in EDIT_WORDS:
+            set_session("edit_sale_pick", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    (
+                        "*EDIT SALE — Choose what to change:*\n"
+                        "*1.* Change Product\n"
+                        "*2.* Change Quantity\n"
+                        "*3.* Change Unit Price (RWF)\n"
+                        "*4.* Change Payment Method / Customer\n"
+                        "*0.* Cancel Sale"
+                    ),
+                    (
+                        "*HINDURA IGURISHA — Hitamo icyo ushaka guhindura:*\n"
+                        "*1.* Hindura Igicuruzwa\n"
+                        "*2.* Hindura Umubare\n"
+                        "*3.* Hindura Igiciro kuri Kimwe (RWF)\n"
+                        "*4.* Hindura Uburyo bwo Kwishyura / Umukiriya\n"
+                        "*0.* Hagarika Igurisha"
+                    ),
+                ),
+                "action": "edit_sale_pick",
+            }
         if upper_text not in CONFIRM_WORDS:
             return {
-                "reply": "Please reply *YES* to confirm and save this sale, or *NO* to cancel.",
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to confirm and save, *EDIT* to change a detail, or *NO* to cancel.",
+                    "Subiza *YEGO* wemeze ubike, *HINDURA* ugire icyo ukosora, cyangwa *OYA* uhagarike.",
+                ),
                 "action": "awaiting_sale_confirmation",
             }
         qty = float(step_data.get("qty") or 1)
@@ -788,22 +992,85 @@ def handle_incoming_whatsapp_message(
         )
         new_stock = _adjust_product_stock(db, scope_key, arch_id, product_id, -qty)
         set_session(None)
-        stock_line = f"\n- Remaining Stock: *{int(new_stock) if new_stock is not None and float(new_stock).is_integer() else new_stock}*" if new_stock is not None else ""
+        stock_val = int(new_stock) if new_stock is not None and float(new_stock).is_integer() else new_stock
+        stock_line = (
+            f"\n- {_t(lang, 'Remaining Stock', 'Ibisigara mu Bubiko')}: *{stock_val}*"
+            if new_stock is not None
+            else ""
+        )
         return {
             "reply": (
-                "*SALE SAVED & SYNCED TO EXBOS*\n"
+                f"*{_t(lang, 'SALE SAVED & SYNCED TO EXBOS', 'IGURISHA RYABITSWE NEZA MURI EXBOS')}*\n"
                 "--------------------------------\n"
-                f"- Reference: *{entry['id']}*\n"
-                f"- Item: *{entry['title']}*\n"
-                f"- Total Amount: *{_fmt_rwf(total_amt)}*\n"
-                f"- Payment: *{payment_method} ({payment_status})*\n"
-                f"- Customer: *{customer_name}*"
+                f"- {_t(lang, 'Reference', 'Nomero')}: *{entry['id']}*\n"
+                f"- {_t(lang, 'Item', 'Igicuruzwa')}: *{entry['title']}*\n"
+                f"- {_t(lang, 'Total Amount', 'Igiteranyo')}: *{_fmt_rwf(total_amt)}*\n"
+                f"- {_t(lang, 'Payment', 'Ubwishyu')}: *{payment_method} ({payment_status})*\n"
+                f"- {_t(lang, 'Customer', 'Umukiriya')}: *{customer_name}*"
                 f"{stock_line}\n"
                 "--------------------------------\n"
-                "Reply *2* for another Sale or *0* for Main Menu."
+                + _t(lang, "Reply *2* for another Sale or *0* for Main Menu.", "Subiza *2* wandike irindi gurisha cyangwa *0* usubire ahabanza.")
             ),
             "action": "sale_recorded",
             "record": entry,
+        }
+
+    # --- A2. SALE EDIT SUB-FLOW ---
+    if current_step == "edit_sale_pick":
+        if clean_text == "1":
+            ws = _get_or_init_workspace(db, scope_key, arch_id, business_name)
+            catalog = _catalog_items(ws, arch_id)
+            set_session("sale_pick_product", {})
+            return {"reply": _format_product_picker(business_name, catalog, _t(lang, "Sale", "Igurisha"), lang=lang), "action": "sale_pick_product"}
+        if clean_text == "2":
+            step_data["returnToConfirm"] = True
+            set_session("sale_enter_qty", step_data)
+            avail = float(step_data.get("availableStock") or 0)
+            avail_disp = int(avail) if avail.is_integer() else avail
+            return {
+                "reply": _t(
+                    lang,
+                    f"Enter the new quantity for *{step_data['productTitle']}* (Available stock: *{avail_disp}*):",
+                    f"Andika umubare mushya wa *{step_data['productTitle']}* (Ububiko buhari: *{avail_disp}*):",
+                ),
+                "action": "sale_enter_qty",
+            }
+        if clean_text == "3":
+            set_session("edit_sale_price", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Enter the new *Unit Price in RWF* for *{step_data['productTitle']}* (current: {_fmt_rwf(step_data.get('unitPriceRWF'))}):",
+                    f"Andika *Igiciro gishya kuri kimwe (RWF)* cya *{step_data['productTitle']}* (icyariho: {_fmt_rwf(step_data.get('unitPriceRWF'))}):",
+                ),
+                "action": "edit_sale_price",
+            }
+        if clean_text == "4":
+            set_session("sale_pick_payment", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    "Select new Payment Method:\n*1.* Cash\n*2.* MTN MoMo Business\n*3.* Airtel Money\n*4.* Bank Transfer\n*5.* Customer Credit (Unpaid)",
+                    "Hitamo uburyo bushya bwo kwishyura:\n*1.* Cash (Intoki)\n*2.* MTN MoMo Business\n*3.* Airtel Money\n*4.* Banki\n*5.* Ideni ry'Umukiriya",
+                ),
+                "action": "sale_pick_payment",
+            }
+        return {
+            "reply": _t(lang, "Please reply *1*, *2*, *3*, or *4* to edit, or *0* to cancel.", "Subiza *1*, *2*, *3*, cyangwa *4* uhindure, cyangwa *0* uhagarike."),
+            "action": "edit_sale_pick_retry",
+        }
+
+    if current_step == "edit_sale_price":
+        new_price = _parse_positive_number(clean_text)
+        if new_price is None:
+            return {"reply": _t(lang, "Please enter a valid unit price in RWF (e.g. *10000*).", "Andika igiciro nyacyo mu RWF (urugero: *10000*)."), "action": "edit_sale_price_retry"}
+        qty = float(step_data.get("qty") or 1)
+        step_data["unitPriceRWF"] = new_price
+        step_data["totalAmountRWF"] = round(qty * new_price, 2)
+        set_session("confirm_sale", step_data)
+        return {
+            "reply": _format_verification_card("NEW SALE", _sale_verification_rows(step_data, lang), lang=lang, title_rw="IGURISHA RISHYA"),
+            "action": "confirm_sale",
         }
 
     # --- B. SALE STEP 1: PICK PRODUCT ---
@@ -875,18 +1142,37 @@ def handle_incoming_whatsapp_message(
         total_amt = round(qty * unit_price, 2)
         step_data["qty"] = qty
         step_data["totalAmountRWF"] = total_amt
+        if step_data.pop("returnToConfirm", False):
+            set_session("confirm_sale", step_data)
+            return {
+                "reply": _format_verification_card("NEW SALE", _sale_verification_rows(step_data, lang), lang=lang, title_rw="IGURISHA RISHYA"),
+                "action": "confirm_sale",
+            }
         set_session("sale_pick_payment", step_data)
         qty_disp = int(qty) if qty.is_integer() else qty
         return {
-            "reply": (
-                f"*Sale Total:* {qty_disp} × {step_data['productTitle']} = *{_fmt_rwf(total_amt)}*\n\n"
-                "Select Payment Method:\n"
-                "*1.* Cash (Paid in Full)\n"
-                "*2.* MTN MoMo Business (Paid in Full)\n"
-                "*3.* Airtel Money (Paid in Full)\n"
-                "*4.* Bank Transfer (Paid in Full)\n"
-                "*5.* Customer Credit (Unpaid)\n\n"
-                "Reply *1–5*, or *0* to cancel."
+            "reply": _t(
+                lang,
+                (
+                    f"*Sale Total:* {qty_disp} × {step_data['productTitle']} = *{_fmt_rwf(total_amt)}*\n\n"
+                    "Select Payment Method:\n"
+                    "*1.* Cash (Paid in Full)\n"
+                    "*2.* MTN MoMo Business (Paid in Full)\n"
+                    "*3.* Airtel Money (Paid in Full)\n"
+                    "*4.* Bank Transfer (Paid in Full)\n"
+                    "*5.* Customer Credit (Unpaid)\n\n"
+                    "Reply *1–5*, or *0* to cancel."
+                ),
+                (
+                    f"*Igiteranyo:* {qty_disp} × {step_data['productTitle']} = *{_fmt_rwf(total_amt)}*\n\n"
+                    "Hitamo Uburyo bwo Kwishyura:\n"
+                    "*1.* Cash (Yishyuwe Yose)\n"
+                    "*2.* MTN MoMo Business (Yishyuwe Yose)\n"
+                    "*3.* Airtel Money (Yishyuwe Yose)\n"
+                    "*4.* Banki (Yishyuwe Yose)\n"
+                    "*5.* Ideni ry'Umukiriya (Ntiyishyuwe)\n\n"
+                    "Subiza *1–5*, cyangwa *0* uhagarike."
+                ),
             ),
             "action": "sale_pick_payment",
         }
@@ -895,7 +1181,11 @@ def handle_incoming_whatsapp_message(
     if current_step == "sale_pick_payment":
         if clean_text not in PAYMENT_OPTIONS:
             return {
-                "reply": "Please reply with *1* (Cash), *2* (MTN MoMo), *3* (Airtel Money), *4* (Bank), or *5* (Customer Credit).",
+                "reply": _t(
+                    lang,
+                    "Please reply with *1* (Cash), *2* (MTN MoMo), *3* (Airtel Money), *4* (Bank), or *5* (Customer Credit).",
+                    "Subiza *1* (Cash), *2* (MTN MoMo), *3* (Airtel Money), *4* (Banki), cyangwa *5* (Ideni).",
+                ),
                 "action": "sale_pick_payment_retry",
             }
         pm_name, pm_status = PAYMENT_OPTIONS[clean_text]
@@ -904,61 +1194,52 @@ def handle_incoming_whatsapp_message(
         if clean_text == "5":
             set_session("sale_enter_customer", step_data)
             return {
-                "reply": "Enter the *Customer Name* for this credit sale (e.g. *Jean Paul*):",
+                "reply": _t(
+                    lang,
+                    "Enter the *Customer Name* for this credit sale (e.g. *Jean Paul*):",
+                    "Andika *Izina ry'Umukiriya* w'iri deni (urugero: *Jean Paul*):",
+                ),
                 "action": "sale_enter_customer",
             }
         step_data["customerName"] = "Walk-in Client"
         set_session("confirm_sale", step_data)
-        qty = float(step_data["qty"])
-        qty_disp = int(qty) if qty.is_integer() else qty
-        rem_stock = max(0.0, float(step_data.get("availableStock") or 0) - qty)
-        rem_disp = int(rem_stock) if rem_stock.is_integer() else rem_stock
         return {
-            "reply": _format_verification_card(
-                "NEW SALE",
-                [
-                    ("Product", str(step_data["productTitle"])),
-                    ("Quantity", f"{qty_disp} unit(s)"),
-                    ("Stock After Sale", f"{rem_disp} unit(s)"),
-                    ("Unit Price", _fmt_rwf(step_data["unitPriceRWF"])),
-                    ("Total Amount", _fmt_rwf(step_data["totalAmountRWF"])),
-                    ("Payment", f"{pm_name} ({pm_status})"),
-                    ("Customer", "Walk-in Client"),
-                ],
-            ),
+            "reply": _format_verification_card("NEW SALE", _sale_verification_rows(step_data, lang), lang=lang, title_rw="IGURISHA RISHYA"),
             "action": "confirm_sale",
         }
 
     # --- E. SALE STEP 3b: ENTER CUSTOMER NAME FOR CREDIT SALE ---
     if current_step == "sale_enter_customer":
         if len(clean_text) < 2:
-            return {"reply": "Please enter a valid customer name (at least 2 characters).", "action": "sale_enter_customer_retry"}
+            return {"reply": _t(lang, "Please enter a valid customer name (at least 2 characters).", "Andika izina ry'umukiriya ryuzuye."), "action": "sale_enter_customer_retry"}
         step_data["customerName"] = clean_text
         set_session("confirm_sale", step_data)
-        qty = float(step_data["qty"])
-        qty_disp = int(qty) if qty.is_integer() else qty
-        rem_stock = max(0.0, float(step_data.get("availableStock") or 0) - qty)
-        rem_disp = int(rem_stock) if rem_stock.is_integer() else rem_stock
         return {
-            "reply": _format_verification_card(
-                "NEW CREDIT SALE",
-                [
-                    ("Product", str(step_data["productTitle"])),
-                    ("Quantity", f"{qty_disp} unit(s)"),
-                    ("Stock After Sale", f"{rem_disp} unit(s)"),
-                    ("Unit Price", _fmt_rwf(step_data["unitPriceRWF"])),
-                    ("Total Amount", _fmt_rwf(step_data["totalAmountRWF"])),
-                    ("Payment", "Customer Credit (Unpaid)"),
-                    ("Customer", clean_text),
-                ],
-            ),
+            "reply": _format_verification_card("NEW CREDIT SALE", _sale_verification_rows(step_data, lang), lang=lang, title_rw="IGURISHA KU IDENI"),
             "action": "confirm_sale",
         }
 
-    # --- F. CONFIRMATION GATE: PURCHASE ---
+    # --- F. CONFIRMATION & EDIT GATE: PURCHASE ---
     if current_step == "confirm_purchase":
+        if upper_text in EDIT_WORDS:
+            set_session("edit_purchase_pick", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    "*EDIT PURCHASE — Choose what to change:*\n*1.* Change Item\n*2.* Change Quantity\n*3.* Change Total Cost\n*0.* Cancel",
+                    "*HINDURA IRANGURA — Hitamo icyo guhindura:*\n*1.* Hindura Igicuruzwa\n*2.* Hindura Umubare\n*3.* Hindura Igiteranyo cy'Amafaranga\n*0.* Hagarika",
+                ),
+                "action": "edit_purchase_pick",
+            }
         if upper_text not in CONFIRM_WORDS:
-            return {"reply": "Please reply *YES* to confirm and save this purchase, or *NO* to cancel.", "action": "awaiting_purchase_confirmation"}
+            return {
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to save, *EDIT* to modify, or *NO* to cancel.",
+                    "Subiza *YEGO* ubike, *HINDURA* ukosore, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_purchase_confirmation",
+            }
         qty = float(step_data.get("qty") or 1)
         item_name = str(step_data.get("productTitle") or "Item")
         product_id = step_data.get("productId")
@@ -1029,44 +1310,71 @@ def handle_incoming_whatsapp_message(
             "action": "purchase_enter_qty",
         }
 
+    if current_step == "edit_purchase_pick":
+        if clean_text == "1":
+            ws = _get_or_init_workspace(db, scope_key, arch_id, business_name)
+            set_session("purchase_pick_product", {})
+            return {"reply": _format_product_picker(business_name, _catalog_items(ws, arch_id), _t(lang, "Purchase", "Irangura"), lang=lang), "action": "purchase_pick_product"}
+        if clean_text == "2":
+            step_data["returnToConfirm"] = True
+            set_session("purchase_enter_qty", step_data)
+            return {"reply": _t(lang, f"Enter new quantity for *{step_data['productTitle']}*:", f"Andika umubare mushya wa *{step_data['productTitle']}*:"), "action": "purchase_enter_qty"}
+        if clean_text == "3":
+            set_session("purchase_enter_amount", step_data)
+            return {"reply": _t(lang, f"Enter new *Total Cost (RWF)* for *{step_data['productTitle']}*:", f"Andika igiteranyo gishya cy'amafaranga (RWF) ya *{step_data['productTitle']}*:"), "action": "purchase_enter_amount"}
+        return {"reply": _t(lang, "Reply *1*, *2*, or *3* to edit, or *0* to cancel.", "Subiza *1*, *2*, cyangwa *3* uhindure, cyangwa *0* uhagarike."), "action": "edit_purchase_pick_retry"}
+
     if current_step == "purchase_enter_qty":
         qty = _parse_positive_number(clean_text)
         if qty is None:
-            return {"reply": "Please enter a valid quantity greater than 0 (e.g. *10*).", "action": "purchase_qty_invalid"}
+            return {"reply": _t(lang, "Please enter a valid quantity greater than 0 (e.g. *10*).", "Andika umubare nyawo urenze 0 (urugero: *10*)."), "action": "purchase_qty_invalid"}
         step_data["qty"] = qty
+        if step_data.pop("returnToConfirm", False):
+            set_session("confirm_purchase", step_data)
+            return {"reply": _format_verification_card("NEW PURCHASE / RESTOCK", _purchase_verification_rows(step_data, lang), lang=lang, title_rw="IRANGURA RISHYA"), "action": "confirm_purchase"}
         set_session("purchase_enter_amount", step_data)
         qty_disp = int(qty) if qty.is_integer() else qty
         return {
-            "reply": f"Enter the *Total Purchase Cost in RWF* for {qty_disp} × {step_data['productTitle']} (e.g. *50000*):",
+            "reply": _t(
+                lang,
+                f"Enter the *Total Purchase Cost in RWF* for {qty_disp} × {step_data['productTitle']} (e.g. *50000*):",
+                f"Andika *Igiteranyo cy'Amafaranga y'Irangura (RWF)* ya {qty_disp} × {step_data['productTitle']} (urugero: *50000*):",
+            ),
             "action": "purchase_enter_amount",
         }
 
     if current_step == "purchase_enter_amount":
         amt = _parse_positive_number(clean_text)
         if amt is None:
-            return {"reply": "Please enter a valid total amount in RWF (e.g. *50000*).", "action": "purchase_amt_invalid"}
+            return {"reply": _t(lang, "Please enter a valid total amount in RWF (e.g. *50000*).", "Andika amafaranga nyayo mu RWF (urugero: *50000*)."), "action": "purchase_amt_invalid"}
         step_data["totalAmountRWF"] = amt
         set_session("confirm_purchase", step_data)
-        qty = float(step_data["qty"])
-        qty_disp = int(qty) if qty.is_integer() else qty
         return {
-            "reply": _format_verification_card(
-                "NEW PURCHASE / RESTOCK",
-                [
-                    ("Item", str(step_data["productTitle"])),
-                    ("Quantity", f"{qty_disp} unit(s)"),
-                    ("Unit Cost", _fmt_rwf(amt / qty)),
-                    ("Total Cost", _fmt_rwf(amt)),
-                    ("Delivery Status", "Received (Updates Stock)"),
-                ],
-            ),
+            "reply": _format_verification_card("NEW PURCHASE / RESTOCK", _purchase_verification_rows(step_data, lang), lang=lang, title_rw="IRANGURA RISHYA"),
             "action": "confirm_purchase",
         }
 
-    # --- G. CONFIRMATION GATE & GUIDED FLOW: EXPENSE ---
+    # --- G. CONFIRMATION & EDIT GATE: EXPENSE ---
     if current_step == "confirm_expense":
+        if upper_text in EDIT_WORDS:
+            set_session("edit_expense_pick", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    "*EDIT EXPENSE — Choose what to change:*\n*1.* Change Description\n*2.* Change Amount (RWF)\n*0.* Cancel",
+                    "*HINDURA AMAFARANGA YAKORESHEJWE:*\n*1.* Hindura Igisobanuro\n*2.* Hindura Amafaranga (RWF)\n*0.* Hagarika",
+                ),
+                "action": "edit_expense_pick",
+            }
         if upper_text not in CONFIRM_WORDS:
-            return {"reply": "Please reply *YES* to confirm and save this expense, or *NO* to cancel.", "action": "awaiting_expense_confirmation"}
+            return {
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to save, *EDIT* to change, or *NO* to cancel.",
+                    "Subiza *YEGO* ubike, *HINDURA* ukosore, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_expense_confirmation",
+            }
         title = str(step_data.get("title") or "Operating Expense")
         amt = float(step_data.get("amountRWF") or 0)
         entry = _append_record_and_tx(
@@ -1095,38 +1403,66 @@ def handle_incoming_whatsapp_message(
             "record": entry,
         }
 
+    if current_step == "edit_expense_pick":
+        if clean_text == "1":
+            step_data["returnToConfirm"] = True
+            set_session("expense_enter_title", step_data)
+            return {"reply": _t(lang, "Enter the new expense description (or choose *1–6*):", "Andika igisobanuro gishya (cyangwa hitamo *1–6*):"), "action": "expense_enter_title"}
+        if clean_text == "2":
+            set_session("expense_enter_amount", step_data)
+            return {"reply": _t(lang, f"Enter the new amount in RWF for *{step_data['title']}*:", f"Andika amafaranga mashya (RWF) ya *{step_data['title']}*:"), "action": "expense_enter_amount"}
+        return {"reply": _t(lang, "Reply *1* or *2* to edit, or *0* to cancel.", "Subiza *1* cyangwa *2* uhindure, cyangwa *0* uhagarike."), "action": "edit_expense_pick_retry"}
+
     if current_step == "expense_enter_title":
         title = EXPENSE_CATEGORIES.get(clean_text, clean_text)
         if len(title) < 2:
-            return {"reply": "Please choose *1–6* or type the expense description.", "action": "expense_title_retry"}
+            return {"reply": _t(lang, "Please choose *1–6* or type the expense description.", "Hitamo *1–6* cyangwa wandike igisobanuro."), "action": "expense_title_retry"}
+        step_data["title"] = title
+        if step_data.pop("returnToConfirm", False) and step_data.get("amountRWF"):
+            set_session("confirm_expense", step_data)
+            return {"reply": _format_verification_card("NEW EXPENSE", _expense_verification_rows(step_data, lang), lang=lang, title_rw="AMAFARANGA YAKORESHEJWE"), "action": "confirm_expense"}
         set_session("expense_enter_amount", {"title": title})
         return {
-            "reply": f"*Expense:* {title}\n\nEnter the amount spent in *RWF* (e.g. *15000*):",
+            "reply": _t(
+                lang,
+                f"*Expense:* {title}\n\nEnter the amount spent in *RWF* (e.g. *15000*):",
+                f"*Igikorwa:* {title}\n\nAndika amafaranga yakoreshejwe mu *RWF* (urugero: *15000*):",
+            ),
             "action": "expense_enter_amount",
         }
 
     if current_step == "expense_enter_amount":
         amt = _parse_positive_number(clean_text)
         if amt is None:
-            return {"reply": "Please enter a valid expense amount in RWF (e.g. *15000*).", "action": "expense_amt_invalid"}
+            return {"reply": _t(lang, "Please enter a valid expense amount in RWF (e.g. *15000*).", "Andika amafaranga nyayo mu RWF (urugero: *15000*)."), "action": "expense_amt_invalid"}
         step_data["amountRWF"] = amt
         set_session("confirm_expense", step_data)
         return {
-            "reply": _format_verification_card(
-                "NEW EXPENSE",
-                [
-                    ("Description", str(step_data["title"])),
-                    ("Amount", _fmt_rwf(amt)),
-                    ("Status", "Paid"),
-                ],
-            ),
+            "reply": _format_verification_card("NEW EXPENSE", _expense_verification_rows(step_data, lang), lang=lang, title_rw="AMAFARANGA YAKORESHEJWE"),
             "action": "confirm_expense",
         }
 
-    # --- H. CONFIRMATION GATE & GUIDED FLOW: ADD PRODUCT ---
+    # --- H. CONFIRMATION & EDIT GATE: ADD PRODUCT ---
     if current_step == "confirm_product":
+        if upper_text in EDIT_WORDS:
+            set_session("edit_product_pick", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    "*EDIT PRODUCT — Choose what to change:*\n*1.* Change Name\n*2.* Change Selling Price\n*3.* Change Cost Price\n*4.* Change Opening Stock\n*0.* Cancel",
+                    "*HINDURA IGICURUZWA:*\n*1.* Hindura Izina\n*2.* Hindura Igiciro cyo Kugurisha\n*3.* Hindura Igiciro cy'Irangura\n*4.* Hindura Ububiko bw'Itangiriro\n*0.* Hagarika",
+                ),
+                "action": "edit_product_pick",
+            }
         if upper_text not in CONFIRM_WORDS:
-            return {"reply": "Please reply *YES* to confirm and save this product, or *NO* to cancel.", "action": "awaiting_product_confirmation"}
+            return {
+                "reply": _t(
+                    lang,
+                    "Please reply *YES* to save, *EDIT* to modify, or *NO* to cancel.",
+                    "Subiza *YEGO* ubike, *HINDURA* ukosore, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_product_confirmation",
+            }
         name = str(step_data.get("name") or "Product")
         sell_p = float(step_data.get("sellingPriceRWF") or 0)
         cost_p = float(step_data.get("costPriceRWF") or 0)
@@ -1166,45 +1502,64 @@ def handle_incoming_whatsapp_message(
             "record": entry,
         }
 
+    if current_step == "edit_product_pick":
+        if clean_text == "1":
+            step_data["returnToConfirm"] = True
+            set_session("product_enter_name", step_data)
+            return {"reply": _t(lang, "Enter the new *Product Name*:", "Andika *Izina rishya ry'Igicuruzwa*:"), "action": "product_enter_name"}
+        if clean_text == "2":
+            step_data["returnToConfirm"] = True
+            set_session("product_enter_sell", step_data)
+            return {"reply": _t(lang, "Enter the new *Selling Price (RWF)*:", "Andika *Igiciro gishya cyo Kugurisha (RWF)*:"), "action": "product_enter_sell"}
+        if clean_text == "3":
+            step_data["returnToConfirm"] = True
+            set_session("product_enter_cost", step_data)
+            return {"reply": _t(lang, "Enter the new *Cost Price (RWF)*:", "Andika *Igiciro gishya cy'Irangura (RWF)*:"), "action": "product_enter_cost"}
+        if clean_text == "4":
+            set_session("product_enter_qty", step_data)
+            return {"reply": _t(lang, "Enter the new *Opening Stock Quantity*:", "Andika *Umubare mushya w'Ububiko*:"), "action": "product_enter_qty"}
+        return {"reply": _t(lang, "Reply *1–4* to edit, or *0* to cancel.", "Subiza *1–4* uhindure, cyangwa *0* uhagarike."), "action": "edit_product_pick_retry"}
+
     if current_step == "product_enter_name":
         if len(clean_text) < 2:
-            return {"reply": "Please enter a valid product name (at least 2 characters).", "action": "product_name_retry"}
+            return {"reply": _t(lang, "Please enter a valid product name (at least 2 characters).", "Andika izina ry'igicuruzwa ryuzuye."), "action": "product_name_retry"}
+        step_data["name"] = clean_text
+        if step_data.pop("returnToConfirm", False) and step_data.get("sellingPriceRWF"):
+            set_session("confirm_product", step_data)
+            return {"reply": _format_verification_card("NEW PRODUCT", _product_verification_rows(step_data, lang), lang=lang, title_rw="IGICURUZWA GISHYA"), "action": "confirm_product"}
         set_session("product_enter_sell", {"name": clean_text})
-        return {"reply": f"*New Product:* {clean_text}\n\nEnter the *Selling Price* per unit in RWF (e.g. *10000*):", "action": "product_enter_sell"}
+        return {"reply": _t(lang, f"*New Product:* {clean_text}\n\nEnter the *Selling Price* per unit in RWF (e.g. *10000*):", f"*Igicuruzwa Gishya:* {clean_text}\n\nAndika *Igiciro cyo Kugurisha* kuri kimwe mu RWF (urugero: *10000*):"), "action": "product_enter_sell"}
 
     if current_step == "product_enter_sell":
         sell_p = _parse_positive_number(clean_text)
         if sell_p is None:
-            return {"reply": "Please enter a valid selling price in RWF (e.g. *10000*).", "action": "product_sell_retry"}
+            return {"reply": _t(lang, "Please enter a valid selling price in RWF (e.g. *10000*).", "Andika igiciro nyacyo mu RWF (urugero: *10000*)."), "action": "product_sell_retry"}
         step_data["sellingPriceRWF"] = sell_p
+        if step_data.pop("returnToConfirm", False) and step_data.get("costPriceRWF"):
+            set_session("confirm_product", step_data)
+            return {"reply": _format_verification_card("NEW PRODUCT", _product_verification_rows(step_data, lang), lang=lang, title_rw="IGICURUZWA GISHYA"), "action": "confirm_product"}
         set_session("product_enter_cost", step_data)
-        return {"reply": f"Enter the *Purchase / Cost Price* per unit in RWF for {step_data['name']} (e.g. *7000*):", "action": "product_enter_cost"}
+        return {"reply": _t(lang, f"Enter the *Purchase / Cost Price* per unit in RWF for {step_data['name']} (e.g. *7000*):", f"Andika *Igiciro cy'Irangura* kuri kimwe mu RWF cya {step_data['name']} (urugero: *7000*):"), "action": "product_enter_cost"}
 
     if current_step == "product_enter_cost":
         cost_p = _parse_positive_number(clean_text)
         if cost_p is None:
-            return {"reply": "Please enter a valid cost price in RWF (e.g. *7000*).", "action": "product_cost_retry"}
+            return {"reply": _t(lang, "Please enter a valid cost price in RWF (e.g. *7000*).", "Andika igiciro nyacyo cy'irangura mu RWF (urugero: *7000*)."), "action": "product_cost_retry"}
         step_data["costPriceRWF"] = cost_p
+        if step_data.pop("returnToConfirm", False) and step_data.get("quantity"):
+            set_session("confirm_product", step_data)
+            return {"reply": _format_verification_card("NEW PRODUCT", _product_verification_rows(step_data, lang), lang=lang, title_rw="IGICURUZWA GISHYA"), "action": "confirm_product"}
         set_session("product_enter_qty", step_data)
-        return {"reply": f"Enter the *Opening Stock Quantity* for {step_data['name']} (e.g. *10*):", "action": "product_enter_qty"}
+        return {"reply": _t(lang, f"Enter the *Opening Stock Quantity* for {step_data['name']} (e.g. *10*):", f"Andika *Umubare w'Ububiko bw'Itangiriro* wa {step_data['name']} (urugero: *10*):"), "action": "product_enter_qty"}
 
     if current_step == "product_enter_qty":
         qty = _parse_positive_number(clean_text)
         if qty is None:
-            return {"reply": "Please enter a valid opening stock quantity (e.g. *10*).", "action": "product_qty_retry"}
+            return {"reply": _t(lang, "Please enter a valid opening stock quantity (e.g. *10*).", "Andika umubare nyawo w'ububiko (urugero: *10*)."), "action": "product_qty_retry"}
         step_data["quantity"] = qty
         set_session("confirm_product", step_data)
-        qty_disp = int(qty) if qty.is_integer() else qty
         return {
-            "reply": _format_verification_card(
-                "NEW PRODUCT",
-                [
-                    ("Product Name", str(step_data["name"])),
-                    ("Selling Price", _fmt_rwf(step_data["sellingPriceRWF"])),
-                    ("Cost Price", _fmt_rwf(step_data["costPriceRWF"])),
-                    ("Opening Stock", f"{qty_disp} unit(s)"),
-                ],
-            ),
+            "reply": _format_verification_card("NEW PRODUCT", _product_verification_rows(step_data, lang), lang=lang, title_rw="IGICURUZWA GISHYA"),
             "action": "confirm_product",
         }
 
@@ -1437,12 +1792,16 @@ def handle_incoming_whatsapp_message(
         if not catalog:
             set_session(None)
             return {
-                "reply": f"*{business_name}* has no products in the database yet.\nReply *8* to add a product first.",
+                "reply": _t(
+                    lang,
+                    f"*{business_name}* has no products in the database yet.\nReply *8* to add a product first.",
+                    f"*{business_name}* ntiragira ibicuruzwa mu bubiko.\nSubiza *8* ubanze wongeremo igicuruzwa.",
+                ),
                 "action": "sale_no_products",
             }
         set_session("sale_pick_product", {})
         return {
-            "reply": _format_product_picker(business_name, catalog, "Sale"),
+            "reply": _format_product_picker(business_name, catalog, _t(lang, "Sale", "Igurisha"), lang=lang),
             "action": "sale_pick_product",
         }
 
@@ -1452,11 +1811,11 @@ def handle_incoming_whatsapp_message(
         set_session("purchase_pick_product", {})
         if catalog:
             return {
-                "reply": _format_product_picker(business_name, catalog, "Purchase / Restock"),
+                "reply": _format_product_picker(business_name, catalog, _t(lang, "Purchase / Restock", "Irangura"), lang=lang),
                 "action": "purchase_pick_product",
             }
         return {
-            "reply": "Enter the *Item Name* you are purchasing (or reply *0* to cancel):",
+            "reply": _t(lang, "Enter the *Item Name* you are purchasing (or reply *0* to cancel):", "Andika *Izina ry'Igicuruzwa* urangura (cyangwa *0* uhagarike):"),
             "action": "purchase_pick_product",
         }
 
@@ -1464,11 +1823,10 @@ def handle_incoming_whatsapp_message(
         set_session("expense_enter_title", {})
         cat_lines = "\n".join(f"*{k}.* {v}" for k, v in EXPENSE_CATEGORIES.items())
         return {
-            "reply": (
-                f"*{business_name} — Record an Expense*\n"
-                "Select a category or type your own description:\n"
-                f"{cat_lines}\n\n"
-                "Reply *1–6*, type a custom title, or *0* to cancel."
+            "reply": _t(
+                lang,
+                f"*{business_name} — Record an Expense*\nSelect a category or type your own description:\n{cat_lines}\n\nReply *1–6*, type a custom title, or *0* to cancel.",
+                f"*{business_name} — Andika Amafaranga Yakoreshejwe*\nHitamo icyiciro cyangwa wandike igisobanuro:\n{cat_lines}\n\nSubiza *1–6*, wandike izina, cyangwa *0* uhagarike.",
             ),
             "action": "expense_enter_title",
         }
@@ -1477,25 +1835,33 @@ def handle_incoming_whatsapp_message(
         set_session(None)
         unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
         if not unpaid:
-            return {"reply": "No unpaid customers found to verify right now. Reply *0* for Main Menu.", "action": "verify_none"}
-        lines = ["*Select Customer to Verify Payment:*"]
+            return {"reply": _t(lang, "No unpaid customers found to verify right now. Reply *0* for Main Menu.", "Nta bakiriya bafite ideni bahari ubu. Subiza *0* usubire ahabanza."), "action": "verify_none"}
+        lines = [_t(lang, "*Select Customer to Verify Payment:*", "*Hitamo Umukiriya Wemeza Ubwishyu:*")]
         for idx, u in enumerate(unpaid[:10], start=1):
-            lines.append(f"*{idx}.* {u['customerName']} — Owed: *{_fmt_rwf(u['remainingAmountRWF'])}*")
-        lines.append("\nReply `VERIFY <Customer Name>` (e.g. `VERIFY Jean`) or *0* for Menu.")
+            lines.append(f"*{idx}.* {u['customerName']} — {_t(lang, 'Owed', 'Ideni')}: *{_fmt_rwf(u['remainingAmountRWF'])}*")
+        lines.append(_t(lang, "\nReply `VERIFY <Customer Name>` (e.g. `VERIFY Jean`) or *0* for Menu.", "\nSubiza `VERIFY <Izina ry'Umukiriya>` cyangwa *0* usubire ahabanza."))
         return {"reply": "\n".join(lines), "action": "prompt_verify"}
 
     if upper_text == "8":
         set_session("product_enter_name", {})
         return {
-            "reply": f"*{business_name} — Add New Product*\n\nEnter the *Product Name* (e.g. *Airtel Router 4G*), or *0* to cancel:",
+            "reply": _t(
+                lang,
+                f"*{business_name} — Add New Product*\n\nEnter the *Product Name* (e.g. *Airtel Router 4G*), or *0* to cancel:",
+                f"*{business_name} — Ongeramo Igicuruzwa Gishya*\n\nAndika *Izina ry'Igicuruzwa* (urugero: *Airtel Router 4G*), cyangwa *0* uhagarike:",
+            ),
             "action": "product_enter_name",
         }
 
     # Fallback: friendly, executive prompt without harsh error wording
     return {
         "reply": (
-            f"I could not match `{clean_text}` to a menu option.\n\n"
-            + build_welcome_message(business_name, arch_id)
+            _t(
+                lang,
+                f"I could not match `{clean_text}` to a menu option.\n\n",
+                f"`{clean_text}` ntiyabonetse mu mahitamo.\n\n",
+            )
+            + build_welcome_message(business_name, arch_id, lang=lang)
         ),
         "action": "fallback_menu",
     }

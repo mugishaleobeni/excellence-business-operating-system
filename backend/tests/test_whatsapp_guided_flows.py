@@ -168,6 +168,54 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             self.assertEqual(len(ws_after["records"]["Expenses"]), 1)
             self.assertEqual(ws_after["records"]["Expenses"][0]["amountRWF"], 5000.0)
 
+    def test_edit_before_save_and_kinyarwanda_language_switch(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # 1. Switch language to Kinyarwanda via menu 9 -> 2
+            r_lang_menu = handle_incoming_whatsapp_message(db, self.owner_phone, "9", self.user_doc)
+            self.assertEqual(r_lang_menu["action"], "choose_language")
+
+            r_rw = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertEqual(r_rw["action"], "language_changed")
+            self.assertEqual(r_rw["language"], "rw")
+            self.assertIn("Sisitemu y'Ubucuruzi", r_rw["reply"])
+
+            # 2. Start Sale in Kinyarwanda: 2 -> 1 (airtel router 4g) -> 2 units -> 1 (Cash)
+            r_s1 = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertIn("Hitamo Igicuruzwa", r_s1["reply"])
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            r_verify = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_verify["action"], "confirm_sale")
+            self.assertIn("GENZURA MBERE YO KUBIKA", r_verify["reply"])
+            self.assertIn("HINDURA", r_verify["reply"])
+
+            # 3. User replies HINDURA (EDIT) -> 2 (Change Quantity) -> 3 units -> returns to verification with 30,000 RWF
+            r_edit_menu = handle_incoming_whatsapp_message(db, self.owner_phone, "HINDURA", self.user_doc)
+            self.assertEqual(r_edit_menu["action"], "edit_sale_pick")
+
+            r_edit_qty = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertEqual(r_edit_qty["action"], "sale_enter_qty")
+
+            r_updated_verify = handle_incoming_whatsapp_message(db, self.owner_phone, "3", self.user_doc)
+            self.assertEqual(r_updated_verify["action"], "confirm_sale")
+            self.assertIn("30,000 RWF", r_updated_verify["reply"])
+
+            # 4. User replies YEGO -> saves 3 units (30,000 RWF) and deducts stock 7 -> 4!
+            r_done = handle_incoming_whatsapp_message(db, self.owner_phone, "YEGO", self.user_doc)
+            self.assertEqual(r_done["action"], "sale_recorded")
+            self.assertIn("IGURISHA RYABITSWE NEZA", r_done["reply"])
+
+            ws_after = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(ws_after["records"]["Sales"][0]["amountRWF"], 30000.0)
+            self.assertEqual(ws_after["records"]["Products"][0]["quantity"], 4)
+
+            # 5. Switch back to English via fast command 'EN'
+            r_en = handle_incoming_whatsapp_message(db, self.owner_phone, "EN", self.user_doc)
+            self.assertEqual(r_en["language"], "en")
+            self.assertIn("Official Business Console", r_en["reply"])
+
 
 if __name__ == "__main__":
     unittest.main()
