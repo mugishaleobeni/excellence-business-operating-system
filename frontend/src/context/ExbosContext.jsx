@@ -524,6 +524,68 @@ export function ExbosProvider({ children }) {
     }
   }
 
+  const [ownerNotifications, setOwnerNotifications] = useState([])
+
+  const refreshOwnerNotifications = async () => {
+    if (!user?.email || isBranchManager) {
+      setOwnerNotifications([])
+      return
+    }
+    try {
+      const res = await exbosApi.getBranchNotifications()
+      const items = res?.data?.data?.notifications || res?.data?.notifications
+      if (res?.ok && Array.isArray(items)) {
+        setOwnerNotifications(items)
+      }
+    } catch {
+      // ignore offline
+    }
+  }
+
+  const markOwnerNotificationRead = async (notifId) => {
+    if (!notifId) return
+    if (notifId === 'all') {
+      setOwnerNotifications([])
+    } else {
+      setOwnerNotifications((prev) => prev.filter((n) => n.id !== notifId))
+    }
+    try {
+      await exbosApi.markBranchNotificationRead(notifId)
+    } catch {
+      // ignore offline
+    }
+  }
+
+  useEffect(() => {
+    if (!user?.email || isBranchManager) {
+      setOwnerNotifications([])
+      return
+    }
+    refreshOwnerNotifications()
+    const interval = setInterval(() => {
+      refreshOwnerNotifications()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [user?.email, isBranchManager])
+
+  const createBranchManagerInvite = async (branchId, payload = {}) => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
+    try {
+      const frontendOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://exbos.pages.dev'
+      const res = await exbosApi.createBranchManagerInvite(branchId, { ...payload, frontendOrigin })
+      const resultData = res?.data?.data || res?.data
+      if (res?.ok && resultData) {
+        if (resultData.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...resultData.branch } : b)))
+        }
+        return { ok: true, ...resultData }
+      }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to generate manager setup link.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to generate manager setup link.' }
+    }
+  }
+
   const assignBranchManager = async (branchId, payload) => {
     if (!branchId) return { ok: false, error: 'Branch ID is required.' }
     try {
@@ -2501,6 +2563,10 @@ export function ExbosProvider({ children }) {
         createBranch,
         updateBranch,
         assignBranchManager,
+        createBranchManagerInvite,
+        ownerNotifications,
+        refreshOwnerNotifications,
+        markOwnerNotificationRead,
         deleteBranch,
         pendingCalculator,
         savePendingCalculatorState,

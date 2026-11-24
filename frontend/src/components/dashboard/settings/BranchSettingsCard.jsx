@@ -27,6 +27,7 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     createBranch,
     updateBranch,
     assignBranchManager,
+    createBranchManagerInvite,
     transferBranchStock,
     deleteBranch,
     switchBranch,
@@ -266,11 +267,11 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
 
   const openAssignManager = (b) => {
     setManagerBranch(b)
-    setManagerName(b.manager?.name || '')
+    setManagerName(b.manager?.name && b.manager.name !== 'Pending Branch Manager' ? b.manager.name : '')
     setManagerEmail(b.manager?.email || '')
     setManagerPhone(b.manager?.phone || '')
     setManagerPassword('')
-    setGeneratedLink('')
+    setGeneratedLink(b.manager?.status === 'Pending Setup' ? b.manager?.inviteLink || '' : '')
     setCopiedLink(false)
   }
 
@@ -279,26 +280,25 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     if (!managerBranch) return
     setAssigning(true)
     try {
-      const res = await assignBranchManager(managerBranch.id, {
+      const res = await createBranchManagerInvite(managerBranch.id, {
         name: managerName.trim(),
         email: managerEmail.trim(),
-        phone: managerPhone.trim(),
-        password: managerPassword
+        phone: managerPhone.trim()
       })
       if (res?.ok) {
-        setGeneratedLink(res.loginLink || '')
+        setGeneratedLink(res.inviteLink || '')
         addToast &&
           addToast({
             type: 'success',
-            title: 'Branch Manager Assigned',
-            message: `${managerName.trim()} can now sign in to ${managerBranch.name}.`
+            title: 'Manager Setup Link Generated',
+            message: `Share this secure link with your branch manager for ${managerBranch.name}. They will enter their own email and password.`
           })
       } else {
         addToast &&
           addToast({
             type: 'error',
-            title: 'Assignment Failed',
-            message: res?.error || 'Could not assign branch manager.'
+            title: 'Link Generation Failed',
+            message: res?.error || 'Could not generate branch manager setup link.'
           })
       }
     } finally {
@@ -477,9 +477,21 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                       <MapPin className="w-3 h-3 text-[#218DFF]" />
                       <span>{b.location || 'Rwanda'}</span>
                     </div>
-                    {b.manager?.email && (
-                      <div className="text-[11px] text-[#9EDCFF] mt-1 truncate">
-                        Manager: <strong>{b.manager.name}</strong> ({b.manager.email})
+                    {(b.manager?.email || b.manager?.status === 'Pending Setup') && (
+                      <div className="text-[11px] text-[#9EDCFF] mt-1 flex flex-wrap items-center gap-1.5">
+                        {b.manager?.status === 'Pending Setup' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/35 text-amber-200 text-[10px] font-bold">
+                            Pending Manager Setup
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/35 text-emerald-200 text-[10px] font-bold">
+                            Active Manager
+                          </span>
+                        )}
+                        <span className="truncate">
+                          <strong>{b.manager.name || 'Invited Manager'}</strong>
+                          {b.manager.email ? ` (${b.manager.email})` : ''}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -772,12 +784,17 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
             </button>
           </div>
 
-          <form onSubmit={handleAssignManager} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Generate a secure, single-use setup link for <strong>{managerBranch.name}</strong>. When the manager opens the link, they will enter their own email address and choose the password they want. You will be notified immediately once their account is activated.
+          </p>
+
+          <form onSubmit={handleAssignManager} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Manager Full Name *</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Manager Name (Optional)
+              </label>
               <input
                 type="text"
-                required
                 value={managerName}
                 onChange={(e) => setManagerName(e.target.value)}
                 placeholder="e.g. Jean Paul Mugabo"
@@ -785,10 +802,11 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Manager Email *</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Email to Auto-Send Link (Optional)
+              </label>
               <input
                 type="email"
-                required
                 value={managerEmail}
                 onChange={(e) => setManagerEmail(e.target.value)}
                 placeholder="manager@business.rw"
@@ -796,7 +814,9 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Phone / WhatsApp (Optional)</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Phone / WhatsApp (Optional)
+              </label>
               <input
                 type="tel"
                 value={managerPhone}
@@ -805,51 +825,52 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                 className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Dashboard Password {managerBranch.manager?.email ? '(Leave blank to keep current)' : '*'}
-              </label>
-              <input
-                type="password"
-                required={!managerBranch.manager?.email}
-                minLength={6}
-                value={managerPassword}
-                onChange={(e) => setManagerPassword(e.target.value)}
-                placeholder="Min 6 characters"
-                className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-400"
-              />
-            </div>
-            <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-1">
+            <div className="sm:col-span-3 flex items-center justify-end gap-2 pt-1">
               <button
                 type="submit"
                 disabled={assigning}
                 className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
               >
-                {assigning ? 'Creating Account & Link...' : 'Save Manager & Generate Login Link'}
+                {assigning ? 'Generating Secure Link...' : 'Generate Manager Setup Link'}
               </button>
             </div>
           </form>
 
           {generatedLink && (
-            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-400/30 space-y-2">
+            <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-400/30 space-y-2.5">
               <div className="text-xs font-semibold text-emerald-300">
-                Branch Manager Dashboard Login Link Ready:
+                Secure Branch Manager Setup Link Ready (Single-Use · Valid 7 Days):
               </div>
-              <div className="flex items-center gap-2">
+              <div className="text-[11px] text-slate-300">
+                Send this link to your manager. They will enter their own email and password, and you will receive an alert as soon as they finish.
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="text"
                   readOnly
                   value={generatedLink}
                   className="flex-1 px-3 py-2 rounded-lg bg-[#030A1F] border border-white/15 text-xs font-mono text-white"
                 />
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedLink ? 'Copied' : 'Copy Link'}</span>
+                  </button>
+                  <a
+                    href={`https://wa.me/${managerPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
+                      `Hello ${managerName || 'Branch Manager'}, please open this secure ExBOS link to enter your email and create your password for ${managerBranch.name}:\n${generatedLink}`
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-2 rounded-lg bg-[#218DFF]/25 hover:bg-[#218DFF]/40 text-[#9EDCFF] text-xs font-bold no-underline"
+                  >
+                    WhatsApp
+                  </a>
+                </div>
               </div>
             </div>
           )}

@@ -38,7 +38,9 @@ export default function DashboardPage() {
     serviceTrade,
     applyServiceTrade,
     agricultureTrade,
-    applyAgricultureTrade
+    applyAgricultureTrade,
+    ownerNotifications = [],
+    markOwnerNotificationRead
   } = useExbos()
 
   const {
@@ -259,7 +261,7 @@ export default function DashboardPage() {
   }, [AVAILABLE_WIDGETS, widgetSearch])
 
   // Dynamic business & platform alerts
-  const activeBusinessAlerts = useBusinessAlerts({
+  const baseBusinessAlerts = useBusinessAlerts({
     activeDemoWorkspace: activeWorkspace,
     activeWorkspace,
     archTransactions,
@@ -271,6 +273,26 @@ export default function DashboardPage() {
     setActivePage,
     setNotifOpen
   })
+
+  // Prepend server-backed owner notifications (e.g., Branch Manager completed account setup)
+  const activeBusinessAlerts = useMemo(() => {
+    const serverAlerts = (ownerNotifications || [])
+      .filter((n) => n && n.id && !dismissedAlertIds.includes(n.id))
+      .map((n) => ({
+        id: n.id,
+        isOwnerNotification: true,
+        title: n.title || 'Branch Manager Account Activated',
+        message: n.message || '',
+        bg: 'bg-emerald-500/15 border-emerald-400/40',
+        actionLabel: 'View Branches',
+        onAction: () => {
+          handleModuleClick('Settings')
+          setActivePage('Business Profile')
+          if (markOwnerNotificationRead) markOwnerNotificationRead(n.id)
+        }
+      }))
+    return [...serverAlerts, ...baseBusinessAlerts]
+  }, [ownerNotifications, dismissedAlertIds, baseBusinessAlerts, markOwnerNotificationRead])
 
   return (
     <div className="exbos-dashboard-bg">
@@ -453,6 +475,9 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => {
                       const allIds = activeBusinessAlerts.map((a) => a.id)
+                      if (ownerNotifications.length > 0 && markOwnerNotificationRead) {
+                        markOwnerNotificationRead('all')
+                      }
                       setDismissedAlertIds((prev) => {
                         const next = [...prev, ...allIds]
                         try {
@@ -506,6 +531,9 @@ export default function DashboardPage() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (alert.isOwnerNotification && markOwnerNotificationRead) {
+                          markOwnerNotificationRead(alert.id)
+                        }
                         setDismissedAlertIds((prev) => {
                           const next = [...prev, alert.id]
                           try {

@@ -1,10 +1,11 @@
 import logging
+import secrets
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from flask import Blueprint, request
-from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+from flask_jwt_extended import create_access_token, get_jwt_identity, verify_jwt_in_request
 
 from app.database import get_db
 from app.utils.mailer import send_gmail_email
@@ -419,6 +420,405 @@ def assign_branch_manager(branch_id: str):
         message=f"Branch Manager '{manager_name}' assigned to '{branch_name}'.",
         status_code=200,
     )
+
+
+@branches_bp.route("/<branch_id>/manager-invite", methods=["POST"])
+def create_branch_manager_invite(branch_id: str):
+    """
+    Generate a secure, single-use 7-day setup link for a Branch Manager.
+    When the manager opens the link, they enter their own email & chosen password to activate their account.
+    """
+    db = get_db()
+    scope_key, owner_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(owner_doc):
+        return error_response("Only the Business Owner can generate branch manager invite links.", status_code=403)
+    _ensure_main_branch(db, scope_key, owner_doc)
+
+    branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    if not branch_doc:
+        return error_response("Branch not found.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    suggested_name = str(payload.get("name") or "").strip()
+    suggested_email = str(payload.get("email") or "").strip().lower()
+    suggested_phone = str(payload.get("phone") or "").strip()
+    frontend_origin = str(payload.get("frontendOrigin") or "https://exbos.pages.dev").strip().rstrip("/")
+
+    now_dt = datetime.now(timezone.utc)
+    expires_dt = now_dt + timedelta(days=7)
+    now_iso = now_dt.isoformat()
+    expires_iso = expires_dt.isoformat()
+
+    token = secrets.token_urlsafe(32)
+    branch_name = branch_doc.get("name") or "Branch"
+    branch_location = branch_doc.get("location") or "Rwanda"
+    branch_arch = branch_doc.get("architectureId") or (owner_doc or {}).get("architectureId") or "buy-and-sell"
+    biz_name = (owner_doc or {}).get("businessName") or branch_name or "ExBOS Business"
+    owner_email = str((owner_doc or {}).get("email") or scope_key).strip().lower()
+
+    # Invalidate older pending invites for the same branch so only the newest link is valid
+    db.branch_invites.update_many(
+        {"scopeKey": scope_key, "branchId": branch_id, "status": "pending"},
+        {"$set": {"status": "replaced", "updatedAt": now_iso}},
+    )
+
+    invite_link = f"{frontend_origin}/branch-invite/{token}"
+    invite_doc = {
+        "token": token,
+        "scopeKey": scope_key,
+        "ownerEmail": owner_email,
+        "branchId": branch_id,
+        "branchName": branch_name,
+        "branchLocation": branch_location,
+        "businessName": biz_name,
+        "architectureId": branch_arch,
+        "suggestedName": suggested_name,
+        "suggestedEmail": suggested_email,
+        "suggestedPhone": suggested_phone,
+        "status": "pending",
+        "inviteLink": invite_link,
+        "createdAt": now_iso,
+        "expiresAt": expires_iso,
+    }
+    db.branch_invites.insert_one(dict(invite_doc))
+
+    existing_manager = branch_doc.get("manager") if isinstance(branch_doc.get("manager"), dict) else {}
+    manager_meta = {
+        "name": suggested_name or existing_manager.get("name") or "Pending Branch Manager",
+        "email": suggested_email or existing_manager.get("email") or "",
+        "phone": suggested_phone or existing_manager.get("phone") or "",
+        "status": "Pending Setup",
+        "inviteLink": invite_link,
+        "inviteCreatedAt": now_iso,
+        "inviteExpiresAt": expires_iso,
+    }
+    db.branches.update_one(
+        {"scopeKey": scope_key, "id": branch_id},
+        {"$set": {"manager": manager_meta, "updatedAt": now_iso}},
+    )
+    updated_branch = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+
+    email_sent = False
+    if suggested_email and "@" in suggested_email:
+        greeting_name = suggested_name or "Branch Manager"
+        email_html = render_exbos_email(
+            category="Branch Invitation",
+            title=f"Set Up Your Branch Manager Account — {branch_name}",
+            greeting=f"Hello <strong>{greeting_name}</strong>,",
+            intro_html=(
+                f"You have been invited to manage <strong>{branch_name}</strong> ({biz_name}) on ExBOS. "
+                f"Click the secure setup button below to enter your email and choose your own password."
+            ),
+            details=[
+                ("Business", biz_name),
+                ("Assigned Branch", branch_name),
+                ("Location", branch_location),
+                ("Role", "Branch Manager"),
+                ("Link Validity", "7 Days (Single-Use)"),
+            ],
+            primary_cta=("Set Up My Manager Account", invite_link),
+            footer_note="For your security, you will choose your own private password on the setup page.",
+            fallback_link=invite_link,
+        )
+        email_text = (
+            f"Hello {greeting_name}, you have been invited to manage {branch_name} ({biz_name}) on ExBOS. "
+            f"Open this secure link to enter your email and create your password: {invite_link}"
+        )
+        email_sent = send_gmail_email(
+            to_email=suggested_email,
+            subject=f"ExBOS Invitation — Set Up Your Branch Manager Account ({branch_name})",
+            html_body=email_html,
+            text_body=email_text,
+        )
+
+    whatsapp_sent = False
+    if suggested_phone:
+        try:
+            from app.routes.whatsapp import _send_whatsapp_message
+            wa_msg = (
+                f"Hello {suggested_name or 'Branch Manager'}, you have been invited as Branch Manager for *{branch_name}* ({biz_name}).\n"
+                f"Open this secure link to enter your email and set your own password:\n{invite_link}"
+            )
+            whatsapp_sent = bool(_send_whatsapp_message(db, scope_key, suggested_phone, wa_msg))
+        except Exception as exc:
+            logger.debug("Optional WhatsApp branch invite skipped: %s", exc)
+
+    result_payload = {
+        "branch": _normalize_branch_doc(updated_branch) if updated_branch else None,
+        "inviteLink": invite_link,
+        "token": token,
+        "expiresAt": expires_iso,
+        "emailSent": email_sent,
+        "whatsappSent": whatsapp_sent,
+    }
+    return success_response(
+        data=result_payload,
+        extra=result_payload,
+        message=f"Secure Branch Manager setup link generated for '{branch_name}'.",
+        status_code=201,
+    )
+
+
+@branches_bp.route("/invite/<token>", methods=["GET"])
+def get_branch_manager_invite(token: str):
+    """Public endpoint to validate a Branch Manager setup link and return safe display details."""
+    db = get_db()
+    clean_token = str(token or "").strip()
+    if not clean_token:
+        return error_response("Invalid invitation link.", status_code=400)
+
+    invite = db.branch_invites.find_one({"token": clean_token}, {"_id": 0})
+    if not invite:
+        return error_response("This invitation link is invalid or does not exist.", status_code=404)
+
+    status = str(invite.get("status") or "pending").lower()
+    if status == "used":
+        return error_response("This invitation link has already been used. Please sign in on the login page.", status_code=410)
+    if status != "pending":
+        return error_response("This invitation link is no longer active. Please ask the business owner for a new link.", status_code=410)
+
+    expires_at = str(invite.get("expiresAt") or "")
+    try:
+        if expires_at and datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
+            db.branch_invites.update_one({"token": clean_token}, {"$set": {"status": "expired"}})
+            return error_response("This invitation link has expired. Please ask the business owner for a fresh link.", status_code=410)
+    except Exception:
+        pass
+
+    public_info = {
+        "businessName": invite.get("businessName") or "ExBOS Business",
+        "branchId": invite.get("branchId") or "",
+        "branchName": invite.get("branchName") or "Branch",
+        "branchLocation": invite.get("branchLocation") or "Rwanda",
+        "suggestedName": invite.get("suggestedName") or "",
+        "suggestedEmail": invite.get("suggestedEmail") or "",
+        "suggestedPhone": invite.get("suggestedPhone") or "",
+        "expiresAt": expires_at,
+    }
+    return success_response(data=public_info, extra=public_info, message="Invitation link is valid.")
+
+
+@branches_bp.route("/invite/<token>/complete", methods=["POST"])
+def complete_branch_manager_invite(token: str):
+    """
+    Public endpoint where the invited Branch Manager submits their own fullName, email, phone, and chosen password.
+    Activates the branch manager account, notifies the Business Owner (in-app + branded email), and returns a JWT session.
+    """
+    db = get_db()
+    clean_token = str(token or "").strip()
+    invite = db.branch_invites.find_one({"token": clean_token})
+    if not invite:
+        return error_response("This invitation link is invalid or does not exist.", status_code=404)
+
+    status = str(invite.get("status") or "pending").lower()
+    if status == "used":
+        return error_response("This invitation link has already been used. Please sign in normally.", status_code=410)
+    if status != "pending":
+        return error_response("This invitation link is no longer active.", status_code=410)
+
+    expires_at = str(invite.get("expiresAt") or "")
+    try:
+        if expires_at and datetime.fromisoformat(expires_at) < datetime.now(timezone.utc):
+            db.branch_invites.update_one({"token": clean_token}, {"$set": {"status": "expired"}})
+            return error_response("This invitation link has expired.", status_code=410)
+    except Exception:
+        pass
+
+    payload = request.get_json(silent=True) or {}
+    full_name = str(payload.get("fullName") or payload.get("name") or invite.get("suggestedName") or "").strip()
+    manager_email = str(payload.get("email") or "").strip().lower()
+    manager_phone = str(payload.get("phone") or invite.get("suggestedPhone") or "").strip()
+    password = str(payload.get("password") or "")
+    confirm_password = str(payload.get("confirmPassword") or password)
+
+    if not full_name:
+        return error_response("Please enter your full name.", status_code=400)
+    if not manager_email or "@" not in manager_email or "." not in manager_email.split("@")[-1]:
+        return error_response("Please enter a valid email address.", status_code=400)
+    if len(password) < 6:
+        return error_response("Password must be at least 6 characters long.", status_code=400)
+    if password != confirm_password:
+        return error_response("Passwords do not match. Please re-enter.", status_code=400)
+
+    scope_key = str(invite.get("scopeKey") or "").strip().lower()
+    branch_id = str(invite.get("branchId") or "").strip()
+    branch_name = str(invite.get("branchName") or "Branch").strip()
+    biz_name = str(invite.get("businessName") or "ExBOS Business").strip()
+    branch_arch = str(invite.get("architectureId") or "buy-and-sell").strip()
+    owner_email = str(invite.get("ownerEmail") or scope_key).strip().lower()
+
+    if manager_email == owner_email:
+        return error_response("Branch manager email cannot be the same as the Business Owner's email.", status_code=409)
+
+    existing_user = db.users.find_one({"email": manager_email})
+    if existing_user and existing_user.get("ownerScopeKey") not in (None, "", scope_key):
+        return error_response("This email already belongs to another independent ExBOS business account.", status_code=409)
+
+    owner_doc = db.users.find_one({"email": owner_email}, {"_id": 0}) or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    user_doc = {
+        "name": full_name,
+        "email": manager_email,
+        "phone": manager_phone,
+        "role": "Branch Manager",
+        "ownerScopeKey": scope_key,
+        "assignedBranchId": branch_id,
+        "assignedBranchName": branch_name,
+        "businessName": biz_name,
+        "architectureId": branch_arch,
+        "enabledActivities": owner_doc.get("enabledActivities") or [branch_arch],
+        "plan": owner_doc.get("plan") or "Free",
+        "location": invite.get("branchLocation") or owner_doc.get("location") or "Rwanda",
+        "emailVerified": True,
+        "accountStatus": "Active",
+        "password_hash": hash_password(password),
+        "updated_at": now_iso,
+    }
+
+    if existing_user:
+        db.users.update_one({"_id": existing_user["_id"]}, {"$set": user_doc})
+    else:
+        user_doc["created_at"] = now_iso
+        db.users.insert_one(dict(user_doc))
+
+    # Mark invite used
+    db.branch_invites.update_one(
+        {"token": clean_token},
+        {
+            "$set": {
+                "status": "used",
+                "usedAt": now_iso,
+                "activatedEmail": manager_email,
+                "activatedName": full_name,
+            }
+        },
+    )
+
+    # Update branch manager metadata to Active
+    manager_meta = {
+        "name": full_name,
+        "email": manager_email,
+        "phone": manager_phone,
+        "status": "Active",
+        "assignedAt": now_iso,
+        "activatedAt": now_iso,
+    }
+    db.branches.update_one(
+        {"scopeKey": scope_key, "id": branch_id},
+        {"$set": {"manager": manager_meta, "updatedAt": now_iso}},
+    )
+
+    # 1) Create persistent in-app notification for the Business Owner / Admin
+    notif_id = f"notif-bm-{int(time.time() * 1000)}"
+    notif_doc = {
+        "id": notif_id,
+        "scopeKey": scope_key,
+        "type": "branch_manager_activated",
+        "title": "Branch Manager Account Activated",
+        "message": f"{full_name} ({manager_email}) successfully set up their Branch Manager account for {branch_name}.",
+        "branchId": branch_id,
+        "branchName": branch_name,
+        "managerName": full_name,
+        "managerEmail": manager_email,
+        "read": False,
+        "createdAt": now_iso,
+    }
+    db.owner_notifications.insert_one(dict(notif_doc))
+
+    # 2) Send branded ExBOS confirmation email to the Business Owner
+    owner_notified_email = False
+    if owner_email and "@" in owner_email:
+        owner_name = owner_doc.get("name") or "Business Owner"
+        frontend_origin = str(payload.get("frontendOrigin") or "https://exbos.pages.dev").strip().rstrip("/")
+        owner_email_html = render_exbos_email(
+            category="Branch Security Alert",
+            title=f"Branch Manager Account Set Up — {branch_name}",
+            greeting=f"Hello <strong>{owner_name}</strong>,",
+            intro_html=(
+                f"Your invited Branch Manager <strong>{full_name}</strong> has successfully completed their "
+                f"account setup and is now active on <strong>{branch_name}</strong>."
+            ),
+            details=[
+                ("Manager Name", full_name),
+                ("Manager Email", manager_email),
+                ("Phone", manager_phone or "Not provided"),
+                ("Assigned Branch", branch_name),
+                ("Status", "Active & Branch-Locked"),
+                ("Activated At (UTC)", now_iso[:19].replace("T", " ")),
+            ],
+            primary_cta=("Manage Branches in ExBOS", f"{frontend_origin}/dashboard"),
+            footer_note="You can review branch permissions, expense limits, or freeze branch access at any time from Settings -> Branches Control.",
+        )
+        owner_email_text = (
+            f"Hello {owner_name}, {full_name} ({manager_email}) has successfully set up their Branch Manager account "
+            f"for {branch_name} ({biz_name})."
+        )
+        owner_notified_email = send_gmail_email(
+            to_email=owner_email,
+            subject=f"ExBOS Alert: Branch Manager Account Activated — {branch_name}",
+            html_body=owner_email_html,
+            text_body=owner_email_text,
+        )
+
+    access_token = create_access_token(identity=manager_email)
+    safe_user = {k: v for k, v in user_doc.items() if k not in ("password_hash", "_id")}
+
+    res_payload = {
+        "access_token": access_token,
+        "user": safe_user,
+        "branchId": branch_id,
+        "branchName": branch_name,
+        "ownerNotified": True,
+        "ownerEmailSent": owner_notified_email,
+    }
+    return success_response(
+        data=res_payload,
+        extra=res_payload,
+        message=f"Account set up successfully! Welcome to {branch_name}.",
+        status_code=201,
+    )
+
+
+@branches_bp.route("/notifications", methods=["GET"])
+def list_branch_notifications():
+    """Return owner-scoped branch notifications (e.g., Branch Manager account activations)."""
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return success_response(data={"notifications": []}, extra={"notifications": []})
+
+    items = list(
+        db.owner_notifications.find({"scopeKey": scope_key, "read": {"$ne": True}}, {"_id": 0})
+        .sort("createdAt", -1)
+        .limit(30)
+    )
+    return success_response(
+        data={"notifications": items},
+        extra={"notifications": items},
+        message="Owner notifications loaded.",
+    )
+
+
+@branches_bp.route("/notifications/<notif_id>/read", methods=["PATCH"])
+def mark_branch_notification_read(notif_id: str):
+    """Mark a single owner notification (or 'all') as read."""
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response("Only the Business Owner can dismiss branch notifications.", status_code=403)
+
+    if notif_id == "all":
+        db.owner_notifications.update_many(
+            {"scopeKey": scope_key, "read": {"$ne": True}},
+            {"$set": {"read": True, "readAt": datetime.now(timezone.utc).isoformat()}},
+        )
+    else:
+        db.owner_notifications.update_one(
+            {"scopeKey": scope_key, "id": notif_id},
+            {"$set": {"read": True, "readAt": datetime.now(timezone.utc).isoformat()}},
+        )
+    return success_response(data={"ok": True}, message="Notification marked as read.")
 
 
 @branches_bp.route("/verify-owner-switch", methods=["POST"])

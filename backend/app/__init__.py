@@ -94,6 +94,7 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
             or path.startswith("/api/v1/auth/forgot-password")
             or path.startswith("/api/v1/auth/reset-password")
             or path.startswith("/api/v1/documents/public/")
+            or path.startswith("/api/v1/branches/invite/")
         ):
             return None
 

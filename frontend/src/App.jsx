@@ -26,6 +26,7 @@ import {
 const DashboardPage = lazyWithRetry(() => import('./pages/DashboardPage'))
 const SuperAdminPage = lazyWithRetry(() => import('./pages/SuperAdminPage'))
 const PublicDocumentPage = lazyWithRetry(() => import('./pages/PublicDocumentPage'))
+const BranchManagerInvitePage = lazyWithRetry(() => import('./pages/BranchManagerInvitePage'))
 
 function RouteFallback() {
   return (
@@ -97,6 +98,9 @@ export default function App() {
 
             {/* Public Shared Document Viewer (/d/:docId) */}
             <Route path="/d/:docId" element={<PublicDocumentPage />} />
+
+            {/* Public Branch Manager Self-Setup Invite Route (/branch-invite/:token) */}
+            <Route path="/branch-invite/:token" element={<BranchManagerInvitePage />} />
 
             {/* Authentication & 7-Step Guided Registration Routes (Section 4) */}
             <Route path="/login" element={<LoginPage isForgotPassword={false} />} />

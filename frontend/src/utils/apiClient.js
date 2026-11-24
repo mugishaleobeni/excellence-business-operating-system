@@ -269,6 +269,23 @@ export const exbosApi = {
     apiRequest(withScope(`/branches/${branchId}`), { method: 'DELETE' }),
   assignBranchManager: (branchId, payload = {}) =>
     apiRequest(withScope(`/branches/${branchId}/assign-manager`), { method: 'POST', body: payload }),
+  createBranchManagerInvite: (branchId, payload = {}) =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/manager-invite`), {
+      method: 'POST',
+      body: payload
+    }),
+  getBranchManagerInvite: (token) =>
+    apiRequest(`/branches/invite/${encodeURIComponent(token)}`),
+  completeBranchManagerInvite: (token, payload = {}) =>
+    apiRequest(`/branches/invite/${encodeURIComponent(token)}/complete`, {
+      method: 'POST',
+      body: payload
+    }),
+  getBranchNotifications: () => apiRequest(withScope('/branches/notifications')),
+  markBranchNotificationRead: (notifId) =>
+    apiRequest(withScope(`/branches/notifications/${encodeURIComponent(notifId)}/read`), {
+      method: 'PATCH'
+    }),
   verifyOwnerBranchSwitch: (payload = {}) =>
     apiRequest(withScope('/branches/verify-owner-switch'), { method: 'POST', body: payload }),
   transferBranchStock: (branchId, payload = {}) =>
