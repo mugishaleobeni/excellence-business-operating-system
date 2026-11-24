@@ -149,26 +149,24 @@ def build_welcome_message(
     architecture_id: str = "buy-and-sell",
     official_number: str = "+250 792 946 680",
 ) -> str:
-    """Build the official ExBOS WhatsApp welcome message and structured menu."""
+    """Build the official ExBOS executive WhatsApp menu."""
     arch_label = ARCH_LABELS.get(architecture_id, "Buy & Sell")
     return (
-        f"Welcome to *EXCELLENCE BOS* Official WhatsApp ({official_number})!\n\n"
-        f"Your business *{business_name}* (*{arch_label}*) is now automatically connected.\n\n"
-        "Reply with a *Menu Number* or *Fast Command* anytime:\n"
-        "*0* - Show Main Menu\n"
-        "*1* - View All Products / Items in Database\n"
-        "*2* - Record a Sale\n"
-        "*3* - Record a Purchase / Restock\n"
-        "*4* - Record an Expense\n"
-        "*5* - Get Live Business Report (Sales, P&L, Stock)\n"
-        "*6* - View Unpaid Customers & Send Reminders\n"
-        "*7* - Verify Customer Payment\n"
-        "*8* - Add New Product / Item\n\n"
-        "Example fast commands:\n"
-        "- `PRODUCTS`\n"
-        "- `SALE 2 iPhone 300000`\n"
-        "- `EXPENSE Transport 5000`\n"
-        "- `REPORT`"
+        f"*EXCELLENCE BOS — Official Business Console*\n"
+        f"Business: *{business_name}* ({arch_label})\n"
+        "--------------------------------\n"
+        "Reply with a *Menu Number*:\n"
+        "*1.* View Products & Live Stock\n"
+        "*2.* Record a Sale (Step-by-Step)\n"
+        "*3.* Record a Purchase / Restock\n"
+        "*4.* Record an Expense\n"
+        "*5.* Live Business Report (Sales, P&L, Stock)\n"
+        "*6.* Unpaid Customers & Reminders\n"
+        "*7.* Verify Customer Payment\n"
+        "*8.* Add New Product\n"
+        "*0.* Main Menu / Cancel\n"
+        "--------------------------------\n"
+        "Every entry shows a *Verification Summary* before saving to your database."
     )
 
 

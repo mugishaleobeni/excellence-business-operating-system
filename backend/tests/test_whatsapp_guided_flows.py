@@ -1,0 +1,174 @@
+"""End-to-end tests for guided WhatsApp POS flows & mandatory verification before saving."""
+
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from app import create_app
+from app.database import get_db
+from app.services.whatsapp_engine import handle_incoming_whatsapp_message
+
+
+class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = create_app()
+        cls.owner_email = "test_wa_guided_owner@exbos.test"
+        cls.owner_phone = "+250788555444"
+
+    def setUp(self):
+        with self.app.app_context():
+            db = get_db()
+            db.users.delete_many({"email": self.owner_email})
+            db.workspaces.delete_many({"scopeKey": self.owner_email})
+            db.transactions.delete_many({"scopeKey": self.owner_email})
+            db.whatsapp_sessions.delete_many({"phone": self.owner_phone})
+
+            self.user_doc = {
+                "name": "Leo Test",
+                "email": self.owner_email,
+                "phone": self.owner_phone,
+                "businessName": "Kigali Tech Shop",
+                "architectureId": "buy-and-sell",
+                "role": "Owner",
+                "plan": "Gold",
+            }
+            db.users.insert_one(dict(self.user_doc))
+            db.workspaces.insert_one({
+                "scopeKey": self.owner_email,
+                "architectureId": "buy-and-sell",
+                "businessName": "Kigali Tech Shop",
+                "records": {
+                    "Products": [
+                        {
+                            "id": "PRD-1",
+                            "title": "airtel router 4g",
+                            "quantity": 7,
+                            "currentStock": 7,
+                            "sellingPriceRWF": 10000,
+                            "purchasePriceRWF": 7000,
+                        },
+                        {
+                            "id": "PRD-2",
+                            "title": "mac book 2025",
+                            "quantity": 4,
+                            "currentStock": 4,
+                            "sellingPriceRWF": 850000,
+                            "purchasePriceRWF": 700000,
+                        },
+                    ],
+                    "Sales": [],
+                    "Purchases": [],
+                    "Expenses": [],
+                    "Customers": [],
+                    "Suppliers": [],
+                },
+                "metrics": {},
+            })
+
+    def tearDown(self):
+        with self.app.app_context():
+            db = get_db()
+            db.users.delete_many({"email": self.owner_email})
+            db.workspaces.delete_many({"scopeKey": self.owner_email})
+            db.transactions.delete_many({"scopeKey": self.owner_email})
+            db.whatsapp_sessions.delete_many({"phone": self.owner_phone})
+
+    def test_natural_greeting_and_guided_sale_with_verification_gate(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # 1. Natural greeting 'Hy' must NOT return 'Command not recognized'
+            r_hi = handle_incoming_whatsapp_message(db, self.owner_phone, "Hy", self.user_doc)
+            self.assertEqual(r_hi["action"], "menu")
+            self.assertNotIn("not recognized", r_hi["reply"].lower())
+
+            # 2. Reply '2' -> lists real products from DB
+            r_pick = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertEqual(r_pick["action"], "sale_pick_product")
+            self.assertIn("airtel router 4g", r_pick["reply"])
+            self.assertIn("10,000 RWF", r_pick["reply"])
+
+            # 3. Choose product #1 -> asks quantity with available stock
+            r_qty_prompt = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_qty_prompt["action"], "sale_enter_qty")
+            self.assertIn("7 unit(s)", r_qty_prompt["reply"])
+
+            # 4. Entering qty > stock (e.g. 99) is rejected cleanly
+            r_too_much = handle_incoming_whatsapp_message(db, self.owner_phone, "99", self.user_doc)
+            self.assertEqual(r_too_much["action"], "sale_qty_exceeds_stock")
+
+            # 5. Enter valid qty '2' -> asks payment method
+            r_pm = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertEqual(r_pm["action"], "sale_pick_payment")
+            self.assertIn("20,000 RWF", r_pm["reply"])
+
+            # 6. Pick '2' (MTN MoMo) -> MUST show VERIFY BEFORE SAVING and NOT save yet!
+            r_verify = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            self.assertEqual(r_verify["action"], "confirm_sale")
+            self.assertIn("VERIFY BEFORE SAVING", r_verify["reply"])
+            self.assertIn("Reply *YES*", r_verify["reply"])
+
+            ws_before = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws_before["records"]["Sales"]), 0)
+            self.assertEqual(ws_before["records"]["Products"][0]["quantity"], 7)
+
+            # 7. Reply 'YES' -> saves sale & deducts stock from 7 to 5!
+            r_saved = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_saved["action"], "sale_recorded")
+            self.assertIn("SALE SAVED", r_saved["reply"])
+
+            ws_after = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws_after["records"]["Sales"]), 1)
+            self.assertEqual(ws_after["records"]["Sales"][0]["amountRWF"], 20000.0)
+            self.assertEqual(ws_after["records"]["Products"][0]["quantity"], 5)
+
+    def test_typo_fast_sale_fuzzy_matches_and_cancel_prevents_save(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # Typo 'Sale 1 aitel' -> fuzzy matches 'airtel router 4g' & requires YES before save
+            r_fast = handle_incoming_whatsapp_message(db, self.owner_phone, "Sale 1 aitel", self.user_doc)
+            self.assertEqual(r_fast["action"], "confirm_sale")
+            self.assertIn("airtel router 4g", r_fast["reply"])
+            self.assertIn("10,000 RWF", r_fast["reply"])
+            self.assertIn("VERIFY BEFORE SAVING", r_fast["reply"])
+
+            # Reply 'NO' -> cancelled, nothing saved to DB!
+            r_cancel = handle_incoming_whatsapp_message(db, self.owner_phone, "NO", self.user_doc)
+            self.assertEqual(r_cancel["action"], "cancelled")
+            ws = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws["records"]["Sales"]), 0)
+            self.assertEqual(ws["records"]["Products"][0]["quantity"], 7)
+
+    def test_guided_expense_with_verification_gate(self):
+        with self.app.app_context():
+            db = get_db()
+
+            r1 = handle_incoming_whatsapp_message(db, self.owner_phone, "4", self.user_doc)
+            self.assertEqual(r1["action"], "expense_enter_title")
+
+            r2 = handle_incoming_whatsapp_message(db, self.owner_phone, "4", self.user_doc)
+            self.assertEqual(r2["action"], "expense_enter_amount")
+            self.assertIn("Transport", r2["reply"])
+
+            r3 = handle_incoming_whatsapp_message(db, self.owner_phone, "5000", self.user_doc)
+            self.assertEqual(r3["action"], "confirm_expense")
+            self.assertIn("VERIFY BEFORE SAVING", r3["reply"])
+
+            # Still 0 expenses before YES
+            ws_before = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws_before["records"]["Expenses"]), 0)
+
+            r4 = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r4["action"], "expense_recorded")
+            ws_after = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(len(ws_after["records"]["Expenses"]), 1)
+            self.assertEqual(ws_after["records"]["Expenses"][0]["amountRWF"], 5000.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
