@@ -216,6 +216,63 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             self.assertEqual(r_en["language"], "en")
             self.assertIn("Official Business Console", r_en["reply"])
 
+    def test_credit_sale_phone_capture_and_missing_phone_reminder_flow(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # A. Record credit sale WITHOUT phone (SKIP), then remind -> ExBOS asks for phone & saves it!
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            r_name = handle_incoming_whatsapp_message(db, self.owner_phone, "5", self.user_doc)
+            self.assertEqual(r_name["action"], "sale_enter_customer")
+
+            r_phone_ask = handle_incoming_whatsapp_message(db, self.owner_phone, "Jean Paul", self.user_doc)
+            self.assertEqual(r_phone_ask["action"], "sale_enter_customer_phone")
+
+            r_v1 = handle_incoming_whatsapp_message(db, self.owner_phone, "SKIP", self.user_doc)
+            self.assertEqual(r_v1["action"], "confirm_sale")
+            r_saved1 = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_saved1["action"], "sale_recorded")
+
+            # Open 6 (Unpaid Customers) -> pick 1 (Jean Paul) -> asks for missing WhatsApp number!
+            r_unpaid = handle_incoming_whatsapp_message(db, self.owner_phone, "6", self.user_doc)
+            self.assertEqual(r_unpaid["action"], "list_unpaid")
+            self.assertIn("Jean Paul", r_unpaid["reply"])
+            self.assertIn("No WhatsApp Number", r_unpaid["reply"])
+
+            r_ask_missing = handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            self.assertEqual(r_ask_missing["action"], "remind_enter_phone")
+
+            # User supplies phone -> permanently saved & shows VERIFY BEFORE SENDING REMINDER
+            r_confirm_rem = handle_incoming_whatsapp_message(db, self.owner_phone, "0788777666", self.user_doc)
+            self.assertEqual(r_confirm_rem["action"], "confirm_reminder")
+            self.assertIn("+250788777666", r_confirm_rem["reply"])
+
+            r_sent = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_sent["action"], "reminder_sent")
+            self.assertIn("+250788777666", r_sent["reply"])
+
+            # Verify phone was saved onto both the Sale and Customers directory in MongoDB
+            ws = db.workspaces.find_one({"scopeKey": self.owner_email, "architectureId": "buy-and-sell"})
+            self.assertEqual(ws["records"]["Sales"][0]["customerPhone"], "+250788777666")
+            self.assertEqual(ws["records"]["Customers"][0]["phone"], "+250788777666")
+
+            # B. Record credit sale WITH phone immediately -> saved directly
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "5", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "Marie Claire", self.user_doc)
+            r_v2 = handle_incoming_whatsapp_message(db, self.owner_phone, "0788222333", self.user_doc)
+            self.assertEqual(r_v2["action"], "confirm_sale")
+            self.assertIn("+250788222333", r_v2["reply"])
+            handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+
+            r_rem_direct = handle_incoming_whatsapp_message(db, self.owner_phone, "REMIND Marie", self.user_doc)
+            self.assertEqual(r_rem_direct["action"], "confirm_reminder")
+            self.assertIn("+250788222333", r_rem_direct["reply"])
+
 
 if __name__ == "__main__":
     unittest.main()

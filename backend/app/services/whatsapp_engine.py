@@ -334,6 +334,8 @@ def send_debt_reminders(
             "customerName": item["customerName"],
             "phone": res.get("to"),
             "status": res.get("status"),
+            "sent": bool(res.get("sent")),
+            "waMeLink": res.get("waMeLink") or "",
             "remainingAmountRWF": item["remainingAmountRWF"],
             "messagePreview": msg,
         })
@@ -645,6 +647,68 @@ def _format_product_picker(business_name: str, catalog: list[dict[str, Any]], ac
     return "\n".join(lines)
 
 
+def _save_customer_phone_on_record(
+    db: Any,
+    scope_key: str,
+    arch_id: str,
+    record_id: str,
+    bucket: str,
+    customer_name: str,
+    phone: str,
+) -> str:
+    """Persist a customer's WhatsApp phone number onto their Sale/Customer record and Customers directory."""
+    normalized = normalize_phone(phone)
+    if not normalized or db is None:
+        return ""
+    ws = _get_or_init_workspace(db, scope_key, arch_id)
+    records = ws.get("records") or {}
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # 1. Update matching sale/record in its bucket
+    if bucket and record_id:
+        bucket_list = list(records.get(bucket) or [])
+        for idx, rec in enumerate(bucket_list):
+            if str(rec.get("id") or "") == str(record_id):
+                upd = dict(rec)
+                if bucket == "Customers":
+                    upd["phone"] = normalized
+                else:
+                    upd["customerPhone"] = normalized
+                bucket_list[idx] = upd
+                break
+        records[bucket] = bucket_list
+
+    # 2. Also upsert/update matching customer in Customers directory for future reminders
+    cust_list = list(records.get("Customers") or [])
+    cname_low = str(customer_name or "").strip().lower()
+    matched_cust = False
+    if cname_low and cname_low != "walk-in client":
+        for idx, c in enumerate(cust_list):
+            if str(c.get("title") or c.get("name") or "").strip().lower() == cname_low:
+                c_upd = dict(c)
+                c_upd["phone"] = normalized
+                cust_list[idx] = c_upd
+                matched_cust = True
+                break
+        if not matched_cust:
+            cust_list.insert(0, {
+                "id": f"CUS-{int(time.time() * 1000) % 1000000}",
+                "title": customer_name,
+                "name": customer_name,
+                "phone": normalized,
+                "status": "Active",
+                "source": "WhatsApp",
+                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            })
+        records["Customers"] = cust_list
+
+    db.workspaces.update_one(
+        {"scopeKey": scope_key, "architectureId": arch_id},
+        {"$set": {"records": records, "updated_at": now_iso}},
+    )
+    return normalized
+
+
 def _sale_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
     qty = float(step_data.get("qty") or 1)
     qty_disp = int(qty) if qty.is_integer() else qty
@@ -653,8 +717,9 @@ def _sale_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list
     pm_name = str(step_data.get("paymentMethod") or "Cash")
     pm_status = str(step_data.get("paymentStatus") or "Paid in Full")
     cust_name = str(step_data.get("customerName") or "Walk-in Client")
+    cust_phone = str(step_data.get("customerPhone") or "").strip()
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
-        return [
+        rows = [
             ("Igicuruzwa", str(step_data.get("productTitle") or "")),
             ("Umubare", f"{qty_disp}"),
             ("Ibisigara mu Bubiko", f"{rem_disp}"),
@@ -663,7 +728,10 @@ def _sale_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list
             ("Ubwishyu", f"{pm_name} ({pm_status})"),
             ("Umukiriya", cust_name),
         ]
-    return [
+        if cust_phone:
+            rows.append(("WhatsApp y'Umukiriya", cust_phone))
+        return rows
+    rows = [
         ("Product", str(step_data.get("productTitle") or "")),
         ("Quantity", f"{qty_disp} unit(s)"),
         ("Stock After Sale", f"{rem_disp} unit(s)"),
@@ -671,6 +739,27 @@ def _sale_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list
         ("Total Amount", _fmt_rwf(step_data.get("totalAmountRWF") or 0)),
         ("Payment", f"{pm_name} ({pm_status})"),
         ("Customer", cust_name),
+    ]
+    if cust_phone:
+        rows.append(("Customer WhatsApp", cust_phone))
+    return rows
+
+
+def _reminder_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
+    if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        return [
+            ("Umukiriya", str(step_data.get("customerName") or "")),
+            ("Nimero ya WhatsApp", str(step_data.get("customerPhone") or "")),
+            ("Ibyo Yaguze", str(step_data.get("productsBought") or "")),
+            ("Ayishyuye", _fmt_rwf(step_data.get("paidAmountRWF") or 0)),
+            ("Ideni Risigaye", _fmt_rwf(step_data.get("remainingAmountRWF") or 0)),
+        ]
+    return [
+        ("Customer", str(step_data.get("customerName") or "")),
+        ("WhatsApp Number", str(step_data.get("customerPhone") or "")),
+        ("Items Bought", str(step_data.get("productsBought") or "")),
+        ("Amount Paid", _fmt_rwf(step_data.get("paidAmountRWF") or 0)),
+        ("Remaining Balance", _fmt_rwf(step_data.get("remainingAmountRWF") or 0)),
     ]
 
 
@@ -956,6 +1045,7 @@ def handle_incoming_whatsapp_message(
         payment_method = str(step_data.get("paymentMethod") or "Cash")
         payment_status = str(step_data.get("paymentStatus") or "Paid in Full")
         customer_name = str(step_data.get("customerName") or "Walk-in Client")
+        customer_phone = str(step_data.get("customerPhone") or "").strip()
         is_credit = payment_status.lower() == "unpaid"
         paid_amt = 0.0 if is_credit else total_amt
         remaining_amt = total_amt if is_credit else 0.0
@@ -980,6 +1070,7 @@ def handle_incoming_whatsapp_message(
                 "costOfGoodsRWF": cogs,
                 "profitRWF": profit,
                 "customerName": customer_name,
+                "customerPhone": customer_phone,
                 "status": payment_status,
                 "paymentStatus": payment_status,
                 "paymentMethod": payment_method,
@@ -990,6 +1081,8 @@ def handle_incoming_whatsapp_message(
             tx_title=f"{qty_display} × {item_name}",
             tx_category=f"{buckets['sales']} (WhatsApp)",
         )
+        if customer_phone and customer_name != "Walk-in Client":
+            _save_customer_phone_on_record(db, scope_key, arch_id, entry["id"], buckets["sales"], customer_name, customer_phone)
         new_stock = _adjust_product_stock(db, scope_key, arch_id, product_id, -qty)
         set_session(None)
         stock_val = int(new_stock) if new_stock is not None and float(new_stock).is_integer() else new_stock
@@ -1208,15 +1301,165 @@ def handle_incoming_whatsapp_message(
             "action": "confirm_sale",
         }
 
-    # --- E. SALE STEP 3b: ENTER CUSTOMER NAME FOR CREDIT SALE ---
+    # --- E. SALE STEP 3b: ENTER CUSTOMER NAME & WHATSAPP NUMBER FOR CREDIT SALE ---
     if current_step == "sale_enter_customer":
         if len(clean_text) < 2:
             return {"reply": _t(lang, "Please enter a valid customer name (at least 2 characters).", "Andika izina ry'umukiriya ryuzuye."), "action": "sale_enter_customer_retry"}
         step_data["customerName"] = clean_text
+        set_session("sale_enter_customer_phone", step_data)
+        return {
+            "reply": _t(
+                lang,
+                f"Enter *{clean_text}*'s WhatsApp phone number for payment reminders (e.g. *0788123456*), or reply *SKIP*:",
+                f"Andika nimero ya WhatsApp ya *{clean_text}* izajya yohererezwaho ibutsa ry'ideni (urugero: *0788123456*), cyangwa subiza *SKIP*:",
+            ),
+            "action": "sale_enter_customer_phone",
+        }
+
+    if current_step == "sale_enter_customer_phone":
+        if upper_text in ("SKIP", "NONE", "SIMBUKA", "-"):
+            step_data["customerPhone"] = ""
+        else:
+            norm_p = normalize_phone(clean_text)
+            if not norm_p or len(norm_p) < 10:
+                return {
+                    "reply": _t(
+                        lang,
+                        "Please enter a valid WhatsApp phone number (e.g. *0788123456* or *+250788123456*), or reply *SKIP*.",
+                        "Andika nimero ya WhatsApp yuzuye (urugero: *0788123456*), cyangwa subiza *SKIP*.",
+                    ),
+                    "action": "sale_enter_customer_phone_retry",
+                }
+            step_data["customerPhone"] = norm_p
         set_session("confirm_sale", step_data)
         return {
             "reply": _format_verification_card("NEW CREDIT SALE", _sale_verification_rows(step_data, lang), lang=lang, title_rw="IGURISHA KU IDENI"),
             "action": "confirm_sale",
+        }
+
+    # --- E2. GUIDED UNPAID CUSTOMER REMINDER FLOW (ASK PHONE IF MISSING + VERIFY BEFORE SEND) ---
+    if current_step == "unpaid_pick_customer":
+        if clean_text.isdigit():
+            unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
+            idx = int(clean_text) - 1
+            if 0 <= idx < len(unpaid):
+                target = unpaid[idx]
+                rem_data = {
+                    "id": target["id"],
+                    "bucket": target["bucket"],
+                    "customerName": target["customerName"],
+                    "customerPhone": target.get("customerPhone") or "",
+                    "productsBought": target["productsBought"],
+                    "totalAmountRWF": target["totalAmountRWF"],
+                    "paidAmountRWF": target["paidAmountRWF"],
+                    "remainingAmountRWF": target["remainingAmountRWF"],
+                }
+                if not rem_data["customerPhone"]:
+                    set_session("remind_enter_phone", rem_data)
+                    return {
+                        "reply": _t(
+                            lang,
+                            (
+                                f"*{target['customerName']}* does not have a WhatsApp number saved yet.\n"
+                                f"- Remaining Balance: *{_fmt_rwf(target['remainingAmountRWF'])}*\n\n"
+                                "Enter their WhatsApp phone number to save it and send the reminder (e.g. *0788123456*), or reply *0* to cancel:"
+                            ),
+                            (
+                                f"*{target['customerName']}* ntaragira nimero ya WhatsApp ibitse.\n"
+                                f"- Ideni Risigaye: *{_fmt_rwf(target['remainingAmountRWF'])}*\n\n"
+                                "Andika nimero ye ya WhatsApp tuyibike tunamwoherereze ibutsa (urugero: *0788123456*), cyangwa *0* uhagarike:"
+                            ),
+                        ),
+                        "action": "remind_enter_phone",
+                    }
+                set_session("confirm_reminder", rem_data)
+                return {
+                    "reply": _format_verification_card("SEND PAYMENT REMINDER", _reminder_verification_rows(rem_data, lang), lang=lang, title_rw="OHEREZA IBUTSA RY'IDENI"),
+                    "action": "confirm_reminder",
+                }
+        # Otherwise fall through so REMIND ALL / VERIFY / menu commands work seamlessly!
+
+    if current_step == "remind_enter_phone":
+        norm_p = normalize_phone(clean_text)
+        if not norm_p or len(norm_p) < 10:
+            return {
+                "reply": _t(
+                    lang,
+                    "Please enter a valid WhatsApp phone number (e.g. *0788123456* or *+250788123456*), or *0* to cancel.",
+                    "Andika nimero ya WhatsApp nyayo (urugero: *0788123456*), cyangwa *0* uhagarike.",
+                ),
+                "action": "remind_enter_phone_retry",
+            }
+        # Save phone permanently onto the unpaid customer's record & directory
+        _save_customer_phone_on_record(
+            db,
+            scope_key,
+            arch_id,
+            str(step_data.get("id") or ""),
+            str(step_data.get("bucket") or "Sales"),
+            str(step_data.get("customerName") or ""),
+            norm_p,
+        )
+        step_data["customerPhone"] = norm_p
+        set_session("confirm_reminder", step_data)
+        return {
+            "reply": _format_verification_card("SEND PAYMENT REMINDER", _reminder_verification_rows(step_data, lang), lang=lang, title_rw="OHEREZA IBUTSA RY'IDENI"),
+            "action": "confirm_reminder",
+        }
+
+    if current_step == "confirm_reminder":
+        if upper_text in EDIT_WORDS:
+            set_session("remind_enter_phone", step_data)
+            return {
+                "reply": _t(
+                    lang,
+                    f"Enter the updated WhatsApp phone number for *{step_data.get('customerName')}*:",
+                    f"Andika nimero nshya ya WhatsApp ya *{step_data.get('customerName')}*:",
+                ),
+                "action": "remind_enter_phone",
+            }
+        if upper_text not in CONFIRM_WORDS:
+            return {
+                "reply": _t(
+                    lang,
+                    "Reply *YES* to send this payment reminder, *EDIT* to change the phone number, or *NO* to cancel.",
+                    "Subiza *YEGO* wohereze ibutsa, *HINDURA* uhindure nimero, cyangwa *OYA* uhagarike.",
+                ),
+                "action": "awaiting_reminder_confirmation",
+            }
+        res = send_debt_reminders(
+            db,
+            scope_key,
+            arch_id,
+            target_id=str(step_data.get("id") or step_data.get("customerName") or ""),
+            business_name=business_name,
+        )
+        set_session(None)
+        disp = (res.get("dispatched") or [{}])[0]
+        wa_link = disp.get("waMeLink") or ""
+        sent_ok = bool(disp.get("sent"))
+        status_note = (
+            _t(lang, "Delivered automatically via Meta WhatsApp.", "Yoherejwe ako kanya kuri WhatsApp.")
+            if sent_ok
+            else _t(
+                lang,
+                f"Prepared in Sandbox Mode — tap to send directly on WhatsApp:\n{wa_link}",
+                f"Yateguwe (Sandbox) — kanda hano uyoherereze umukiriya kuri WhatsApp:\n{wa_link}",
+            )
+        )
+        return {
+            "reply": (
+                f"*{_t(lang, 'PAYMENT REMINDER PROCESSED', 'IBUTSA RY\'IDENI RYATUNGANYIJWE')}*\n"
+                "--------------------------------\n"
+                f"- {_t(lang, 'Customer', 'Umukiriya')}: *{step_data.get('customerName')}*\n"
+                f"- WhatsApp: *{step_data.get('customerPhone')}*\n"
+                f"- {_t(lang, 'Remaining Balance', 'Ideni Risigaye')}: *{_fmt_rwf(step_data.get('remainingAmountRWF'))}*\n"
+                f"- {status_note}\n"
+                "--------------------------------\n"
+                + _t(lang, "Reply *6* for Unpaid Customers or *0* for Main Menu.", "Subiza *6* urebe abandi batarishyura cyangwa *0* usubire ahabanza.")
+            ),
+            "action": "reminder_sent",
+            "result": res,
         }
 
     # --- F. CONFIRMATION & EDIT GATE: PURCHASE ---
@@ -1589,22 +1832,69 @@ def handle_incoming_whatsapp_message(
         return {"reply": _build_report_text(db, scope_key, arch_id, business_name), "action": "report"}
 
     if upper_text in ("6", "UNPAID", "DEBTS", "OWED"):
-        set_session(None)
         unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
         if not unpaid:
-            return {"reply": "All customers are *Paid in Full*. Zero unpaid balances right now.", "action": "list_unpaid_empty"}
-        lines = [f"*Unpaid Customers ({len(unpaid)}):*"]
+            set_session(None)
+            return {
+                "reply": _t(
+                    lang,
+                    "All customers are *Paid in Full*. Zero unpaid balances right now.",
+                    "Abakiriya bose *Barishyuye*. Nta deni rihari ubu.",
+                ),
+                "action": "list_unpaid_empty",
+            }
+        set_session("unpaid_pick_customer", {})
+        lines = [_t(lang, f"*Unpaid Customers ({len(unpaid)}):*", f"*Abakiriya Batarishyura ({len(unpaid)}):*")]
         for idx, u in enumerate(unpaid[:10], start=1):
+            phone_lbl = u["customerPhone"] if u.get("customerPhone") else _t(lang, "No WhatsApp Number", "Nta Nimero ya WhatsApp")
             lines.append(
                 f"*{idx}.* {u['customerName']} ({u['productsBought']})\n"
-                f"   Paid: {_fmt_rwf(u['paidAmountRWF'])} | *Remaining: {_fmt_rwf(u['remainingAmountRWF'])}*"
+                f"   {_t(lang, 'Remaining', 'Ideni')}: *{_fmt_rwf(u['remainingAmountRWF'])}* | {phone_lbl}"
             )
-        lines.append("\nCommands:\n- `REMIND ALL` — send reminders to all\n- `REMIND <Name>` — remind one client\n- `VERIFY <Name>` — confirm payment & clear list")
+        lines.append(
+            _t(
+                lang,
+                "\nReply with a *customer number* (e.g. *1*) to send a reminder (if phone is missing, ExBOS will ask you for it).\nOr send `REMIND ALL` / `VERIFY <Name>` / *0* for Menu.",
+                "\nSubiza *umubare w'umukiriya* (urugero: *1*) umwoherereze ibutsa (niba nta nimero afite, ExBOS irayigusaba).\nCyangwa wandike `REMIND ALL` / `VERIFY <Izina>` / *0*.",
+            )
+        )
         return {"reply": "\n".join(lines), "action": "list_unpaid"}
 
     if upper_text.startswith("REMIND"):
-        set_session(None)
         arg = clean_text[6:].strip() or "ALL"
+        if arg.upper() != "ALL":
+            unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
+            match = next(
+                (u for u in unpaid if arg.lower() in u["customerName"].lower() or str(u["id"]).lower() == arg.lower()),
+                None,
+            )
+            if match:
+                rem_data = {
+                    "id": match["id"],
+                    "bucket": match["bucket"],
+                    "customerName": match["customerName"],
+                    "customerPhone": match.get("customerPhone") or "",
+                    "productsBought": match["productsBought"],
+                    "totalAmountRWF": match["totalAmountRWF"],
+                    "paidAmountRWF": match["paidAmountRWF"],
+                    "remainingAmountRWF": match["remainingAmountRWF"],
+                }
+                if not rem_data["customerPhone"]:
+                    set_session("remind_enter_phone", rem_data)
+                    return {
+                        "reply": _t(
+                            lang,
+                            f"*{match['customerName']}* has no WhatsApp number saved yet.\nEnter their WhatsApp phone number to save & send the reminder (e.g. *0788123456*), or *0* to cancel:",
+                            f"*{match['customerName']}* nta nimero ya WhatsApp afite.\nAndika nimero ye ya WhatsApp tuyibike tunamwoherereze ibutsa (urugero: *0788123456*), cyangwa *0* uhagarike:",
+                        ),
+                        "action": "remind_enter_phone",
+                    }
+                set_session("confirm_reminder", rem_data)
+                return {
+                    "reply": _format_verification_card("SEND PAYMENT REMINDER", _reminder_verification_rows(rem_data, lang), lang=lang, title_rw="OHEREZA IBUTSA RY'IDENI"),
+                    "action": "confirm_reminder",
+                }
+        set_session(None)
         res = send_debt_reminders(db, scope_key, arch_id, target_id=arg, business_name=business_name)
         return {
             "reply": (
