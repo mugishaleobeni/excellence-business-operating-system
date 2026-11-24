@@ -812,12 +812,14 @@ def handle_unregistered_whatsapp_message(
         linked_user = db.users.find_one({"email": email_lower}, {"_id": 0}) or {}
         biz_name = linked_user.get("businessName") or linked_user.get("name") or "ExBOS Business"
         arch_id = linked_user.get("architectureId") or "buy-and-sell"
+        from app.services.whatsapp_super_admin import is_whatsapp_super_admin
+        is_sa = is_whatsapp_super_admin(linked_user)
         return {
             "reply": _t(
                 lang,
                 f"*WhatsApp Linked Successfully!*\nYour number *{normalized_phone}* is now connected to *{biz_name}*.\n\n",
                 f"*WhatsApp Yahujwe Neza!*\nNimero yawe *{normalized_phone}* yahujwe na *{biz_name}*.\n\n",
-            ) + build_welcome_message(biz_name, arch_id, official_num, lang=lang),
+            ) + build_welcome_message(biz_name, arch_id, official_num, lang=lang, is_super_admin=is_sa),
             "action": "account_linked",
             "email": email_lower,
         }

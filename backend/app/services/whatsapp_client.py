@@ -201,17 +201,19 @@ def build_welcome_message(
     architecture_id: str = "buy-and-sell",
     official_number: str = "+250 792 946 680",
     lang: str = "en",
+    is_super_admin: bool = False,
 ) -> str:
     """Build the official ExBOS executive WhatsApp menu in English or Kinyarwanda."""
     arch_label = ARCH_LABELS.get(architecture_id, "Buy & Sell")
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        sa_line = "*10.* Ubuyobozi Bukuru (Super Admin Command Center)\n" if is_super_admin else ""
         return (
             f"*EXCELLENCE BOS — Sisitemu y'Ubucuruzi*\n"
             f"Ubucuruzi: *{business_name}* ({arch_label})\n"
             "--------------------------------\n"
             "Subiza *Umubare* w'ibyo ushaka:\n"
             "*1.* Reba Ibicuruzwa n'Ububiko\n"
-            "*2.* Andika Igurisha (Intambwe ku ntambwe)\n"
+            "*2.* Andika Ibigiye Kugurishwa (Intambwe ku ntambwe)\n"
             "*3.* Andika Ibyaranguwe / Kongera Ububiko\n"
             "*4.* Andika Amafaranga Yakoreshejwe\n"
             "*5.* Raporo y'Ubucuruzi (Inyungu, Ububiko ,...)\n"
@@ -219,10 +221,12 @@ def build_welcome_message(
             "*7.* Emeza Ubwishyu bw'Umukiriya\n"
             "*8.* Ongeramo Igicuruzwa Gishya\n"
             "*9.* Hindura Ururimi (English / Kinyarwanda)\n"
+            f"{sa_line}"
             "*0.* Ahabanza / Hagarika\n"
             "--------------------------------\n"
             "Buri gikorwa kibanze kigusaba *Kugenzura (YEGO / HINDURA / OYA)* mbere yo kubikwa."
         )
+    sa_line = "*10.* Super Admin Command Center (Platform Control)\n" if is_super_admin else ""
     return (
         f"*EXCELLENCE BOS — Official Business Console*\n"
         f"Business: *{business_name}* ({arch_label})\n"
@@ -237,6 +241,7 @@ def build_welcome_message(
         "*7.* Verify Customer Payment\n"
         "*8.* Add New Product\n"
         "*9.* Change Language (English / Kinyarwanda)\n"
+        f"{sa_line}"
         "*0.* Main Menu / Cancel\n"
         "--------------------------------\n"
         "Every entry shows a *Verification Summary* (*YES / EDIT / NO*) before saving."

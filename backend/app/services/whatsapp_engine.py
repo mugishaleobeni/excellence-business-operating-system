@@ -871,6 +871,11 @@ def handle_incoming_whatsapp_message(
                 user_doc = u
                 break
 
+    # If not matched directly on db.users, check if phone is registered as a Super Admin recipient
+    if user_doc is None and normalized_phone:
+        from app.services.whatsapp_super_admin import resolve_super_admin_by_registered_recipient
+        user_doc = resolve_super_admin_by_registered_recipient(db, normalized_phone)
+
     if not user_doc:
         from app.services.whatsapp_onboarding import handle_unregistered_whatsapp_message
         return handle_unregistered_whatsapp_message(
@@ -879,6 +884,12 @@ def handle_incoming_whatsapp_message(
             clean_text,
             media_data=media_data,
         )
+
+    from app.services.whatsapp_super_admin import (
+        handle_super_admin_whatsapp_message,
+        is_whatsapp_super_admin,
+    )
+    is_sa = is_whatsapp_super_admin(user_doc)
 
     scope_key = (user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
     arch_id = user_doc.get("architectureId") or "buy-and-sell"
@@ -939,7 +950,7 @@ def handle_incoming_whatsapp_message(
         lang = set_user_language("en")
         set_session(None)
         return {
-            "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en"),
+            "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en", is_super_admin=is_sa),
             "action": "language_changed",
             "language": "en",
         }
@@ -947,7 +958,7 @@ def handle_incoming_whatsapp_message(
         lang = set_user_language("rw")
         set_session(None)
         return {
-            "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw"),
+            "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw", is_super_admin=is_sa),
             "action": "language_changed",
             "language": "rw",
         }
@@ -957,7 +968,7 @@ def handle_incoming_whatsapp_message(
             lang = set_user_language("en")
             set_session(None)
             return {
-                "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en"),
+                "reply": "Language switched to *English*.\n\n" + build_welcome_message(business_name, arch_id, lang="en", is_super_admin=is_sa),
                 "action": "language_changed",
                 "language": "en",
             }
@@ -965,7 +976,7 @@ def handle_incoming_whatsapp_message(
             lang = set_user_language("rw")
             set_session(None)
             return {
-                "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw"),
+                "reply": "Ururimi rwahinduwe mu *Kinyarwanda*.\n\n" + build_welcome_message(business_name, arch_id, lang="rw", is_super_admin=is_sa),
                 "action": "language_changed",
                 "language": "rw",
             }
@@ -973,6 +984,22 @@ def handle_incoming_whatsapp_message(
             "reply": "Reply *1* for English or *2* for Kinyarwanda (or *0* to cancel).",
             "action": "choose_language_retry",
         }
+
+    # Super Admin Command Center routing (strictly restricted to verified Super Admins)
+    if is_sa and (
+        (current_step and str(current_step).startswith("sa_"))
+        or (current_step is None and upper_text in ("10", "ADMIN", "SUPERADMIN", "SUPER ADMIN"))
+    ):
+        return handle_super_admin_whatsapp_message(
+            db=db,
+            user_doc=user_doc,
+            normalized_phone=normalized_phone,
+            clean_text=clean_text,
+            current_step=current_step,
+            step_data=step_data,
+            lang=lang,
+            set_session=set_session,
+        )
 
     # Global reset / natural greeting
     if (
@@ -984,7 +1011,7 @@ def handle_incoming_whatsapp_message(
     ):
         set_session(None)
         return {
-            "reply": build_welcome_message(business_name, arch_id, lang=lang),
+            "reply": build_welcome_message(business_name, arch_id, lang=lang, is_super_admin=is_sa),
             "action": "menu",
         }
 
@@ -2201,7 +2228,7 @@ def handle_incoming_whatsapp_message(
                 f"I could not match `{clean_text}` to a menu option.\n\n",
                 f"`{clean_text}` ntiyabonetse mu mahitamo.\n\n",
             )
-            + build_welcome_message(business_name, arch_id, lang=lang)
+            + build_welcome_message(business_name, arch_id, lang=lang, is_super_admin=is_sa)
         ),
         "action": "fallback_menu",
     }
