@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useExbos } from '../context/ExbosContext'
 import { formatRWF } from '../utils/currencyWords'
 import MoneyInput from '../components/common/MoneyInput'
+import CustomSelect from '../components/common/CustomSelect'
 import { apiClient } from '../utils/apiClient'
 import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
 import {
@@ -2183,17 +2184,18 @@ export default function SuperAdminPage() {
                 <label className="block text-xs font-semibold uppercase text-[#9EDCFF]">
                   Select Business Owner / User
                 </label>
-                <select
+                <CustomSelect
+                  searchable={true}
+                  placeholder="Select Business Owner / User..."
+                  searchPlaceholder="Search by business, email, or phone..."
                   value={selectedUserEmail}
-                  onChange={(e) => setSelectedUserEmail(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#03091F] border border-[#9EDCFF]/30 text-xs font-bold text-white"
-                >
-                  {platformUsers.map((u) => (
-                    <option key={u.email} value={u.email}>
-                      {u.businessName} ({u.email}) — {u.plan}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setSelectedUserEmail(val)}
+                  options={platformUsers.map((u) => ({
+                    value: u.email,
+                    label: `${u.businessName} (${u.email}) — ${u.plan}`,
+                    searchText: `${u.businessName || ''} ${u.email || ''} ${u.phone || ''} ${u.plan || ''}`
+                  }))}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

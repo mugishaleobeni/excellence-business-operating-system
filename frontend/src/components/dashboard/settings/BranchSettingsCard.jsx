@@ -16,6 +16,7 @@ import {
   Package
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
+import CustomSelect from '../../common/CustomSelect'
 
 export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', currentArch = {} }) {
   const {
@@ -724,21 +725,21 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Main HQ Product *
                 </label>
-                <select
-                  required
+                <CustomSelect
+                  searchable={true}
+                  placeholder="Select Main HQ product..."
+                  searchPlaceholder="Search product by name..."
                   value={transferProductId}
-                  onChange={(e) => setTransferProductId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-[#071644] border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-400"
-                >
-                  {mainHqProducts.map((p) => {
+                  onChange={(val) => setTransferProductId(val)}
+                  options={mainHqProducts.map((p) => {
                     const q = Number(p.quantity ?? p.stock ?? p.currentStock ?? 0)
-                    return (
-                      <option key={p.id} value={p.id}>
-                        {p.title || p.name} (HQ Stock: {q})
-                      </option>
-                    )
+                    return {
+                      value: p.id,
+                      label: `${p.title || p.name} (HQ Stock: ${q})`,
+                      searchText: `${p.title || ''} ${p.name || ''} ${p.sku || ''} ${p.category || ''}`
+                    }
                   })}
-                </select>
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
