@@ -63,20 +63,13 @@ def _fmt_rwf(val: Any) -> str:
 
 
 def _load_plan_options(db: Any) -> dict[str, dict[str, Any]]:
-    """Load live subscription plan pricing from platform_config overrides or DEFAULT_PLAN_LIMITS."""
-    overrides: dict[str, Any] = {}
-    if db is not None:
-        try:
-            doc = db.platform_config.find_one({"key": "plan_matrix_overrides"}, {"_id": 0})
-            if doc and isinstance(doc.get("value"), dict):
-                overrides = doc["value"]
-        except Exception:
-            pass
+    """Load live subscription plan pricing from entitlements.get_all_plan_limits (synced with Super Admin)."""
+    from app.utils.entitlements import get_all_plan_limits
+
+    live = get_all_plan_limits(db) if db is not None else DEFAULT_PLAN_LIMITS
 
     def _price(plan_key: str, default_val: int) -> int:
-        ov = overrides.get(plan_key) if isinstance(overrides.get(plan_key), dict) else {}
-        base = DEFAULT_PLAN_LIMITS.get(plan_key) or {}
-        raw = ov.get("priceRWF", base.get("priceRWF", default_val))
+        raw = (live.get(plan_key) or {}).get("priceRWF", default_val)
         try:
             return int(round(float(raw or 0)))
         except (TypeError, ValueError):

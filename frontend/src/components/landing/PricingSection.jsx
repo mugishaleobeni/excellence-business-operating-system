@@ -208,26 +208,53 @@ function PlanCard({ plan, language, onSelect }) {
 }
 
 export default function PricingSection() {
-  const { pricingPlans, platinumProgram, language } = useExbos()
+  const { pricingPlans, setPricingPlans, platinumProgram, language } = useExbos()
   const navigate = useNavigate()
   const [liveLimits, setLiveLimits] = useState(null)
+  const [livePricingPlans, setLivePricingPlans] = useState(null)
 
   useEffect(() => {
     let active = true
-    apiClient.superAdminGetPlanLimits().then((res) => {
-      if (active && res.ok && res.data?.data) {
-        setLiveLimits(res.data.data)
-      }
-    }).catch(() => {})
+    const fetchLivePricing = () => {
+      Promise.all([
+        apiClient.superAdminGetPlanLimits().catch(() => null),
+        apiClient.superAdminGetPricingPlans().catch(() => null)
+      ]).then(([limRes, plansRes]) => {
+        if (!active) return
+        if (limRes?.ok && limRes.data?.data) {
+          setLiveLimits(limRes.data.data)
+        }
+        if (plansRes?.ok && Array.isArray(plansRes.data?.data) && plansRes.data.data.length > 0) {
+          setLivePricingPlans(plansRes.data.data)
+          if (typeof setPricingPlans === 'function') {
+            setPricingPlans(plansRes.data.data)
+          }
+        }
+      })
+    }
+
+    fetchLivePricing()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchLivePricing()
+    }, 10000)
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') fetchLivePricing()
+    }
+    window.addEventListener('focus', onFocusOrVisible)
+    document.addEventListener('visibilitychange', onFocusOrVisible)
+
     return () => {
       active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocusOrVisible)
+      document.removeEventListener('visibilitychange', onFocusOrVisible)
     }
-  }, [])
+  }, [setPricingPlans])
 
-  const displayPlans = useMemo(
-    () => (liveLimits ? buildDisplayPlansFromLimits(liveLimits, pricingPlans) : pricingPlans),
-    [liveLimits, pricingPlans]
-  )
+  const displayPlans = useMemo(() => {
+    const basePlans = livePricingPlans || pricingPlans
+    return liveLimits ? buildDisplayPlansFromLimits(liveLimits, basePlans) : basePlans
+  }, [liveLimits, livePricingPlans, pricingPlans])
 
   return (
     <section

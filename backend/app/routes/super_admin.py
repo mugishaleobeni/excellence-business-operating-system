@@ -1152,6 +1152,32 @@ def update_pricing_plan(plan_id: str, validated_data: PricingPlanUpdateSchema):
         {"$set": {"key": "pricing_plans", "value": plans, "updated_at": now_iso}},
         upsert=True,
     )
+
+    # Also sync priceRWF & name into `plan_limits` (and bust cache) so Landing Page,
+    # /pricing, /register, Upgrade Modal, and WhatsApp Registration update instantaneously!
+    try:
+        from app.utils.entitlements import invalidate_plan_limits_cache, normalize_plan_name
+
+        tier_key = normalize_plan_name(updated_plan.get("tier") or updated_plan.get("id") or plan_id)
+        if tier_key in ("free", "bronze", "silver", "gold", "platinum"):
+            pl_doc = db.platform_config.find_one({"key": "plan_limits"})
+            pl_val = dict(pl_doc.get("value")) if pl_doc and isinstance(pl_doc.get("value"), dict) else {}
+            tier_entry = dict(pl_val.get(tier_key) or {})
+            if "priceRWF" in updated_plan:
+                tier_entry["priceRWF"] = float(updated_plan.get("priceRWF") or 0)
+            if updated_plan.get("name"):
+                tier_entry["name"] = str(updated_plan["name"])
+            if updated_plan.get("description"):
+                tier_entry["description"] = str(updated_plan["description"])
+            pl_val[tier_key] = tier_entry
+            db.platform_config.update_one(
+                {"key": "plan_limits"},
+                {"$set": {"key": "plan_limits", "value": pl_val, "updated_at": now_iso}},
+                upsert=True,
+            )
+            invalidate_plan_limits_cache()
+    except Exception as sync_exc:
+        logger.warning("Could not sync pricing_plans -> plan_limits: %s", sync_exc)
     _record_audit_log(
         db=db,
         actor_email=g.super_admin_email,

@@ -67,7 +67,8 @@ export default function SuperAdminPage() {
     platinumProgram,
     setPlatinumProgram,
     superAdminBroadcast,
-    setSuperAdminBroadcast
+    setSuperAdminBroadcast,
+    addToast
   } = useExbos()
 
   const [activeTab, setActiveTab] = useState('overview')
@@ -150,12 +151,18 @@ export default function SuperAdminPage() {
   const showNotice = (msg) => {
     setErrorToast(null)
     setSavedToast(msg)
+    if (typeof addToast === 'function') {
+      addToast({ type: 'success', title: 'Saved Successfully', message: msg })
+    }
     setTimeout(() => setSavedToast(null), 4500)
   }
 
   const showError = (msg) => {
     setSavedToast(null)
     setErrorToast(msg)
+    if (typeof addToast === 'function') {
+      addToast({ type: 'error', title: 'Action Failed', message: msg })
+    }
     setTimeout(() => setErrorToast(null), 5000)
   }
 
@@ -569,19 +576,27 @@ export default function SuperAdminPage() {
   }
 
   const handleSavePricingPlan = async (plan) => {
-    const res = await apiClient.superAdminUpdatePricingPlan(plan.id, {
-      name: plan.name,
-      tier: plan.tier,
-      monthlyPriceRWF: Number(plan.priceRWF || 0),
-      priceRWF: Number(plan.priceRWF || 0),
-      description: plan.description
-    })
-    if (!res.ok) {
-      showError(res.error || `Could not save pricing for ${plan.name}.`)
-      return
+    const key = `pricing:${plan.id}`
+    if (busyAction === key) return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminUpdatePricingPlan(plan.id, {
+        name: plan.name,
+        tier: plan.tier,
+        monthlyPriceRWF: Number(plan.priceRWF || 0),
+        priceRWF: Number(plan.priceRWF || 0),
+        description: plan.description
+      })
+      if (!res.ok) {
+        showError(res.error || `Could not save pricing for ${plan.name}.`)
+        return
+      }
+      showNotice(`Saved ${plan.name} (${formatRWF(plan.priceRWF)}) live — Landing Page & Pricing updated.`)
+      fetchPlanLimits()
+      fetchAuditLogs()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(`Saved ${plan.name} (${formatRWF(plan.priceRWF)}) live to MongoDB.`)
-    fetchAuditLogs()
   }
 
   const handleSavePlatinum = async () => {
@@ -2528,10 +2543,16 @@ export default function SuperAdminPage() {
 
                   <button
                     type="button"
+                    disabled={isBusy(`pricing:${plan.id}`)}
                     onClick={() => handleSavePricingPlan(plan)}
-                    className="w-full btn-sapphire py-2.5 text-xs font-orbitron cursor-pointer"
+                    className="w-full btn-sapphire py-2.5 text-xs font-orbitron cursor-pointer inline-flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Save {plan.tier} Tier
+                    {isBusy(`pricing:${plan.id}`) && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>
+                      {isBusy(`pricing:${plan.id}`)
+                        ? `Saving ${plan.tier} Tier...`
+                        : `Save ${plan.tier} Tier`}
+                    </span>
                   </button>
                 </div>
               ))}

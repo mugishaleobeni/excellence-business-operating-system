@@ -370,6 +370,7 @@ export const exbosApi = {
       method: 'DELETE',
       body: payload
     }),
+  superAdminGetPricingPlans: () => apiRequest('/super-admin/pricing-plans'),
   superAdminGetPlanLimits: () => apiRequest('/super-admin/plan-limits'),
   superAdminUpdatePlanLimits: (planKey, payload = {}) =>
     apiRequest(`/super-admin/plan-limits/${encodeURIComponent(planKey)}`, {
