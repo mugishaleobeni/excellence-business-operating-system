@@ -303,9 +303,15 @@ function renderRouteHtml(baseHtml, meta) {
     html = html.replace('</head>', breadcrumbTag)
   }
 
+  const loadingShellHtml = `
+      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#03091F;color:#eaf2ff;">
+        <div style="width:42px;height:42px;border-radius:9999px;border:3px solid rgba(33,141,255,0.22);border-top-color:#218DFF;animation:exbosSpin 0.8s linear infinite;"></div>
+      </div>
+      <style>@keyframes exbosSpin{to{transform:rotate(360deg)}}</style>`
+
   html = html.replace(
-    '<div id="root"></div>',
-    `<div id="root">${buildCrawlableFallbackHtml(meta)}\n    </div>`
+    /<div id="root">[\s\S]*?(?=<\/body>)/,
+    `<div id="root">${loadingShellHtml}\n    </div>\n    <noscript>${buildCrawlableFallbackHtml(meta)}\n    </noscript>\n  `
   )
   return html
 }
@@ -332,3 +338,4 @@ for (const meta of SEO_ROUTES) {
 }
 
 console.log(`SEO static pre-generator: built ${generatedCount} crawlable route HTML files in dist/.`)
+
