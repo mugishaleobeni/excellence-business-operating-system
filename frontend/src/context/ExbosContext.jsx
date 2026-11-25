@@ -1713,7 +1713,8 @@ export function ExbosProvider({ children }) {
       })
       return
     }
-    if (activeBranchId !== 'main' && activeBranchPermissions?.canDeleteRecords === false) {
+    const isProductCatalogBucket = ['Products', 'Inventory', 'Menu Items', 'Crops & Inputs', 'Services', 'Catalog'].includes(moduleName)
+    if (activeBranchId !== 'main' && !isProductCatalogBucket && activeBranchPermissions?.canDeleteRecords === false) {
       addToast({
         type: 'error',
         title: 'Deletion Restricted by Main HQ',

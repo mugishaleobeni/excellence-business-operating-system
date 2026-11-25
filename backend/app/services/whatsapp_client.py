@@ -225,7 +225,6 @@ def build_welcome_message(
             "*8.* Ongeramo Igicuruzwa Gishya\n"
             "*9.* Hindura Ururimi (English / Kinyarwanda)\n"
             f"{sa_line}"
-            "*0.* Ahabanza / Hagarika\n"
             "--------------------------------\n"
             "Buri gikorwa kibanze kigusaba *Kugenzura (YEGO / HINDURA / OYA)* mbere yo kubikwa."
         )
@@ -247,7 +246,6 @@ def build_welcome_message(
         "*8.* Add New Product\n"
         "*9.* Change Language (English / Kinyarwanda)\n"
         f"{sa_line}"
-        "*0.* Main Menu / Cancel\n"
         "--------------------------------\n"
         "Every entry shows a *Verification Summary* (*YES / EDIT / NO*) before saving."
     )

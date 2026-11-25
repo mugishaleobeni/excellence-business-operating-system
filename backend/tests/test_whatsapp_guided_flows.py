@@ -81,9 +81,12 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             db = get_db()
 
             # 1. Natural greeting 'Hy' must NOT return 'Command not recognized'
+            #    and Main Menu must NOT show '*0.* Main Menu / Cancel' when already on Main Menu
             r_hi = handle_incoming_whatsapp_message(db, self.owner_phone, "Hy", self.user_doc)
             self.assertEqual(r_hi["action"], "menu")
             self.assertNotIn("not recognized", r_hi["reply"].lower())
+            self.assertNotIn("*0.* Main Menu", r_hi["reply"])
+            self.assertNotIn("*0.* Ahabanza", r_hi["reply"])
 
             # 2. Reply '2' -> lists real products from DB
             r_pick = handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)

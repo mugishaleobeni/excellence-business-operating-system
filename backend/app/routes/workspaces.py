@@ -1201,6 +1201,43 @@ def update_module_record(
     )
     if module_name in PRODUCT_BUCKETS:
         _mirror_product(db, scope_key, arch_id, updated_item, now_iso)
+        try:
+            item_bid = str((updated_item or {}).get("branchId") or (previous_item or {}).get("branchId") or "main").strip()
+            actor_doc, is_mgr, eff_bid, b_doc = _resolve_actor_and_branch(db, scope_key, item_bid)
+            if is_mgr and previous_item is not None:
+                from app.services.owner_audit_notifier import notify_owner_branch_product_action
+
+                diffs = []
+                for field_key, label, is_money in (
+                    ("title", "Product Name", False),
+                    ("sellingPriceRWF", "Selling Price", True),
+                    ("purchasePriceRWF", "Cost Price", True),
+                    ("unitCostRWF", "Unit Cost", True),
+                    ("quantity", "Stock Quantity", False),
+                ):
+                    old_v = previous_item.get(field_key)
+                    new_v = updated_item.get(field_key)
+                    if new_v is not None and str(old_v) != str(new_v):
+                        if is_money:
+                            diffs.append((label, f"{float(old_v or 0):,.0f} RWF -> {float(new_v or 0):,.0f} RWF"))
+                        else:
+                            diffs.append((label, f"{old_v} -> {new_v}"))
+                if diffs:
+                    notify_owner_branch_product_action(
+                        db,
+                        scope_key=scope_key,
+                        branch_id=eff_bid or item_bid,
+                        branch_name=(b_doc or {}).get("name") or eff_bid or item_bid,
+                        manager_doc=actor_doc or {},
+                        action_type="Edited Product Details",
+                        product_title=str(updated_item.get("title") or updated_item.get("name") or record_id),
+                        product_id=str(record_id),
+                        changes=diffs,
+                        channel="ExBOS Web",
+                        business_name=str(ws.get("businessName") or "ExBOS Business"),
+                    )
+        except Exception as audit_exc:
+            logger.debug("Silent web product edit audit skipped: %s", audit_exc)
     logger.info(
         "UPDATED RECORD -> arch=%s | bucket=%s | id=%s | scopeKey=%s",
         arch_id,
@@ -1234,22 +1271,26 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         (item for item in bucket_list if str(item.get("id")) == str(record_id)),
         None,
     )
+    del_actor_doc = None
+    del_is_manager = False
+    del_eff_branch_id = None
+    del_branch_doc = None
     if isinstance(deleted_item, dict):
         item_branch_id = str(deleted_item.get("branchId") or "main").strip()
-        _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, item_branch_id)
-        if is_manager and item_branch_id != effective_branch_id:
+        del_actor_doc, del_is_manager, del_eff_branch_id, del_branch_doc = _resolve_actor_and_branch(db, scope_key, item_branch_id)
+        if del_is_manager and item_branch_id != del_eff_branch_id:
             return error_response(
                 "Access Denied: You cannot delete records belonging to Main HQ or another branch.",
                 status_code=403,
             )
-        if is_manager and branch_doc and item_branch_id != "main":
-            if str(branch_doc.get("status") or "Active") == "Frozen":
+        if del_is_manager and del_branch_doc and item_branch_id != "main":
+            if str(del_branch_doc.get("status") or "Active") == "Frozen":
                 return error_response(
-                    f"Branch '{branch_doc.get('name', item_branch_id)}' is Frozen (Read-Only) by Main HQ.",
+                    f"Branch '{del_branch_doc.get('name', item_branch_id)}' is Frozen (Read-Only) by Main HQ.",
                     status_code=403,
                 )
-            b_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
-            if b_perms.get("canDeleteRecords", False) is False:
+            b_perms = del_branch_doc.get("permissions") if isinstance(del_branch_doc.get("permissions"), dict) else {}
+            if module_name not in PRODUCT_BUCKETS and b_perms.get("canDeleteRecords", False) is False:
                 return error_response(
                     "Record deletion is disabled for this branch by Main HQ.",
                     status_code=403,
@@ -1516,6 +1557,29 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
         db.products.delete_one(
             {"scopeKey": scope_key, "architectureId": arch_id, "id": str(record_id)}
         )
+        if del_is_manager and isinstance(deleted_item, dict):
+            try:
+                from app.services.owner_audit_notifier import notify_owner_branch_product_action
+
+                notify_owner_branch_product_action(
+                    db,
+                    scope_key=scope_key,
+                    branch_id=del_eff_branch_id or str(deleted_item.get("branchId") or ""),
+                    branch_name=(del_branch_doc or {}).get("name") or del_eff_branch_id or "Assigned Branch",
+                    manager_doc=del_actor_doc or {},
+                    action_type="Deleted Product Permanently",
+                    product_title=str(deleted_item.get("title") or deleted_item.get("name") or record_id),
+                    product_id=str(record_id),
+                    changes=[
+                        ("Last Selling Price", f"{float(deleted_item.get('sellingPriceRWF') or deleted_item.get('amountRWF') or 0):,.0f} RWF"),
+                        ("Last Cost Price", f"{float(deleted_item.get('purchasePriceRWF') or deleted_item.get('unitCostRWF') or 0):,.0f} RWF"),
+                        ("Last Stock", f"{deleted_item.get('quantity') if deleted_item.get('quantity') is not None else (deleted_item.get('currentStock') or 0)} unit(s)"),
+                    ],
+                    channel="ExBOS Web",
+                    business_name=str(ws.get("businessName") or "ExBOS Business"),
+                )
+            except Exception as audit_exc:
+                logger.debug("Silent web product delete audit skipped: %s", audit_exc)
     # Also clean up from transactions if this record was synced to transactions
     db.transactions.delete_many(
         {

@@ -127,11 +127,46 @@ class BranchIsolationAndCascadeDeleteTestCase(unittest.TestCase):
             self.assertNotIn("HQ Laptop Pro", r1["reply"])
             self.assertNotIn("Remera Phone", r1["reply"])
 
-            # 2. Branch Manager cannot delete product (canDeleteRecords=False)
+            # 2. Branch Manager CAN edit selling price & cost price of own branch product,
+            #    and Business Owner silently receives audit report WITHOUT Branch Manager knowing
             r_pick = handle_incoming_whatsapp_message(db, self.mgr_phone, "1")
             self.assertEqual(r_pick["action"], "catalog_product_action")
-            r_del_block = handle_incoming_whatsapp_message(db, self.mgr_phone, "5")
-            self.assertEqual(r_del_block["action"], "permission_denied")
+            r_ask_sell = handle_incoming_whatsapp_message(db, self.mgr_phone, "2")
+            self.assertEqual(r_ask_sell["action"], "catalog_edit_sell_price")
+            r_ver_sell = handle_incoming_whatsapp_message(db, self.mgr_phone, "18000")
+            self.assertEqual(r_ver_sell["action"], "confirm_product_edit")
+            r_done_sell = handle_incoming_whatsapp_message(db, self.mgr_phone, "YES")
+            self.assertEqual(r_done_sell["action"], "product_updated")
+            # Stealth check: Branch Manager reply MUST NOT reveal that owner was notified
+            self.assertNotIn("owner", r_done_sell["reply"].lower())
+            self.assertNotIn("audit", r_done_sell["reply"].lower())
+            self.assertNotIn("notified", r_done_sell["reply"].lower())
+
+            # Owner silently received in-app notification & persistent audit log
+            owner_notif = db.owner_notifications.find_one(
+                {"scopeKey": self.owner_email, "type": "branch_manager_product_audit", "actionType": "Edited Selling Price"}
+            )
+            self.assertIsNotNone(owner_notif)
+            self.assertIn("18,000 RWF", owner_notif["message"])
+            audit_entry = db.branch_audit_logs.find_one(
+                {"scopeKey": self.owner_email, "actionType": "Edited Selling Price"}
+            )
+            self.assertIsNotNone(audit_entry)
+
+            # 2b. Branch Manager CAN also edit cost price and delete their own branch's extra product
+            handle_incoming_whatsapp_message(db, self.mgr_phone, "1")
+            handle_incoming_whatsapp_message(db, self.mgr_phone, "1")
+            r_ask_cost = handle_incoming_whatsapp_message(db, self.mgr_phone, "3")
+            self.assertEqual(r_ask_cost["action"], "catalog_edit_cost_price")
+            handle_incoming_whatsapp_message(db, self.mgr_phone, "11000")
+            r_done_cost = handle_incoming_whatsapp_message(db, self.mgr_phone, "YES")
+            self.assertEqual(r_done_cost["action"], "product_updated")
+            self.assertNotIn("owner", r_done_cost["reply"].lower())
+            self.assertIsNotNone(
+                db.owner_notifications.find_one(
+                    {"scopeKey": self.owner_email, "type": "branch_manager_product_audit", "actionType": "Edited Cost Price"}
+                )
+            )
 
             # 3. Reset & Report (5) -> hides Net Profit (canViewProfitReports=False) & only counts Branch B sales (25,000 RWF)
             handle_incoming_whatsapp_message(db, self.mgr_phone, "0")

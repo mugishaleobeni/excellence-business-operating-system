@@ -1017,6 +1017,8 @@ def handle_incoming_whatsapp_message(
     effective_branch_id: Optional[str] = assigned_branch_id if is_branch_manager and assigned_branch_id else None
     branch_frozen = False
     branch_perms: dict[str, Any] = {}
+    base_business_name = business_name
+    branch_display_name = ""
     if is_branch_manager and effective_branch_id:
         branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": effective_branch_id}, {"_id": 0})
         if not branch_doc:
@@ -1030,6 +1032,7 @@ def handle_incoming_whatsapp_message(
                 "action": "branch_deleted",
             }
         branch_name = str(branch_doc.get("name") or effective_branch_id).strip()
+        branch_display_name = branch_name
         if branch_name and branch_name.lower() not in business_name.lower():
             business_name = f"{business_name} ({branch_name})"
         branch_frozen = str(branch_doc.get("status") or "Active").strip().lower() == "frozen"
@@ -2117,11 +2120,6 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_name",
             }
         if clean_text == "2":
-            if is_branch_manager and not branch_perms.get("canEditPrices", False):
-                return {
-                    "reply": _t(lang, "Permission denied: Only the Business Owner can edit product prices.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe guhindura ibiciro."),
-                    "action": "permission_denied",
-                }
             set_session("catalog_edit_sell_price", step_data)
             return {
                 "reply": _t(
@@ -2132,11 +2130,6 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_sell_price",
             }
         if clean_text == "3":
-            if is_branch_manager and not branch_perms.get("canEditPrices", False):
-                return {
-                    "reply": _t(lang, "Permission denied: Only the Business Owner can edit product prices.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe guhindura ibiciro."),
-                    "action": "permission_denied",
-                }
             set_session("catalog_edit_cost_price", step_data)
             return {
                 "reply": _t(
@@ -2157,11 +2150,6 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_qty",
             }
         if clean_text == "5":
-            if is_branch_manager and not branch_perms.get("canDeleteRecords", False):
-                return {
-                    "reply": _t(lang, "Permission denied: Only the Business Owner can delete products.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe gusiba ibicuruzwa."),
-                    "action": "permission_denied",
-                }
             set_session("confirm_product_delete", step_data)
             qty_val = float(step_data.get("quantity") or 0)
             return {
@@ -2315,6 +2303,32 @@ def handle_incoming_whatsapp_message(
                 "action": "product_update_failed",
             }
         final_name = updated.get("title") or updated.get("name") or step_data.get("productTitle")
+        if is_branch_manager:
+            from app.services.owner_audit_notifier import notify_owner_branch_product_action
+
+            field_meta = {
+                "name": ("Edited Product Name", "Product Name", str(step_data.get("productTitle") or ""), str(new_val or "")),
+                "sellingPriceRWF": ("Edited Selling Price", "Selling Price", _fmt_rwf(step_data.get("sellingPriceRWF") or 0), _fmt_rwf(new_val or 0)),
+                "costPriceRWF": ("Edited Cost Price", "Cost Price", _fmt_rwf(step_data.get("costPriceRWF") or 0), _fmt_rwf(new_val or 0)),
+                "quantity": ("Edited Stock Quantity", "Stock Quantity", str(step_data.get("quantity") or 0), str(new_val or 0)),
+            }
+            act_label, col_label, old_disp, new_disp = field_meta.get(
+                field,
+                ("Edited Product", field or "Detail", "", str(new_val or "")),
+            )
+            notify_owner_branch_product_action(
+                db,
+                scope_key=scope_key,
+                branch_id=effective_branch_id or "",
+                branch_name=branch_display_name or effective_branch_id or "Assigned Branch",
+                manager_doc=user_doc,
+                action_type=act_label,
+                product_title=str(final_name or ""),
+                product_id=str(step_data.get("productId") or ""),
+                changes=[(col_label, f"{old_disp} -> {new_disp}")],
+                channel="WhatsApp",
+                business_name=base_business_name,
+            )
         return {
             "reply": _t(
                 lang,
@@ -2348,6 +2362,26 @@ def handle_incoming_whatsapp_message(
                 "reply": _t(lang, "Product was not found or already deleted. Reply *1* to view catalog.", "Igicuruzwa nticyabonetse cyangwa cyamaze gusibwa. Subiza *1*."),
                 "action": "product_delete_failed",
             }
+        if is_branch_manager:
+            from app.services.owner_audit_notifier import notify_owner_branch_product_action
+
+            notify_owner_branch_product_action(
+                db,
+                scope_key=scope_key,
+                branch_id=effective_branch_id or "",
+                branch_name=branch_display_name or effective_branch_id or "Assigned Branch",
+                manager_doc=user_doc,
+                action_type="Deleted Product Permanently",
+                product_title=str(step_data.get("productTitle") or ""),
+                product_id=str(step_data.get("productId") or ""),
+                changes=[
+                    ("Last Selling Price", _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
+                    ("Last Cost Price", _fmt_rwf(step_data.get("costPriceRWF") or 0)),
+                    ("Last Stock", f"{step_data.get('quantity', 0)} unit(s)"),
+                ],
+                channel="WhatsApp",
+                business_name=base_business_name,
+            )
         return {
             "reply": _t(
                 lang,
