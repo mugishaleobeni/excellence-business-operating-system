@@ -2367,8 +2367,8 @@ def handle_incoming_whatsapp_message(
             return {
                 "reply": _t(
                     lang,
-                    f"*{business_name} Catalog* is currently empty.\nReply *8* to add your first product.",
-                    f"Ububiko bwa *{business_name}* burimo ubusa.\nSubiza *8* wongeremo igicuruzwa cya mbere.",
+                    f"*{business_name} Catalog* is currently empty.\nReply *8* to add your first product or *0* for Main Menu.",
+                    f"Ububiko bwa *{business_name}* burimo ubusa.\nSubiza *8* wongeremo igicuruzwa cya mbere cyangwa *0* usubire ahabanza.",
                 ),
                 "action": "list_products_empty",
             }
@@ -2418,8 +2418,8 @@ def handle_incoming_whatsapp_message(
             return {
                 "reply": _t(
                     lang,
-                    "All customers are *Paid in Full*. Zero unpaid balances right now.",
-                    "Abakiriya bose *Barishyuye*. Nta deni rihari ubu.",
+                    "All customers are *Paid in Full*. Zero unpaid balances right now.\n\nReply *0* for Main Menu.",
+                    "Abakiriya bose *Barishyuye*. Nta deni rihari ubu.\n\nSubiza *0* usubire ahabanza.",
                 ),
                 "action": "list_unpaid_empty",
             }
@@ -2448,8 +2448,8 @@ def handle_incoming_whatsapp_message(
             return {
                 "reply": _t(
                     lang,
-                    "All customers are *Paid in Full*. No unpaid customers to remind right now.",
-                    "Abakiriya bose *Barishyuye*. Nta mukiriya ufite ideni ubu.",
+                    "All customers are *Paid in Full*. No unpaid customers to remind right now.\n\nReply *0* for Main Menu.",
+                    "Abakiriya bose *Barishyuye*. Nta mukiriya ufite ideni ubu.\n\nSubiza *0* usubire ahabanza.",
                 ),
                 "action": "list_unpaid_empty",
             }
@@ -2519,7 +2519,12 @@ def handle_incoming_whatsapp_message(
                 "WhatsApp Reminders Processed:\n"
                 f"- Targeted: {res['totalTargeted']}\n"
                 f"- Dispatched/Queued: {res['dispatchedCount']}\n"
-                f"- Skipped (no phone): {res['skippedCount']}"
+                f"- Skipped (no phone): {res['skippedCount']}\n\n"
+                + _t(
+                    lang,
+                    "Reply *6* for Unpaid Customers or *0* for Main Menu.",
+                    "Subiza *6* urebe abatarishyura cyangwa *0* usubire ahabanza.",
+                )
             ),
             "action": "send_reminders",
             "result": res,
@@ -2529,7 +2534,14 @@ def handle_incoming_whatsapp_message(
         set_session(None)
         arg = clean_text[6:].strip()
         if not arg:
-            return {"reply": "Usage: `VERIFY <Customer Name or Sale ID>` (optional amount at end).", "action": "verify_usage"}
+            return {
+                "reply": _t(
+                    lang,
+                    "Usage: `VERIFY <Customer Name or Sale ID>` (optional amount at end).\n\nReply *0* for Main Menu.",
+                    "Uko bikoreshwa: `VERIFY <Izina ry'Umukiriya cyangwa ID>` (amafaranga ku mpera niba atishyuye yose).\n\nSubiza *0* usubire ahabanza.",
+                ),
+                "action": "verify_usage",
+            }
         parts = arg.split()
         amt = None
         if len(parts) >= 2 and re.match(r"^\d+(\.\d+)?$", parts[-1].replace(",", "")):
@@ -2539,14 +2551,39 @@ def handle_incoming_whatsapp_message(
             target = arg
         res = verify_customer_payment(db, scope_key, arch_id, target_id=target, amount=amt, source="WhatsApp")
         if not res.get("ok"):
-            return {"reply": res.get("error", "Could not verify payment."), "action": "verify_failed"}
+            return {
+                "reply": (
+                    res.get("error", "Could not verify payment.")
+                    + "\n\n"
+                    + _t(
+                        lang,
+                        "Reply *6* for Unpaid Customers or *0* for Main Menu.",
+                        "Subiza *6* urebe abatarishyura cyangwa *0* usubire ahabanza.",
+                    )
+                ),
+                "action": "verify_failed",
+            }
+        cleared_line_en = "Customer removed from Unpaid List.\n" if res["clearedFromUnpaidList"] else ""
+        cleared_line_rw = "Umukiriya yakuwe ku rutonde rw'abatarishyura.\n" if res["clearedFromUnpaidList"] else ""
         return {
-            "reply": (
-                "*PAYMENT VERIFIED*\n"
-                f"- Customer: *{res['customerName']}*\n"
-                f"- Verified Paid: *{_fmt_rwf(res['paidNowRWF'])}*\n"
-                f"- Remaining: *{_fmt_rwf(res['remainingAmountRWF'])}* ({res['status']})\n"
-                + ("Customer removed from Unpaid List." if res["clearedFromUnpaidList"] else "")
+            "reply": _t(
+                lang,
+                (
+                    "*PAYMENT VERIFIED*\n"
+                    f"- Customer: *{res['customerName']}*\n"
+                    f"- Verified Paid: *{_fmt_rwf(res['paidNowRWF'])}*\n"
+                    f"- Remaining: *{_fmt_rwf(res['remainingAmountRWF'])}* ({res['status']})\n"
+                    f"{cleared_line_en}"
+                    "\nReply *6* for Unpaid Customers or *0* for Main Menu."
+                ),
+                (
+                    "*UBWISHYU BWEMEJWE*\n"
+                    f"- Umukiriya: *{res['customerName']}*\n"
+                    f"- Ayishyuwe: *{_fmt_rwf(res['paidNowRWF'])}*\n"
+                    f"- Asigaye: *{_fmt_rwf(res['remainingAmountRWF'])}* ({res['status']})\n"
+                    f"{cleared_line_rw}"
+                    "\nSubiza *6* urebe abandi batarishyura cyangwa *0* usubire ahabanza."
+                ),
             ),
             "action": "payment_verified",
             "result": res,
@@ -2702,8 +2739,8 @@ def handle_incoming_whatsapp_message(
             return {
                 "reply": _t(
                     lang,
-                    f"*{business_name}* has no products in the database yet.\nReply *8* to add a product first.",
-                    f"*{business_name}* ntiragira ibicuruzwa mu bubiko.\nSubiza *8* ubanze wongeremo igicuruzwa.",
+                    f"*{business_name}* has no products in the database yet.\nReply *8* to add a product first or *0* for Main Menu.",
+                    f"*{business_name}* ntiragira ibicuruzwa mu bubiko.\nSubiza *8* ubanze wongeremo igicuruzwa cyangwa *0* usubire ahabanza.",
                 ),
                 "action": "sale_no_products",
             }

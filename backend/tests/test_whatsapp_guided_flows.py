@@ -324,6 +324,56 @@ class WhatsAppGuidedFlowsTestCase(unittest.TestCase):
             self.assertEqual(len(ws_after_del["records"]["Products"]), 1)
             self.assertEqual(ws_after_del["records"]["Products"][0]["id"], "PRD-1")
 
+    def test_verify_payment_includes_main_menu_prompt_and_returns_to_menu(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # 1. Record a credit sale for customer "Leo"
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "5", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "Leo", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "SKIP", self.user_doc)
+            r_saved = handle_incoming_whatsapp_message(db, self.owner_phone, "YES", self.user_doc)
+            self.assertEqual(r_saved["action"], "sale_recorded")
+
+            # 2. Empty VERIFY and unmatched VERIFY both include *0* for Main Menu
+            r_usage = handle_incoming_whatsapp_message(db, self.owner_phone, "VERIFY", self.user_doc)
+            self.assertEqual(r_usage["action"], "verify_usage")
+            self.assertIn("*0*", r_usage["reply"])
+
+            r_fail = handle_incoming_whatsapp_message(db, self.owner_phone, "VERIFY UnknownPerson", self.user_doc)
+            self.assertEqual(r_fail["action"], "verify_failed")
+            self.assertIn("*0*", r_fail["reply"])
+
+            # 3. Verify Leo's payment -> includes PAYMENT VERIFIED + Reply *6* ... or *0* for Main Menu
+            r_ver = handle_incoming_whatsapp_message(db, self.owner_phone, "Verify leo", self.user_doc)
+            self.assertEqual(r_ver["action"], "payment_verified")
+            self.assertIn("PAYMENT VERIFIED", r_ver["reply"])
+            self.assertIn("Customer removed from Unpaid List.", r_ver["reply"])
+            self.assertIn("Reply *6* for Unpaid Customers or *0* for Main Menu.", r_ver["reply"])
+
+            # 4. Replying 0 immediately returns Main Menu
+            r_menu = handle_incoming_whatsapp_message(db, self.owner_phone, "0", self.user_doc)
+            self.assertEqual(r_menu["action"], "menu")
+            self.assertIn("Official Business Console", r_menu["reply"])
+
+            # 5. Kinyarwanda mode: create another credit sale and verify in RW
+            handle_incoming_whatsapp_message(db, self.owner_phone, "RW", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "2", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "1", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "5", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "Aline", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "SKIP", self.user_doc)
+            handle_incoming_whatsapp_message(db, self.owner_phone, "YEGO", self.user_doc)
+
+            r_ver_rw = handle_incoming_whatsapp_message(db, self.owner_phone, "VERIFY Aline", self.user_doc)
+            self.assertEqual(r_ver_rw["action"], "payment_verified")
+            self.assertIn("UBWISHYU BWEMEJWE", r_ver_rw["reply"])
+            self.assertIn("Subiza *6* urebe abandi batarishyura cyangwa *0* usubire ahabanza.", r_ver_rw["reply"])
+
 
 if __name__ == "__main__":
     unittest.main()
