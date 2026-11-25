@@ -1313,15 +1313,33 @@ def get_system_health():
     db_latency_ms = round((time.monotonic() - t0) * 1000, 1)
 
     now_ts = time.time()
-    hb = db.platform_config.find_one({"key": "smtp_relay_heartbeat"})
+    hb = None
+    pending_emails = 0
+    failed_emails = 0
+    open_errors = 0
+    resolved_errors = 0
+    error_reports = []
+    if db_ok:
+        try:
+            hb = db.platform_config.find_one({"key": "smtp_relay_heartbeat"})
+            pending_emails = db.email_outbox.count_documents({"status": "pending"})
+            failed_emails = db.email_outbox.count_documents({"status": "failed"})
+            open_errors = db.system_error_reports.count_documents({"status": "open"})
+            resolved_errors = db.system_error_reports.count_documents({"status": "resolved"})
+            error_cursor = db.system_error_reports.find({}).sort("lastSeenTs", -1).limit(50)
+            for doc in error_cursor:
+                clean = serialize_doc(doc)
+                clean.pop("_id", None)
+                error_reports.append(clean)
+        except Exception as exc:
+            logger.warning("Partial telemetry fallback in get_system_health: %s", exc)
+
     relay_age_s = round(now_ts - float(hb.get("updated_ts") or 0), 1) if hb and hb.get("updated_ts") else None
     relay_online = relay_age_s is not None and relay_age_s < 120
     https_mailer = bool(
         (current_app.config.get("BREVO_API_KEY") or os.environ.get("BREVO_API_KEY") or "").strip()
         or (current_app.config.get("RESEND_API_KEY") or os.environ.get("RESEND_API_KEY") or "").strip()
     )
-    pending_emails = db.email_outbox.count_documents({"status": "pending"})
-    failed_emails = db.email_outbox.count_documents({"status": "failed"})
 
     wa_configured = bool(
         (current_app.config.get("WHATSAPP_ACCESS_TOKEN") or "").strip()
@@ -1331,15 +1349,6 @@ def get_system_health():
         (current_app.config.get("GOOGLE_CLIENT_ID") or "").strip()
         and (current_app.config.get("GOOGLE_CLIENT_SECRET") or "").strip()
     )
-
-    open_errors = db.system_error_reports.count_documents({"status": "open"})
-    resolved_errors = db.system_error_reports.count_documents({"status": "resolved"})
-    error_cursor = db.system_error_reports.find({}).sort("lastSeenTs", -1).limit(50)
-    error_reports = []
-    for doc in error_cursor:
-        clean = serialize_doc(doc)
-        clean.pop("_id", None)
-        error_reports.append(clean)
 
     # Calculate overall health score (0-100)
     score = 100

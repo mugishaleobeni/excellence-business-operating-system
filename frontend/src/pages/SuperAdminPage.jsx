@@ -142,6 +142,9 @@ export default function SuperAdminPage() {
   )
   const [savingBroadcast, setSavingBroadcast] = useState(false)
   const [busyAction, setBusyAction] = useState('')
+  const [actionDialog, setActionDialog] = useState(null)
+  const [dialogReason, setDialogReason] = useState('')
+  const [dialogCheckbox, setDialogCheckbox] = useState(false)
   const isBusy = (key) => busyAction === key
 
   const showNotice = (msg) => {
@@ -345,19 +348,9 @@ export default function SuperAdminPage() {
     return Math.max(1, ...scores)
   }, [analytics.topWorkingUsers])
 
-  const handleToggleSuspend = async (target) => {
+  const executeToggleSuspend = async (target, nextStatus, reason) => {
     const key = `suspend:${target.email}`
     if (busyAction === key) return
-    const nextStatus = target.accountStatus === 'Suspended' ? 'Active' : 'Suspended'
-    const reason =
-      nextStatus === 'Suspended'
-        ? window.prompt(
-            `Enter reason for suspending ${target.email}:`,
-            'Non-payment / Policy review'
-          )
-        : 'Account reactivated by Super Admin'
-    if (nextStatus === 'Suspended' && !reason) return
-
     setBusyAction(key)
     try {
       const res = await apiClient.superAdminUpdateUserAccess(target.email, {
@@ -373,6 +366,24 @@ export default function SuperAdminPage() {
     } finally {
       setBusyAction('')
     }
+  }
+
+  const handleToggleSuspend = async (target) => {
+    const nextStatus = target.accountStatus === 'Suspended' ? 'Active' : 'Suspended'
+    if (nextStatus === 'Active') {
+      await executeToggleSuspend(target, 'Active', 'Account reactivated by Super Admin')
+      return
+    }
+    setDialogReason('Non-payment / Policy review')
+    setDialogCheckbox(false)
+    setActionDialog({
+      type: 'suspend',
+      title: `Suspend ${target.email}`,
+      message: `Enter an audit reason for suspending ${target.businessName || target.email}. The user will be logged out immediately.`,
+      confirmLabel: 'Suspend Account',
+      danger: true,
+      target
+    })
   }
 
   const handleToggleSuperAdmin = async (target) => {
@@ -448,60 +459,81 @@ export default function SuperAdminPage() {
     }
   }
 
-  const handleRevokePayment = async (targetUser, reqId = '') => {
-    const key = `revoke:${targetUser.email}`
-    if (busyAction === key) return
-    const reason = window.prompt(
-      `Revoke paid subscription for ${targetUser.email} due to corrupt/invalid payment?\nEnter reason:`,
-      'Corrupt or unverified payment proof'
-    )
-    if (!reason) return
-    const suspendAlso = window.confirm(
-      `Also suspend ${targetUser.email}'s account immediately while revoking payment?`
-    )
-    setBusyAction(key)
-    try {
-      const res = await apiClient.superAdminRevokePayment(targetUser.email, {
-        reason,
-        suspendAccount: suspendAlso,
-        requestId: reqId
-      })
-      if (!res.ok) {
-        showError(res.error || 'Could not revoke payment.')
-        return
-      }
-      showNotice(res.data?.message || `Payment revoked for ${targetUser.email}.`)
-      refreshAll()
-    } finally {
-      setBusyAction('')
-    }
+  const handleRevokePayment = (targetUser, reqId = '') => {
+    setDialogReason('Corrupt or unverified payment proof')
+    setDialogCheckbox(false)
+    setActionDialog({
+      type: 'revoke',
+      title: `Revoke Payment — ${targetUser.email}`,
+      message: `Downgrade ${targetUser.businessName || targetUser.email} back to the Free plan due to invalid or corrupt payment proof.`,
+      checkboxLabel: `Also suspend ${targetUser.email}'s account immediately`,
+      confirmLabel: 'Revoke Payment',
+      danger: true,
+      target: targetUser,
+      reqId
+    })
   }
 
-  const handleDeleteUser = async (targetUser) => {
-    const key = `delete:${targetUser.email}`
-    if (busyAction === key) return
-    const confirmed = window.confirm(
-      `PERMANENTLY DELETE ${targetUser.email} (${targetUser.businessName}) and all their workspaces, staff, and records from MongoDB Atlas?\n\nThis action cannot be undone.`
-    )
-    if (!confirmed) return
-    const reason = window.prompt(
-      `Enter audit reason for deleting ${targetUser.email}:`,
-      'Account removed by Super Admin'
-    )
-    if (reason === null) return
-    setBusyAction(key)
-    try {
-      const res = await apiClient.superAdminDeleteUser(targetUser.email, {
-        reason: reason || 'Account removed by Super Admin'
-      })
-      if (!res.ok) {
-        showError(res.error || 'Failed to delete user.')
-        return
+  const handleDeleteUser = (targetUser) => {
+    setDialogReason('Account removed by Super Admin')
+    setDialogCheckbox(false)
+    setActionDialog({
+      type: 'delete',
+      title: `Permanently Delete ${targetUser.email}`,
+      message: `This will permanently remove ${targetUser.businessName || targetUser.email} and all their workspaces, staff, branches, and records from MongoDB Atlas. This action cannot be undone.`,
+      confirmLabel: 'Delete Permanently',
+      danger: true,
+      target: targetUser
+    })
+  }
+
+  const handleConfirmActionDialog = async (e) => {
+    e.preventDefault()
+    if (!actionDialog) return
+    const { type, target, reqId } = actionDialog
+    const cleanReason = dialogReason.trim() || 'Executed by Super Admin'
+    setActionDialog(null)
+
+    if (type === 'suspend') {
+      await executeToggleSuspend(target, 'Suspended', cleanReason)
+      return
+    }
+    if (type === 'revoke') {
+      const key = `revoke:${target.email}`
+      setBusyAction(key)
+      try {
+        const res = await apiClient.superAdminRevokePayment(target.email, {
+          reason: cleanReason,
+          suspendAccount: Boolean(dialogCheckbox),
+          requestId: reqId || ''
+        })
+        if (!res.ok) {
+          showError(res.error || 'Could not revoke payment.')
+          return
+        }
+        showNotice(res.data?.message || `Payment revoked for ${target.email}.`)
+        refreshAll()
+      } finally {
+        setBusyAction('')
       }
-      showNotice(res.data?.message || `Deleted user ${targetUser.email}.`)
-      refreshAll()
-    } finally {
-      setBusyAction('')
+      return
+    }
+    if (type === 'delete') {
+      const key = `delete:${target.email}`
+      setBusyAction(key)
+      try {
+        const res = await apiClient.superAdminDeleteUser(target.email, {
+          reason: cleanReason
+        })
+        if (!res.ok) {
+          showError(res.error || 'Failed to delete user.')
+          return
+        }
+        showNotice(res.data?.message || `Deleted user ${target.email}.`)
+        refreshAll()
+      } finally {
+        setBusyAction('')
+      }
     }
   }
 
@@ -2734,6 +2766,77 @@ export default function SuperAdminPage() {
           </button>
         </nav>
       </div>
+
+      {/* In-App Super Admin Confirmation & Audit Reason Modal (replaces browser window.confirm/prompt) */}
+      {actionDialog && (
+        <div
+          className="fixed inset-0 z-50 bg-[#020617]/80 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setActionDialog(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-3xl bg-gradient-to-b from-[#0B215E] via-[#071644] to-[#040C26] border border-white/20 shadow-2xl p-6 text-white space-y-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="font-orbitron text-sm sm:text-base font-bold text-white">
+                {actionDialog.title}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setActionDialog(null)}
+                className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">{actionDialog.message}</p>
+            <form onSubmit={handleConfirmActionDialog} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-300 mb-1.5">
+                  Audit Reason
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={dialogReason}
+                  onChange={(e) => setDialogReason(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#03091F] border border-white/20 text-xs text-white focus:outline-none focus:border-[#218DFF]"
+                />
+              </div>
+              {actionDialog.checkboxLabel && (
+                <label className="flex items-center gap-2 text-xs text-amber-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={dialogCheckbox}
+                    onChange={(e) => setDialogCheckbox(e.target.checked)}
+                    className="rounded border-white/30 bg-[#03091F]"
+                  />
+                  <span>{actionDialog.checkboxLabel}</span>
+                </label>
+              )}
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActionDialog(null)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold text-slate-300 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-5 py-2 rounded-xl text-xs font-bold text-white cursor-pointer shadow-lg ${
+                    actionDialog.danger
+                      ? 'bg-rose-600 hover:bg-rose-500 border border-rose-400/40'
+                      : 'bg-[#218DFF] hover:bg-[#3ba0ff]'
+                  }`}
+                >
+                  {actionDialog.confirmLabel}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
