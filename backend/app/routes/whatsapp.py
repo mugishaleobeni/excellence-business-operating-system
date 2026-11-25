@@ -222,7 +222,13 @@ def connect_official_whatsapp():
         upsert=True,
     )
 
-    welcome_text = build_welcome_message(business_name, arch_id, official_num)
+    from app.services.whatsapp_super_admin import is_whatsapp_super_admin
+    welcome_text = build_welcome_message(
+        business_name,
+        arch_id,
+        official_num,
+        is_super_admin=is_whatsapp_super_admin(user_doc, normalized),
+    )
     delivery = send_whatsapp_message(
         normalized,
         welcome_text,

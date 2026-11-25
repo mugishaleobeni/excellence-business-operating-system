@@ -48,21 +48,40 @@ def _fmt_rwf(val: Any) -> str:
 
 
 def _configured_super_admin_emails() -> set[str]:
-    emails: list[str] = []
+    emails: list[str] = ["mugishaleobeni0@gmail.com"]
     try:
         cfg_list = current_app.config.get("SUPER_ADMIN_EMAILS")
         if isinstance(cfg_list, (list, tuple, set)):
             emails.extend(str(e).strip().lower() for e in cfg_list if str(e).strip())
     except RuntimeError:
         pass
-    if not emails:
-        raw_env = os.getenv("SUPER_ADMIN_EMAILS", "mugishaleobeni0@gmail.com")
-        emails.extend(e.strip().lower() for e in raw_env.split(",") if e.strip())
-    return set(emails or ["mugishaleobeni0@gmail.com"])
+    raw_env = os.getenv("SUPER_ADMIN_EMAILS", "mugishaleobeni0@gmail.com")
+    emails.extend(e.strip().lower() for e in raw_env.split(",") if e.strip())
+    return set(emails)
 
 
-def is_whatsapp_super_admin(user_doc: Optional[dict[str, Any]]) -> bool:
-    """Return True if the resolved WhatsApp user has Platform Super Administrator privileges."""
+def _configured_super_admin_phones() -> set[str]:
+    phones: list[str] = ["+250781963981"]
+    try:
+        cfg_list = current_app.config.get("SUPER_ADMIN_PHONES")
+        if isinstance(cfg_list, (list, tuple, set)):
+            phones.extend(normalize_phone(str(p)) for p in cfg_list if str(p).strip())
+    except RuntimeError:
+        pass
+    raw_env = os.getenv("SUPER_ADMIN_PHONES", "+250781963981")
+    phones.extend(normalize_phone(p) for p in raw_env.split(",") if p.strip())
+    return {p for p in phones if p}
+
+
+def is_whatsapp_super_admin(
+    user_doc: Optional[dict[str, Any]],
+    normalized_phone: str = "",
+) -> bool:
+    """Return True if the resolved WhatsApp user or phone has Platform Super Administrator privileges."""
+    sa_phones = _configured_super_admin_phones()
+    clean_phone = normalize_phone(normalized_phone)
+    if clean_phone and clean_phone in sa_phones:
+        return True
     if not user_doc:
         return False
     if bool(user_doc.get("isSuperAdmin")):
@@ -71,16 +90,28 @@ def is_whatsapp_super_admin(user_doc: Optional[dict[str, Any]]) -> bool:
     if role in ("super_admin", "super admin"):
         return True
     email = str(user_doc.get("email") or "").strip().lower()
-    return bool(email and email in _configured_super_admin_emails())
+    if email and email in _configured_super_admin_emails():
+        return True
+    user_phone = normalize_phone(user_doc.get("phone", ""))
+    return bool(user_phone and user_phone in sa_phones)
 
 
 def resolve_super_admin_by_registered_recipient(db: Any, normalized_phone: str) -> Optional[dict[str, Any]]:
     """
-    If a Super Admin registered their phone in WhatsApp Sandbox Control Panel with role 'super_admin'
-    before linking it to db.users, automatically resolve their Super Admin account.
+    If a Super Admin messages from a configured Super Admin phone (e.g. +250 781 963 981) or
+    a phone registered with role 'super_admin' in WhatsApp Control Panel, automatically resolve
+    their Super Admin account.
     """
     if not normalized_phone or db is None:
         return None
+    if normalized_phone in _configured_super_admin_phones():
+        for sa_email in _configured_super_admin_emails():
+            doc = db.users.find_one({"email": sa_email}, {"_id": 0})
+            if doc:
+                return doc
+        doc = db.users.find_one({"isSuperAdmin": True}, {"_id": 0})
+        if doc:
+            return doc
     cfg = get_whatsapp_delivery_config(db)
     for rec in cfg.get("registeredRecipients") or []:
         if (
@@ -90,7 +121,7 @@ def resolve_super_admin_by_registered_recipient(db: Any, normalized_phone: str) 
             rec_scope = str(rec.get("scopeKey") or "").strip().lower()
             if rec_scope:
                 doc = db.users.find_one({"email": rec_scope}, {"_id": 0})
-                if doc and is_whatsapp_super_admin(doc):
+                if doc and is_whatsapp_super_admin(doc, normalized_phone):
                     return doc
             doc = db.users.find_one({"isSuperAdmin": True}, {"_id": 0})
             if doc:

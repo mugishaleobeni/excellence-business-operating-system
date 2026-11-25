@@ -975,7 +975,7 @@ def handle_incoming_whatsapp_message(
         handle_super_admin_whatsapp_message,
         is_whatsapp_super_admin,
     )
-    is_sa = is_whatsapp_super_admin(user_doc)
+    is_sa = is_whatsapp_super_admin(user_doc, normalized_phone)
 
     scope_key = (user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
     arch_id = user_doc.get("architectureId") or "buy-and-sell"
