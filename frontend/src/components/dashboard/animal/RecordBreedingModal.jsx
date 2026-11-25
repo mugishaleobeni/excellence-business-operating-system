@@ -8,19 +8,19 @@ export default function RecordBreedingModal({
   animal,
   onSave
 }) {
-  if (!isOpen || !animal) return null
-
-  const categoryInfo = getCategoryByAnimalType(animal.animalType)
-  const [breedingStatus, setBreedingStatus] = useState(animal.breedingStatus || 'In Pig (Pregnant / Gestating)')
-  const [matingDate, setMatingDate] = useState(animal.lastMatingDate || new Date().toISOString().slice(0, 10))
-  const [matingPartner, setMatingPartner] = useState(animal.matingPartner || '')
+  const categoryInfo = getCategoryByAnimalType(animal?.animalType)
+  const [breedingStatus, setBreedingStatus] = useState(animal?.breedingStatus || 'In Pig (Pregnant / Gestating)')
+  const [matingDate, setMatingDate] = useState(animal?.lastMatingDate || new Date().toISOString().slice(0, 10))
+  const [matingPartner, setMatingPartner] = useState(animal?.matingPartner || '')
   const [expectedDate, setExpectedDate] = useState(
-    animal.expectedBirthDate ||
+    animal?.expectedBirthDate ||
     calculateExpectedBirthDate(matingDate, categoryInfo.gestationDays)
   )
-  const [bornAlive, setBornAlive] = useState(animal.bornAlive ? String(animal.bornAlive) : '')
-  const [stillborn, setStillborn] = useState(animal.stillborn ? String(animal.stillborn) : '')
+  const [bornAlive, setBornAlive] = useState(animal?.bornAlive ? String(animal.bornAlive) : '')
+  const [stillborn, setStillborn] = useState(animal?.stillborn ? String(animal.stillborn) : '')
   const [notes, setNotes] = useState('')
+
+  if (!isOpen || !animal) return null
 
   const handleMatingDateChange = (newDate) => {
     setMatingDate(newDate)

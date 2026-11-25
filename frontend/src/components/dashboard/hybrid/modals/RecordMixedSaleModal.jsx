@@ -31,6 +31,14 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
   const [selectedQty, setSelectedQty] = useState(1)
   const [customPrice, setCustomPrice] = useState('')
 
+  const totals = useMemo(() => {
+    const totalAmount = cartItems.reduce((acc, it) => acc + (it.lineTotal || 0), 0)
+    const totalCost = cartItems.reduce((acc, it) => acc + (it.lineCost || 0), 0)
+    const netProfit = totalAmount - totalCost
+    const marginPercent = totalAmount > 0 ? ((netProfit / totalAmount) * 100).toFixed(1) : '0.0'
+    return { totalAmount, totalCost, netProfit, marginPercent }
+  }, [cartItems])
+
   if (!isOpen) return null
 
   const selectedCatalogItem = catalog.find((c) => c.id === selectedItemId)
@@ -87,14 +95,6 @@ export default function RecordMixedSaleModal({ isOpen, onClose }) {
     updated[index].lineCost = qty * updated[index].unitCostRWF
     setCartItems(updated)
   }
-
-  const totals = useMemo(() => {
-    const totalAmount = cartItems.reduce((acc, it) => acc + (it.lineTotal || 0), 0)
-    const totalCost = cartItems.reduce((acc, it) => acc + (it.lineCost || 0), 0)
-    const netProfit = totalAmount - totalCost
-    const marginPercent = totalAmount > 0 ? ((netProfit / totalAmount) * 100).toFixed(1) : '0.0'
-    return { totalAmount, totalCost, netProfit, marginPercent }
-  }, [cartItems])
 
   const handleSubmit = (e) => {
     e.preventDefault()

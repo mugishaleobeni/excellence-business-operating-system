@@ -27,9 +27,10 @@ export default function AnimalProfileModal({
   onDelete,
   hideFinancials = false
 }) {
+  const [activeTab, setActiveTab] = useState('overview')
+
   if (!isOpen || !animal) return null
 
-  const [activeTab, setActiveTab] = useState('overview')
   const categoryInfo = getCategoryByAnimalType(animal.animalType)
 
   // Calculate days remaining to expected birth date if pregnant

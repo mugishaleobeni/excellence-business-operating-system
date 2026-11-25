@@ -39,8 +39,6 @@ export default function RegisterAnimalModal({
   existingAnimals = [],
   initialData = null // if editing
 }) {
-  if (!isOpen) return null
-
   const isEditing = Boolean(initialData)
 
   // Registration Mode: 'individual' vs 'group'
@@ -425,6 +423,8 @@ export default function RegisterAnimalModal({
   const isFemale = sex === 'Female'
   const isMale = sex === 'Male'
   const gestationDays = activeCategoryInfo.gestationDays || 0
+
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[#03091F]/85 backdrop-blur-md overflow-y-auto">

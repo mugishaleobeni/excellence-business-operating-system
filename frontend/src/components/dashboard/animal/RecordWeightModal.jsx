@@ -7,11 +7,11 @@ export default function RecordWeightModal({
   animal,
   onSave
 }) {
-  if (!isOpen || !animal) return null
-
-  const [weightKg, setWeightKg] = useState(animal.weightKg ? String(animal.weightKg) : '')
+  const [weightKg, setWeightKg] = useState(animal?.weightKg ? String(animal.weightKg) : '')
   const [recordDate, setRecordDate] = useState(new Date().toISOString().slice(0, 10))
   const [weightNotes, setWeightNotes] = useState('')
+
+  if (!isOpen || !animal) return null
 
   const handleSubmit = (e) => {
     e.preventDefault()

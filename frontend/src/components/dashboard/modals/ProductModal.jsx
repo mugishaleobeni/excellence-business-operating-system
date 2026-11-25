@@ -123,6 +123,8 @@ export default function ProductModal({
     stopCameraScan();
   };
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     if (!isOpen && cameraActive) {
       stopCameraScan();
@@ -141,8 +143,6 @@ export default function ProductModal({
   const unitIncome = Math.max(0, price - cost);
   const marginPct = price > 0 ? Math.round((unitIncome / price) * 100) : 0;
   const activeBarcodePreview = productSku.trim() || "600123456789";
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreateProduct = async (e) => {
     e.preventDefault();
