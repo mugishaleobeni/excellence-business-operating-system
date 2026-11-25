@@ -19,9 +19,12 @@ import {
   ShieldCheck
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
+import { OPTIMIZED_IMAGES } from '../../../assets/optimized/imageManifest'
 import ActiveTradeBadge from '../make-and-sell/components/ActiveTradeBadge'
 import ActiveServiceTradeBadge from '../services/components/ActiveServiceTradeBadge'
 import ActiveAgricultureTradeBadge from '../agriculture/components/ActiveAgricultureTradeBadge'
+
+const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 
 export default function DashboardTopNav({
   workspaceScrolled,
@@ -251,34 +254,41 @@ export default function DashboardTopNav({
     >
       {/* Top Meta Bar: Compact Breadcrumbs (Left) + Quick Controls: Badge, Bell, Sign Out (Right) */}
       <div className="flex items-center justify-between gap-2 text-xs pb-1 sm:pb-2 border-b border-white/10">
-        {/* Left: Hamburger & Compact Breadcrumbs */}
-        <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 text-slate-300">
+        {/* Left: ExBOS Logo on Mobile + Full Breadcrumbs on Desktop (lg+) */}
+        <div className="flex items-center gap-1.5 min-w-0 text-slate-300">
           <button
             type="button"
-            onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
-            className="lg:hidden p-1 rounded-lg bg-white/10 text-white cursor-pointer border border-white/20 mr-0.5 shrink-0"
-            title="Toggle Menu"
-            aria-label="Toggle navigation drawer"
+            onClick={() => {
+              if (navigateToModulePage) navigateToModulePage('Overview', 'Dashboard')
+              else if (handleModuleClick) handleModuleClick('Overview')
+            }}
+            className="lg:hidden flex items-center justify-center rounded-lg bg-transparent border-0 p-0 cursor-pointer shrink-0 active:scale-95 transition-transform"
+            title="ExBOS Overview"
+            aria-label="Go to ExBOS Overview"
           >
-            <Menu className="w-3.5 h-3.5" />
+            <img
+              src={exbosLogo}
+              alt="ExBOS"
+              className="w-6 h-6 rounded-lg object-contain shrink-0"
+            />
           </button>
-          <span className="whitespace-nowrap font-bold text-white/90 tracking-wide text-[10px] sm:text-xs">
+          <span className="whitespace-nowrap font-bold text-white/95 tracking-wide text-xs">
             ExBOS
           </span>
-          <span className="text-white/30 shrink-0 text-[10px]">/</span>
-          <span className="whitespace-nowrap text-[#218DFF] font-semibold text-[10px] sm:text-xs truncate max-w-[85px] sm:max-w-none">
+          <span className="hidden lg:inline text-white/30 shrink-0 text-[10px]">/</span>
+          <span className="hidden lg:inline whitespace-nowrap text-[#218DFF] font-semibold text-xs">
             {currentArch.name}
           </span>
           {activeBranch?.name && (
             <>
-              <span className="text-white/30 shrink-0 text-[10px]">/</span>
-              <span className="whitespace-nowrap text-emerald-300 font-semibold text-[10px] sm:text-xs truncate max-w-[110px] sm:max-w-none">
+              <span className="hidden lg:inline text-white/30 shrink-0 text-[10px]">/</span>
+              <span className="hidden lg:inline whitespace-nowrap text-emerald-300 font-semibold text-xs">
                 {activeBranch.name}
               </span>
             </>
           )}
-          <span className="text-white/30 shrink-0 text-[10px]">/</span>
-          <span className="whitespace-nowrap text-[#9EDCFF] font-medium text-[10px] sm:text-xs truncate max-w-[95px] sm:max-w-none">
+          <span className="hidden lg:inline text-white/30 shrink-0 text-[10px]">/</span>
+          <span className="hidden lg:inline whitespace-nowrap text-[#9EDCFF] font-medium text-xs">
             {activeModule === 'Documents' ? 'Documents' : activeModule}
           </span>
         </div>
@@ -396,7 +406,7 @@ export default function DashboardTopNav({
             </button>
           )}
 
-          {/* Compact Sign Out Button (Icon-only on mobile, full on desktop) */}
+          {/* Sign Out Button (Desktop lg+ only; on mobile Sign Out lives inside Bottom Nav -> More drawer) */}
           <button
             type="button"
             onClick={() => {
@@ -408,10 +418,10 @@ export default function DashboardTopNav({
                 ? `Sign Out (${user.name || user.email})`
                 : 'Sign Out / Switch User'
             }
-            className="w-7 h-7 sm:w-auto p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-[0.98] text-rose-300 border border-rose-500/30 cursor-pointer flex items-center justify-center gap-1.5 transition-all shadow-sm"
+            className="hidden lg:flex w-auto px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 active:scale-[0.98] text-rose-300 border border-rose-500/30 cursor-pointer items-center justify-center gap-1.5 transition-all shadow-sm"
           >
             <LogOut className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span className="hidden sm:inline text-xs font-semibold">
+            <span className="text-xs font-semibold">
               Sign Out
             </span>
           </button>
