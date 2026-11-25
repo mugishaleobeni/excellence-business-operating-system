@@ -202,14 +202,17 @@ def build_welcome_message(
     official_number: str = "+250 792 946 680",
     lang: str = "en",
     is_super_admin: bool = False,
+    role_label: str = "",
 ) -> str:
     """Build the official ExBOS executive WhatsApp menu in English or Kinyarwanda."""
     arch_label = ARCH_LABELS.get(architecture_id, "Buy & Sell")
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
         sa_line = "*10.* Ubuyobozi Bukuru (Super Admin Command Center)\n" if is_super_admin else ""
+        role_line = f"Inshingano: *{role_label}*\n" if role_label else ""
         return (
             f"*EXCELLENCE BOS — Sisitemu y'Ubucuruzi*\n"
             f"Ubucuruzi: *{business_name}* ({arch_label})\n"
+            f"{role_line}"
             "--------------------------------\n"
             "Subiza *Umubare* w'ibyo ushaka:\n"
             "*1.* Reba, Hindura & Siba Ibicuruzwa (Ububiko)\n"
@@ -227,9 +230,11 @@ def build_welcome_message(
             "Buri gikorwa kibanze kigusaba *Kugenzura (YEGO / HINDURA / OYA)* mbere yo kubikwa."
         )
     sa_line = "*10.* Super Admin Command Center (Platform Control)\n" if is_super_admin else ""
+    role_line = f"Role: *{role_label}*\n" if role_label else ""
     return (
         f"*EXCELLENCE BOS — Official Business Console*\n"
         f"Business: *{business_name}* ({arch_label})\n"
+        f"{role_line}"
         "--------------------------------\n"
         "Reply with a *Menu Number*:\n"
         "*1.* View, Edit & Delete Products (Live Stock)\n"

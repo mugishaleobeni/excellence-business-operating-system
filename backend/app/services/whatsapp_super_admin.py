@@ -209,6 +209,14 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
     expiry = str(target_user.get("subscriptionExpiry") or "N/A")
     has_proof = bool(target_user.get("paymentScreenshot") or target_user.get("paymentMessageCopy"))
 
+    role_raw = str(target_user.get("role") or "BUSINESS_OWNER").strip()
+    assigned_bid = str(target_user.get("assignedBranchId") or "").strip()
+    is_bm = role_raw.lower() == "branch manager" or (bool(assigned_bid) and assigned_bid != "main")
+    role_disp = (
+        f"Branch Manager ({assigned_bid})" if is_bm and assigned_bid
+        else ("Branch Manager" if is_bm else ("Super Admin" if is_whatsapp_super_admin(target_user) else "Business Owner"))
+    )
+
     is_target_sa = is_whatsapp_super_admin(target_user)
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
         del_line = "*5.* Siba Konti y'Umukoresha Burundu (Delete)\n" if not is_target_sa else ""
@@ -216,6 +224,7 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
             f"*KONTI Y'UMUKORESHA — {biz}*\n"
             "--------------------------------\n"
             f"- Amazina: *{name}*\n"
+            f"- Inshingano (Role): *{role_disp}*\n"
             f"- Imeri: *{email}*\n"
             f"- Telefoni: *{phone}*\n"
             f"- Ubwoko: *{arch}*\n"
@@ -235,7 +244,8 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
     return (
         f"*USER ACCOUNT PROFILE — {biz}*\n"
         "--------------------------------\n"
-        f"- Owner: *{name}*\n"
+        f"- Owner / Name: *{name}*\n"
+        f"- Role: *{role_disp}*\n"
         f"- Email: *{email}*\n"
         f"- Phone: *{phone}*\n"
         f"- Architecture: *{arch}*\n"
@@ -297,6 +307,11 @@ def handle_super_admin_whatsapp_message(
             total_users = len(users)
             active_users = sum(1 for u in users if str(u.get("accountStatus") or "Active").lower() == "active")
             suspended_users = sum(1 for u in users if str(u.get("accountStatus") or "").lower() in ("suspended", "frozen"))
+            branch_managers_cnt = sum(
+                1 for u in users
+                if str(u.get("role") or "").strip().lower() == "branch manager"
+                or (str(u.get("assignedBranchId") or "").strip() not in ("", "main"))
+            )
             paid_users = sum(
                 1 for u in users
                 if str(u.get("billingType") or "").lower() == "paid"
@@ -314,6 +329,7 @@ def handle_super_admin_whatsapp_message(
                     "*EXBOS PLATFORM OVERVIEW (LIVE)*\n"
                     "--------------------------------\n"
                     f"- Total Users: *{total_users}* (Active: *{active_users}* | Suspended/Frozen: *{suspended_users}*)\n"
+                    f"- Business Owners: *{max(0, total_users - branch_managers_cnt)}* | Branch Managers: *{branch_managers_cnt}*\n"
                     f"- Registered Businesses: *{total_businesses}*\n"
                     f"- Active Workspaces: *{total_workspaces}*\n"
                     f"- Paid Subscriptions: *{paid_users}* | Free: *{max(0, total_users - paid_users)}*\n"
@@ -321,12 +337,19 @@ def handle_super_admin_whatsapp_message(
                     f"- Payment Submissions: *{total_sub_reqs}*\n"
                     f"- WhatsApp Mode: *{str(wa_cfg.get('mode', 'sandbox')).upper()}*\n"
                     "--------------------------------\n"
-                    "Reply *1–5* for another Super Admin command or *0* for Business Menu."
+                    "Reply with a *Command Number*:\n"
+                    "*1.* Refresh Platform Overview\n"
+                    "*2.* Recent Users & Businesses (Latest 10)\n"
+                    "*3.* Subscription & Payment Requests (Approve / Revoke)\n"
+                    "*4.* Manage User Account (Activate / Suspend / Plan / Delete)\n"
+                    "*5.* WhatsApp System Status (Sandbox / Production)\n"
+                    "*0.* Exit to Business Main Menu"
                 ),
                 (
                     "*INCAMAKE YA SISITEMU EXBOS (LIVE)*\n"
                     "--------------------------------\n"
                     f"- Abakoresha Bose: *{total_users}* (Bakora: *{active_users}* | Bahagaritswe: *{suspended_users}*)\n"
+                    f"- Ba Nyir'ubucuruzi: *{max(0, total_users - branch_managers_cnt)}* | Branch Managers: *{branch_managers_cnt}*\n"
                     f"- Ubucuruzi Bwanditswe: *{total_businesses}*\n"
                     f"- Workspaces Zikora: *{total_workspaces}*\n"
                     f"- Abishyura: *{paid_users}* | Ubuntu: *{max(0, total_users - paid_users)}*\n"
@@ -334,7 +357,13 @@ def handle_super_admin_whatsapp_message(
                     f"- Ibyemezo by'Ubwishyu: *{total_sub_reqs}*\n"
                     f"- WhatsApp Mode: *{str(wa_cfg.get('mode', 'sandbox')).upper()}*\n"
                     "--------------------------------\n"
-                    "Subiza *1–5* ku kindi gikorwa cyangwa *0* usubire kuri Menu y'Ubucuruzi."
+                    "Subiza *Umubare*:\n"
+                    "*1.* Vugurura Incamake ya Sisitemu\n"
+                    "*2.* Abakoresha n'Ubucuruzi Bwaherutse (10 ba mbere)\n"
+                    "*3.* Ibyemezo by'Ubwishyu n'Ifatabuguzi (Approve / Revoke)\n"
+                    "*4.* Gucunga Konti y'Umukoresha (Activate / Suspend / Delete)\n"
+                    "*5.* Imiterere ya WhatsApp (Sandbox / Production)\n"
+                    "*0.* Subira kuri Menu y'Ubucuruzi"
                 ),
             )
             return {"reply": reply, "action": "sa_overview"}
@@ -353,7 +382,10 @@ def handle_super_admin_whatsapp_message(
                 u_email = u.get("email") or ""
                 u_plan = u.get("planTier") or u.get("plan") or "Free"
                 u_status = u.get("accountStatus") or "Active"
-                lines.append(f"*{idx}.* {bname} ({u_plan} | {u_status})\n    {u_email}")
+                u_assigned = str(u.get("assignedBranchId") or "").strip()
+                is_bm = str(u.get("role") or "").strip().lower() == "branch manager" or (bool(u_assigned) and u_assigned != "main")
+                role_tag = " | Branch Manager" if is_bm else (" | Super Admin" if is_whatsapp_super_admin(u) else "")
+                lines.append(f"*{idx}.* {bname} ({u_plan} | {u_status}{role_tag})\n    {u_email}")
             lines.append("--------------------------------")
             lines.append(_t(lang, "Reply *1–10* to manage a user, or *0* for Super Admin Menu.", "Subiza *1–10* ucunge konti, cyangwa *0* usubire kuri Menu."))
             set_session("sa_pick_user", {"emails": emails_list})

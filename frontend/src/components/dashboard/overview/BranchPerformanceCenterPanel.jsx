@@ -28,18 +28,38 @@ export default function BranchPerformanceCenterPanel({
   const [backendAnalytics, setBackendAnalytics] = useState(null)
 
   useEffect(() => {
-    apiClient
-      .getBranchAnalytics(activeArchId)
-      .then((res) => {
-        const analyticsData = res?.data?.data || res?.data
-        if (res?.ok && analyticsData) {
-          setBackendAnalytics(analyticsData)
-        }
-      })
-      .catch(() => {})
+    let active = true
+    const fetchLiveAnalytics = () => {
+      apiClient
+        .getBranchAnalytics(activeArchId)
+        .then((res) => {
+          const analyticsData = res?.data?.data || res?.data
+          if (active && res?.ok && analyticsData) {
+            setBackendAnalytics(analyticsData)
+          }
+        })
+        .catch(() => {})
+    }
+
+    fetchLiveAnalytics()
+    const timer = window.setInterval(fetchLiveAnalytics, 12000)
+    const onFocus = () => fetchLiveAnalytics()
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') fetchLiveAnalytics()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [activeArchId, branches.length, allWorkspaces])
 
-  // Compute live client-side branch stats + heatmap so updates reflect instantaneously
+  // Compute live branch stats + heatmap, automatically merging live MongoDB analytics
+  // so sales recorded by Branch Managers on WhatsApp or another device appear instantaneously on Main HQ
   const computed = useMemo(() => {
     const ws = allWorkspaces?.[activeArchId] || {}
     const records = ws.records || {}
@@ -52,74 +72,98 @@ export default function BranchPerformanceCenterPanel({
     const purchasesList = records.Purchases || []
     const expensesList = records.Expenses || []
 
-    const branchList =
-      branches.length > 0
-        ? branches
-        : [{ id: 'main', name: 'Main HQ', isMain: true, location: 'Headquarters' }]
+    const liveBranches = Array.isArray(backendAnalytics?.branches) ? backendAnalytics.branches : []
+    const useLiveBackend = liveBranches.length > 0
 
-    const statsMap = {}
-    branchList.forEach((b) => {
-      statsMap[b.id] = {
+    let perfList = []
+    let dailyMap = {}
+
+    if (useLiveBackend) {
+      perfList = liveBranches.map((b) => ({
         id: b.id,
         name: b.name,
         location: b.location || 'Rwanda',
         isMain: Boolean(b.isMain || b.id === 'main'),
-        revenueRWF: 0,
-        purchasesRWF: 0,
-        expensesRWF: 0,
-        netProfitRWF: 0,
-        salesCount: 0
+        revenueRWF: Number(b.revenueRWF || 0),
+        purchasesRWF: Number(b.purchasesRWF || 0),
+        expensesRWF: Number(b.expensesRWF || 0),
+        netProfitRWF: Number(b.netProfitRWF || 0),
+        salesCount: Number(b.salesCount || 0)
+      }))
+      const liveDailyByBranch = backendAnalytics?.dailyActivityByBranch || {}
+      if (selectedBranchFilter !== 'ALL' && liveDailyByBranch[selectedBranchFilter]) {
+        dailyMap = liveDailyByBranch[selectedBranchFilter]
+      } else {
+        dailyMap = backendAnalytics?.dailyActivity || {}
       }
-    })
+    } else {
+      const branchList =
+        branches.length > 0
+          ? branches
+          : [{ id: 'main', name: 'Main HQ', isMain: true, location: 'Headquarters' }]
 
-    const fallbackBid = statsMap.main ? 'main' : branchList[0]?.id
-    const resolveBid = (rec) => {
-      const raw = rec?.branchId || fallbackBid
-      return statsMap[raw] ? raw : fallbackBid
+      const statsMap = {}
+      branchList.forEach((b) => {
+        statsMap[b.id] = {
+          id: b.id,
+          name: b.name,
+          location: b.location || 'Rwanda',
+          isMain: Boolean(b.isMain || b.id === 'main'),
+          revenueRWF: 0,
+          purchasesRWF: 0,
+          expensesRWF: 0,
+          netProfitRWF: 0,
+          salesCount: 0
+        }
+      })
+
+      const resolveBid = (rec) => {
+        const raw = String(rec?.branchId || 'main').trim()
+        return statsMap[raw] ? raw : null
+      }
+
+      const addDay = (dateStr, rev) => {
+        const d = String(dateStr || '').slice(0, 10)
+        if (d.length !== 10) return
+        if (!dailyMap[d]) dailyMap[d] = { count: 0, revenueRWF: 0 }
+        dailyMap[d].count += 1
+        dailyMap[d].revenueRWF += rev
+      }
+
+      salesList.forEach((s) => {
+        const bid = resolveBid(s)
+        if (!bid || !statsMap[bid]) return
+        const amt = Number(s.amountRWF || s.totalAmount || 0)
+        statsMap[bid].revenueRWF += amt
+        statsMap[bid].salesCount += 1
+        if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
+          addDay(s.date, amt)
+        }
+      })
+
+      purchasesList.forEach((p) => {
+        const bid = resolveBid(p)
+        if (!bid || !statsMap[bid]) return
+        statsMap[bid].purchasesRWF += Number(p.amountRWF || 0)
+        if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
+          addDay(p.date, 0)
+        }
+      })
+
+      expensesList.forEach((e) => {
+        const bid = resolveBid(e)
+        if (!bid || !statsMap[bid]) return
+        statsMap[bid].expensesRWF += Number(e.amountRWF || 0)
+        if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
+          addDay(e.date, 0)
+        }
+      })
+
+      perfList = Object.values(statsMap).map((b) => ({
+        ...b,
+        netProfitRWF: b.revenueRWF - b.purchasesRWF - b.expensesRWF
+      }))
     }
-
-    const dailyMap = {}
-    const addDay = (dateStr, rev) => {
-      const d = String(dateStr || '').slice(0, 10)
-      if (d.length !== 10) return
-      if (!dailyMap[d]) dailyMap[d] = { count: 0, revenueRWF: 0 }
-      dailyMap[d].count += 1
-      dailyMap[d].revenueRWF += rev
-    }
-
-    salesList.forEach((s) => {
-      const bid = resolveBid(s)
-      if (!bid || !statsMap[bid]) return
-      const amt = Number(s.amountRWF || s.totalAmount || 0)
-      statsMap[bid].revenueRWF += amt
-      statsMap[bid].salesCount += 1
-      if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
-        addDay(s.date, amt)
-      }
-    })
-
-    purchasesList.forEach((p) => {
-      const bid = resolveBid(p)
-      if (!bid || !statsMap[bid]) return
-      statsMap[bid].purchasesRWF += Number(p.amountRWF || 0)
-      if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
-        addDay(p.date, 0)
-      }
-    })
-
-    expensesList.forEach((e) => {
-      const bid = resolveBid(e)
-      if (!bid || !statsMap[bid]) return
-      statsMap[bid].expensesRWF += Number(e.amountRWF || 0)
-      if (selectedBranchFilter === 'ALL' || selectedBranchFilter === bid) {
-        addDay(e.date, 0)
-      }
-    })
-
-    const perfList = Object.values(statsMap).map((b) => ({
-      ...b,
-      netProfitRWF: b.revenueRWF - b.purchasesRWF - b.expensesRWF
-    }))
 
     perfList.sort((a, b) => b.revenueRWF - a.revenueRWF || b.netProfitRWF - a.netProfitRWF)
     const bestBranch = perfList[0] || null
@@ -159,7 +203,7 @@ export default function BranchPerformanceCenterPanel({
       totalOps: Object.values(dailyMap).reduce((a, b) => a + b.count, 0),
       totalBranchRev: perfList.reduce((a, b) => a + b.revenueRWF, 0)
     }
-  }, [allWorkspaces, activeArchId, branches, selectedBranchFilter])
+  }, [allWorkspaces, activeArchId, branches, selectedBranchFilter, backendAnalytics])
 
   const customBranches = branches.filter((b) => !b.isMain && b.id !== 'main')
   // Only the Main HQ Dashboard visualizes cross-branch performance, and only when at least 1 custom branch exists

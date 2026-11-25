@@ -1175,8 +1175,11 @@ def branch_analytics():
             "productsCount": 0,
         }
 
-    # Daily heatmap aggregator (date -> {count, revenueRWF, byBranch})
+    # Daily heatmap aggregator (date -> {count, revenueRWF}) globally and per-branch
     daily_map: dict[str, dict] = defaultdict(lambda: {"count": 0, "revenueRWF": 0.0})
+    daily_by_branch: dict[str, dict[str, dict]] = defaultdict(
+        lambda: defaultdict(lambda: {"count": 0, "revenueRWF": 0.0})
+    )
 
     def _b_id(rec: dict) -> str | None:
         raw = str(rec.get("branchId") or "main").strip()
@@ -1195,6 +1198,8 @@ def branch_analytics():
         if len(d_str) == 10:
             daily_map[d_str]["count"] += 1
             daily_map[d_str]["revenueRWF"] += amt
+            daily_by_branch[bid][d_str]["count"] += 1
+            daily_by_branch[bid][d_str]["revenueRWF"] += amt
 
     for p in purchases_list:
         bid = _b_id(p)
@@ -1205,6 +1210,7 @@ def branch_analytics():
         d_str = str(p.get("date") or "")[:10]
         if len(d_str) == 10:
             daily_map[d_str]["count"] += 1
+            daily_by_branch[bid][d_str]["count"] += 1
 
     for e in expenses_list:
         bid = _b_id(e)
@@ -1215,6 +1221,7 @@ def branch_analytics():
         d_str = str(e.get("date") or "")[:10]
         if len(d_str) == 10:
             daily_map[d_str]["count"] += 1
+            daily_by_branch[bid][d_str]["count"] += 1
 
     for prod in products_list:
         bid = _b_id(prod)
@@ -1261,6 +1268,11 @@ def branch_analytics():
             "branches": perf_sorted,
             "bestBranch": best_branch,
             "heatmap": heatmap,
+            "dailyActivity": {k: dict(v) for k, v in daily_map.items()},
+            "dailyActivityByBranch": {
+                bid: {d: dict(val) for d, val in dmap.items()}
+                for bid, dmap in daily_by_branch.items()
+            },
             "totalRevenueRWF": sum(b["revenueRWF"] for b in perf_sorted),
             "totalNetProfitRWF": sum(b["netProfitRWF"] for b in perf_sorted),
         },

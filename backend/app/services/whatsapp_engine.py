@@ -1057,8 +1057,14 @@ def handle_incoming_whatsapp_message(
         branch_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
 
     hide_profit = bool(is_branch_manager and not branch_perms.get("canViewProfitReports", False))
+    menu_role_label = (
+        _t(lang, "Branch Manager", "Umuyobozi w'Ishami (Branch Manager)")
+        if is_branch_manager
+        else ""
+    )
 
     # Bind branch-scoped wrappers so EVERY read & write in this request is strictly isolated to effective_branch_id
+    build_welcome_message = partial(globals()["build_welcome_message"], role_label=menu_role_label)
     _catalog_items = partial(globals()["_catalog_items"], branch_id=effective_branch_id)
     _append_record_and_tx = partial(globals()["_append_record_and_tx"], branch_id=effective_branch_id or "main")
     get_unpaid_customers_summary = partial(globals()["get_unpaid_customers_summary"], branch_id=effective_branch_id)
