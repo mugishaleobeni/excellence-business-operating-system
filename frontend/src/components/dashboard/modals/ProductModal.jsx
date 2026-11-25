@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Box, X, Camera, VideoOff, TrendingUp, Percent, Tag, Plus, Check, Barcode, QrCode } from "lucide-react";
+import { Box, X, Camera, VideoOff, TrendingUp, Percent, Tag, Plus, Check, Barcode, QrCode, Loader2 } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 import { renderBarcodeSvg } from "../../../utils/barcodeUtils";
 import BarcodeScannerModal from "../../common/BarcodeScannerModal";
@@ -142,9 +142,14 @@ export default function ProductModal({
   const marginPct = price > 0 ? Math.round((unitIncome / price) * 100) : 0;
   const activeBarcodePreview = productSku.trim() || "600123456789";
 
-  const handleCreateProduct = (e) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCreateProduct = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!title.trim()) return;
+    setIsSubmitting(true);
+    try {
 
     const generatedSku = productSku.trim() || `600${Math.floor(1000000000 + Math.random() * 9000000000)}`;
 
@@ -178,7 +183,10 @@ export default function ProductModal({
 
     stopCameraScan();
     if (onSaveProduct) {
-      onSaveProduct(payload, Boolean(editRow));
+      await Promise.resolve(onSaveProduct(payload, Boolean(editRow)));
+    }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -208,7 +216,11 @@ export default function ProductModal({
                 <div className="flex items-center gap-2.5">
                   <Box className="w-5 h-5 text-[#9EDCFF]" />
                   <h3 className="font-orbitron text-base sm:text-lg font-bold text-white">
-                    {activeArchId === 'agriculture' ? 'Register New Farm Input' : 'New product'}
+                    {editRow
+                      ? 'Edit product'
+                      : activeArchId === 'agriculture'
+                      ? 'Register New Farm Input'
+                      : 'New product'}
                   </h3>
                 </div>
                 <button
@@ -696,9 +708,19 @@ export default function ProductModal({
                   </button>
                   <button
                     type="submit"
-                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold cursor-pointer"
+                    disabled={isSubmitting}
+                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold cursor-pointer inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span>Create product</span>
+                    {isSubmitting && <Loader2 className="w-4 h-4 animate-spin text-[#9EDCFF]" />}
+                    <span>
+                      {isSubmitting
+                        ? editRow
+                          ? 'Saving Changes...'
+                          : 'Creating Product...'
+                        : editRow
+                        ? 'Save Changes'
+                        : 'Create product'}
+                    </span>
                   </button>
                 </div>
               </form>

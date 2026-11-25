@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 
 export default function GenericRecordModal({
@@ -52,17 +52,22 @@ export default function GenericRecordModal({
     }
   }, [editRow, isOpen, activeModule]);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   if (!isOpen) return null;
 
-  const handleSaveEntry = (e) => {
+  const handleSaveEntry = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!title.trim()) return;
+    setIsSubmitting(true);
+    try {
 
     const amountNum = parseNumericInput(amountRWF) || 0;
     const qtyNum = Number(quantity) || 1;
 
     const payload = {
-      id: editRow ? editRow.id : `REC-${Date.now().toString().slice(-4)}`,
+      id: editRow ? editRow.id : `REC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       title: title.trim(),
       category: categoryTag || "General",
       amountRWF: amountNum,
@@ -78,7 +83,10 @@ export default function GenericRecordModal({
     };
 
     if (onSaveRecord) {
-      onSaveRecord(payload, Boolean(editRow));
+      await Promise.resolve(onSaveRecord(payload, Boolean(editRow)));
+    }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -271,10 +279,21 @@ export default function GenericRecordModal({
                   </button>
                   <button
                     type="submit"
-                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold"
+                    disabled={isSubmitting}
+                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <Plus className="w-4 h-4 text-[#9EDCFF]" />
-                    <span>{editRow ? 'Save Changes' : 'Record Entry'}</span>
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 text-[#9EDCFF] animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4 text-[#9EDCFF]" />
+                    )}
+                    <span>
+                      {isSubmitting
+                        ? 'Saving...'
+                        : editRow
+                        ? 'Save Changes'
+                        : 'Record Entry'}
+                    </span>
                   </button>
                 </div>
               </form>

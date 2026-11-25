@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { ShoppingBag, X, Package, ChevronDown, Search, Check, Info, TrendingUp, AlertTriangle, CheckCircle2, Eye, Send, Download } from "lucide-react";
+import { ShoppingBag, X, Package, ChevronDown, Search, Check, Info, TrendingUp, AlertTriangle, CheckCircle2, Eye, Send, Download, Loader2 } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 import CustomSelect from "../../common/CustomSelect";
 import SendDocumentModal from "../documents/SendDocumentModal";
@@ -36,6 +36,7 @@ export default function SaleModal({
   const [taxProfile, setTaxProfile] = useState(DEFAULT_RRA_TAX_PROFILE);
   const [saleCustomerTin, setSaleCustomerTin] = useState("");
   const [saleEbmNumber, setSaleEbmNumber] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -212,10 +213,14 @@ export default function SaleModal({
   const saleTotalProfit = totalProfit;
   const saleProfitMarginPct = profitMarginPct;
 
-  const handleCreateSale = (e) => {
+  const handleCreateSale = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!saleProductId || !selectedSaleProduct) return;
     if (qtyNum <= 0 || unitPriceNum <= 0) return;
+
+    setIsSubmitting(true);
+    try {
 
     const effectiveUnit = selectedSaleProduct.unit || defaultUnit;
     const custName = saleCustomerName.trim() || "Walk-in Client";
@@ -259,7 +264,7 @@ export default function SaleModal({
     };
 
     if (onSaveSale) {
-      onSaveSale(salePayload, selectedSaleProduct);
+      await Promise.resolve(onSaveSale(salePayload, selectedSaleProduct));
     }
 
     const isPaid = salePaymentStatus === "Paid in Full";
@@ -310,10 +315,13 @@ export default function SaleModal({
     };
 
     if (addDemoRecord) {
-      addDemoRecord(activeArchId, "Documents", newInvoiceDoc);
+      await Promise.resolve(addDemoRecord(activeArchId, "Documents", newInvoiceDoc));
     }
 
     setSavedSaleDoc(newInvoiceDoc);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -827,11 +835,20 @@ export default function SaleModal({
                   </button>
                   <button
                     type="submit"
-                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg"
+                    disabled={isSubmitting}
+                    className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold flex items-center gap-2 cursor-pointer shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <Check className="w-4 h-4 text-[#9EDCFF]" />
+                    {isSubmitting ? (
+                      <Loader2 className="w-4 h-4 text-[#9EDCFF] animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4 text-[#9EDCFF]" />
+                    )}
                     <span>
-                      {saleTotalAmount > 0 ? `Record Sale (${formatRWF(saleTotalAmount)})` : 'Record Sale'}
+                      {isSubmitting
+                        ? 'Recording Sale...'
+                        : saleTotalAmount > 0
+                        ? `Record Sale (${formatRWF(saleTotalAmount)})`
+                        : 'Record Sale'}
                     </span>
                   </button>
                 </div>

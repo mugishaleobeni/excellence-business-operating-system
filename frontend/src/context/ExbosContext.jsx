@@ -1655,6 +1655,15 @@ export function ExbosProvider({ children }) {
         return
       }
 
+      if (!res?.ok && res?.status >= 400 && res?.status < 500) {
+        addToast({
+          type: 'error',
+          title: 'Could Not Save Record',
+          message: res?.error || `Server rejected "${entry.title || entry.name || moduleName}" (HTTP ${res.status}).`
+        })
+        return
+      }
+
       if (attempt < 2) {
         setTimeout(() => persistRecord(attempt + 1), 1500)
         return
@@ -1731,6 +1740,15 @@ export function ExbosProvider({ children }) {
           exbosApi.deleteTransaction(txId).catch(() => {})
         }
       })
+
+      if (!res?.ok && res?.status >= 400 && res?.status < 500) {
+        addToast({
+          type: 'error',
+          title: 'Delete Blocked',
+          message: res?.error || 'You do not have permission to delete this record.'
+        })
+        return
+      }
 
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
         enqueueOfflineAction({
@@ -1965,6 +1983,14 @@ export function ExbosProvider({ children }) {
         return
       }
       const res = await exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
+      if (!res?.ok && res?.status >= 400 && res?.status < 500) {
+        addToast({
+          type: 'error',
+          title: 'Update Rejected',
+          message: res?.error || 'Could not update this record.'
+        })
+        return
+      }
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
         enqueueOfflineAction({
           type: 'update',

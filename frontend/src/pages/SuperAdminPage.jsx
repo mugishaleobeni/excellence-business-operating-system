@@ -141,6 +141,8 @@ export default function SuperAdminPage() {
       'ExBOS will perform a brief maintenance window tonight from 01:00 to 01:30 CAT.'
   )
   const [savingBroadcast, setSavingBroadcast] = useState(false)
+  const [busyAction, setBusyAction] = useState('')
+  const isBusy = (key) => busyAction === key
 
   const showNotice = (msg) => {
     setErrorToast(null)
@@ -344,6 +346,8 @@ export default function SuperAdminPage() {
   }, [analytics.topWorkingUsers])
 
   const handleToggleSuspend = async (target) => {
+    const key = `suspend:${target.email}`
+    if (busyAction === key) return
     const nextStatus = target.accountStatus === 'Suspended' ? 'Active' : 'Suspended'
     const reason =
       nextStatus === 'Suspended'
@@ -354,46 +358,67 @@ export default function SuperAdminPage() {
         : 'Account reactivated by Super Admin'
     if (nextStatus === 'Suspended' && !reason) return
 
-    const res = await apiClient.superAdminUpdateUserAccess(target.email, {
-      accountStatus: nextStatus,
-      reason
-    })
-    if (!res.ok) {
-      showError(res.error || 'Failed to update account status.')
-      return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminUpdateUserAccess(target.email, {
+        accountStatus: nextStatus,
+        reason
+      })
+      if (!res.ok) {
+        showError(res.error || 'Failed to update account status.')
+        return
+      }
+      showNotice(res.data?.message || `${target.email} is now ${nextStatus}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(res.data?.message || `${target.email} is now ${nextStatus}.`)
-    refreshAll()
   }
 
   const handleToggleSuperAdmin = async (target) => {
+    const key = `admin:${target.email}`
+    if (busyAction === key) return
     const nextSuper = !target.isSuperAdmin
-    const res = await apiClient.superAdminUpdateUserAccess(target.email, {
-      isSuperAdmin: nextSuper,
-      reason: nextSuper ? 'Promoted to Platform Super Admin' : 'Revoked Platform Super Admin'
-    })
-    if (!res.ok) {
-      showError(res.error || 'Failed to update Super Admin role.')
-      return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminUpdateUserAccess(target.email, {
+        isSuperAdmin: nextSuper,
+        reason: nextSuper ? 'Promoted to Platform Super Admin' : 'Revoked Platform Super Admin'
+      })
+      if (!res.ok) {
+        showError(res.error || 'Failed to update Super Admin role.')
+        return
+      }
+      showNotice(res.data?.message || `Updated Super Admin role for ${target.email}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(res.data?.message || `Updated Super Admin role for ${target.email}.`)
-    refreshAll()
   }
 
   const handleVerifyEmail = async (target) => {
-    const res = await apiClient.superAdminUpdateUserAccess(target.email, {
-      emailVerified: true,
-      reason: 'Manually verified by Super Admin'
-    })
-    if (!res.ok) {
-      showError(res.error || 'Could not verify email.')
-      return
+    const key = `verify:${target.email}`
+    if (busyAction === key) return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminUpdateUserAccess(target.email, {
+        emailVerified: true,
+        reason: 'Manually verified by Super Admin'
+      })
+      if (!res.ok) {
+        showError(res.error || 'Could not verify email.')
+        return
+      }
+      showNotice(`Email verified for ${target.email}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(`Email verified for ${target.email}.`)
-    refreshAll()
   }
 
   const handleQuickRenew30Days = async (targetUser) => {
+    const key = `renew:${targetUser.email}`
+    if (busyAction === key) return
     const baseDate =
       targetUser.subscriptionExpiry && new Date(targetUser.subscriptionExpiry) > new Date()
         ? new Date(targetUser.subscriptionExpiry)
@@ -403,22 +428,29 @@ export default function SuperAdminPage() {
       targetUser.plan && String(targetUser.plan).toLowerCase() !== 'free'
         ? targetUser.plan
         : 'Bronze'
-    const res = await apiClient.superAdminUpdateUserSubscription(targetUser.email, {
-      plan: targetPlan,
-      billingType: 'Paid',
-      subscriptionExpiry: nextExpiry,
-      reason: `Renewed ${targetPlan} plan (+30 days until ${nextExpiry})`,
-      notifyUser: true
-    })
-    if (!res.ok) {
-      showError(res.error || 'Failed to renew subscription.')
-      return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminUpdateUserSubscription(targetUser.email, {
+        plan: targetPlan,
+        billingType: 'Paid',
+        subscriptionExpiry: nextExpiry,
+        reason: `Renewed ${targetPlan} plan (+30 days until ${nextExpiry})`,
+        notifyUser: true
+      })
+      if (!res.ok) {
+        showError(res.error || 'Failed to renew subscription.')
+        return
+      }
+      showNotice(`Renewed ${targetUser.email} (${targetPlan}) until ${nextExpiry}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(`Renewed ${targetUser.email} (${targetPlan}) until ${nextExpiry}.`)
-    refreshAll()
   }
 
   const handleRevokePayment = async (targetUser, reqId = '') => {
+    const key = `revoke:${targetUser.email}`
+    if (busyAction === key) return
     const reason = window.prompt(
       `Revoke paid subscription for ${targetUser.email} due to corrupt/invalid payment?\nEnter reason:`,
       'Corrupt or unverified payment proof'
@@ -427,20 +459,27 @@ export default function SuperAdminPage() {
     const suspendAlso = window.confirm(
       `Also suspend ${targetUser.email}'s account immediately while revoking payment?`
     )
-    const res = await apiClient.superAdminRevokePayment(targetUser.email, {
-      reason,
-      suspendAccount: suspendAlso,
-      requestId: reqId
-    })
-    if (!res.ok) {
-      showError(res.error || 'Could not revoke payment.')
-      return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminRevokePayment(targetUser.email, {
+        reason,
+        suspendAccount: suspendAlso,
+        requestId: reqId
+      })
+      if (!res.ok) {
+        showError(res.error || 'Could not revoke payment.')
+        return
+      }
+      showNotice(res.data?.message || `Payment revoked for ${targetUser.email}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(res.data?.message || `Payment revoked for ${targetUser.email}.`)
-    refreshAll()
   }
 
   const handleDeleteUser = async (targetUser) => {
+    const key = `delete:${targetUser.email}`
+    if (busyAction === key) return
     const confirmed = window.confirm(
       `PERMANENTLY DELETE ${targetUser.email} (${targetUser.businessName}) and all their workspaces, staff, and records from MongoDB Atlas?\n\nThis action cannot be undone.`
     )
@@ -450,15 +489,20 @@ export default function SuperAdminPage() {
       'Account removed by Super Admin'
     )
     if (reason === null) return
-    const res = await apiClient.superAdminDeleteUser(targetUser.email, {
-      reason: reason || 'Account removed by Super Admin'
-    })
-    if (!res.ok) {
-      showError(res.error || 'Failed to delete user.')
-      return
+    setBusyAction(key)
+    try {
+      const res = await apiClient.superAdminDeleteUser(targetUser.email, {
+        reason: reason || 'Account removed by Super Admin'
+      })
+      if (!res.ok) {
+        showError(res.error || 'Failed to delete user.')
+        return
+      }
+      showNotice(res.data?.message || `Deleted user ${targetUser.email}.`)
+      refreshAll()
+    } finally {
+      setBusyAction('')
     }
-    showNotice(res.data?.message || `Deleted user ${targetUser.email}.`)
-    refreshAll()
   }
 
   const handleApplySubscriptionChange = async (e) => {
@@ -1250,11 +1294,12 @@ export default function SuperAdminPage() {
                           {!s.isSuperAdmin && String(s.email || '').toLowerCase() !== String(user?.email || '').toLowerCase() && (
                             <button
                               type="button"
+                              disabled={isBusy(`delete:${s.email}`)}
                               onClick={() => handleDeleteUser(s)}
-                              className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/35 text-rose-200 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/35 text-rose-200 transition-colors cursor-pointer disabled:opacity-50"
                               title={`Permanently delete ${s.email}`}
                             >
-                              <Trash2 className="w-3 h-3" />
+                              {isBusy(`delete:${s.email}`) ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                             </button>
                           )}
                         </div>
@@ -1740,32 +1785,40 @@ export default function SuperAdminPage() {
                             {!u.emailVerified && (
                               <button
                                 type="button"
+                                disabled={isBusy(`verify:${u.email}`)}
                                 onClick={() => handleVerifyEmail(u)}
-                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                               >
-                                <MailCheck className="w-3 h-3" /> Verify
+                                {isBusy(`verify:${u.email}`) ? <RefreshCw className="w-3 h-3 animate-spin" /> : <MailCheck className="w-3 h-3" />}
+                                {isBusy(`verify:${u.email}`) ? 'Verifying...' : 'Verify'}
                               </button>
                             )}
                             {!isSelf && (
                               <>
                                 <button
                                   type="button"
+                                  disabled={isBusy(`admin:${u.email}`)}
                                   onClick={() => handleToggleSuperAdmin(u)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                                  className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                                 >
-                                  <ShieldAlert className="w-3 h-3" />
-                                  {u.isSuperAdmin ? 'Revoke Admin' : 'Make Admin'}
+                                  {isBusy(`admin:${u.email}`) ? <RefreshCw className="w-3 h-3 animate-spin" /> : <ShieldAlert className="w-3 h-3" />}
+                                  {isBusy(`admin:${u.email}`) ? 'Updating...' : u.isSuperAdmin ? 'Revoke Admin' : 'Make Admin'}
                                 </button>
                                 <button
                                   type="button"
+                                  disabled={isBusy(`suspend:${u.email}`)}
                                   onClick={() => handleToggleSuspend(u)}
-                                  className={`px-2.5 py-1.5 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer ${
+                                  className={`px-2.5 py-1.5 rounded-lg font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
                                     u.accountStatus === 'Suspended'
                                       ? 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300'
                                       : 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-300'
                                   }`}
                                 >
-                                  {u.accountStatus === 'Suspended' ? (
+                                  {isBusy(`suspend:${u.email}`) ? (
+                                    <>
+                                      <RefreshCw className="w-3 h-3 animate-spin" /> Processing...
+                                    </>
+                                  ) : u.accountStatus === 'Suspended' ? (
                                     <>
                                       <Unlock className="w-3 h-3" /> Reactivate
                                     </>
@@ -1778,21 +1831,25 @@ export default function SuperAdminPage() {
                                 {String(u.plan || 'Free').toLowerCase() !== 'free' && (
                                   <button
                                     type="button"
+                                    disabled={isBusy(`revoke:${u.email}`)}
                                     onClick={() => handleRevokePayment(u)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 font-bold text-[10px] cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-200 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                                     title="Revoke paid plan due to corrupt or invalid payment proof"
                                   >
-                                    Revoke Payment
+                                    {isBusy(`revoke:${u.email}`) && <RefreshCw className="w-3 h-3 animate-spin" />}
+                                    {isBusy(`revoke:${u.email}`) ? 'Revoking...' : 'Revoke Payment'}
                                   </button>
                                 )}
                                 {!u.isSuperAdmin && (
                                   <button
                                     type="button"
+                                    disabled={isBusy(`delete:${u.email}`)}
                                     onClick={() => handleDeleteUser(u)}
-                                    className="px-2.5 py-1.5 rounded-lg bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/40 text-rose-200 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-lg bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/40 text-rose-200 font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer disabled:opacity-50"
                                     title="Permanently delete user and all workspace data"
                                   >
-                                    <Trash2 className="w-3 h-3" /> Delete
+                                    {isBusy(`delete:${u.email}`) ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                    {isBusy(`delete:${u.email}`) ? 'Deleting...' : 'Delete'}
                                   </button>
                                 )}
                               </>

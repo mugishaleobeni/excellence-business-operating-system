@@ -16,7 +16,8 @@ import {
   ShieldCheck,
   Sparkles,
   Clock,
-  ArrowUpRight
+  ArrowUpRight,
+  Loader2
 } from "lucide-react";
 import { formatRWF, formatWithCommas, parseNumericInput, numberToWordsEnglish } from "../../../utils/currencyWords";
 import { assessPurchaseDecision } from "../../../utils/financialIntelligenceEngine";
@@ -313,10 +314,15 @@ export default function PurchaseModal({
     }
   };
 
-  const handleCreatePurchase = (e) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCreatePurchase = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     const effectiveTitle = selectedPurchaseProduct ? selectedPurchaseProduct.title : purchaseItemTitle.trim();
     if (!effectiveTitle || purchaseQtyNum <= 0 || purchaseCostNum <= 0 || !purchaseSupplierName.trim()) return;
+    setIsSubmitting(true);
+    try {
 
     const sName = purchaseSupplierName.trim();
     const sPhone = purchaseSupplierPhone.trim();
@@ -367,7 +373,10 @@ export default function PurchaseModal({
     };
 
     if (onSavePurchase) {
-      onSavePurchase(purchasePayload, selectedPurchaseProduct, purchaseRemainingAmount);
+      await Promise.resolve(onSavePurchase(purchasePayload, selectedPurchaseProduct, purchaseRemainingAmount));
+    }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1176,11 +1185,18 @@ export default function PurchaseModal({
             </button>
             <button
               type="submit"
-              className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold cursor-pointer shadow-lg flex items-center gap-2"
+              disabled={isSubmitting}
+              className="btn-sapphire-clean px-6 py-2.5 text-xs font-bold cursor-pointer shadow-lg flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Check className="w-4 h-4 text-[#9EDCFF]" />
+              {isSubmitting ? (
+                <Loader2 className="w-4 h-4 text-[#9EDCFF] animate-spin" />
+              ) : (
+                <Check className="w-4 h-4 text-[#9EDCFF]" />
+              )}
               <span>
-                {purchaseDeliveryStatus === "Ordered"
+                {isSubmitting
+                  ? "Saving Purchase..."
+                  : purchaseDeliveryStatus === "Ordered"
                   ? `Create Purchase Order (${formatRWF(purchaseTotalAmount)})`
                   : activeModule === "Products" && activePage === "Stock"
                   ? purchaseTotalAmount > 0
