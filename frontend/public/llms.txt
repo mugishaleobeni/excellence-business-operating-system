@@ -1,13 +1,20 @@
-# ExBOS — Excellence Business Operations System
+# ExBOS — Excellence Business Operations System (by PYLARIX)
 
-> Intelligent multi-architecture business operations platform built by PYLARIX for SMEs, retailers, manufacturers, service providers, hospitality businesses, and agribusinesses.
+> Rwanda's #1 all-in-one business management, POS, stock inventory, MTN MoMo & Airtel Money cash-flow, WhatsApp Business POS automation, RRA tax-ready invoicing, and multi-branch profit operating system for SMEs across Rwanda and East Africa.
 
-## Core Pages
-- [Home](https://exbos.pages.dev/): Platform overview, six business architectures, and financial survival tools.
-- [Features](https://exbos.pages.dev/features): Sales, inventory, expenses, customer debt reminders, WhatsApp automation, and multi-branch analytics.
-- [Business Models](https://exbos.pages.dev/business-models): Make & Sell, Buy & Sell, Service-Based, Agriculture & Livestock, Food & Hospitality, and Hybrid.
-- [Pricing](https://exbos.pages.dev/pricing): Forever Free and growth plans in RWF.
-- [Resources](https://exbos.pages.dev/resources): Guides and business survival tools.
+## Core Public Pages
+- [Home](https://exbos.pages.dev/): Platform overview, 6 business architectures, WhatsApp Business POS, and financial survival tools.
+- [Features](https://exbos.pages.dev/features): Where Is My Money 8-bucket cash/MoMo/bank tracker, WhatsApp Business POS & debt reminders, multi-branch stock transfers, RRA VAT 18% / EBM readiness, and live P&L reports.
+- [Business Models](https://exbos.pages.dev/business-models): Six dedicated industry workspaces in one platform.
+  - [Make & Sell (Manufacturing, Bakery, Tailoring)](https://exbos.pages.dev/business-models/make-and-sell)
+  - [Buy & Sell (Retail, Wholesale, Pharmacy, Electronics)](https://exbos.pages.dev/business-models/buy-and-sell)
+  - [Service-Based Businesses (Clinics, Salons, Repairs, Agencies)](https://exbos.pages.dev/business-models/services)
+  - [Agriculture & Livestock (Farms, Dairy, Poultry, Agribusiness)](https://exbos.pages.dev/business-models/agriculture)
+  - [Food & Hospitality (Restaurants, Cafes, Hotels, Lodges)](https://exbos.pages.dev/business-models/food-and-hospitality)
+  - [Hybrid Business (Multi-Activity Enterprises)](https://exbos.pages.dev/business-models/hybrid)
+- [Free Business Survival Tools](https://exbos.pages.dev/business-tools): 6-Month Business Survival Planner, Break-Even Calculator, Pricing & Margin Calculator in RWF.
+- [Pricing (RWF)](https://exbos.pages.dev/pricing): Forever Free (0 RWF), Bronze Growth (10,000 RWF/mo), Silver Enterprise (20,000 RWF/mo), and Gold Corporate (35,000 RWF/mo).
+- [About PYLARIX & ExBOS](https://exbos.pages.dev/about): Mission, Kigali headquarters, and bilingual English & Kinyarwanda SME focus.
+- [Resources & Guides](https://exbos.pages.dev/resources): SME financial survival guides, inventory best practices, and RRA tax readiness.
+- [Create Free Account](https://exbos.pages.dev/register): 7-step guided onboarding via Web or ExBOS Official WhatsApp (+250 792 946 680).
 - [Sign In](https://exbos.pages.dev/login): Access your ExBOS workspace.
-- [Create Account](https://exbos.pages.dev/signup): Start your ExBOS business workspace.
-
