@@ -4,6 +4,7 @@ import { useExbos } from '../context/ExbosContext'
 import { formatRWF } from '../utils/currencyWords'
 import MoneyInput from '../components/common/MoneyInput'
 import CustomSelect from '../components/common/CustomSelect'
+import { ListRowsSkeleton, TableRowsSkeleton } from '../components/common/SkeletonLoader'
 import { apiClient } from '../utils/apiClient'
 import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
 import {
@@ -1246,6 +1247,9 @@ export default function SuperAdminPage() {
                       </div>
                     )
                   })}
+                  {loadingAnalytics && topUsers.length === 0 && (
+                    <ListRowsSkeleton rows={5} />
+                  )}
                   {!loadingAnalytics && topUsers.length === 0 && (
                     <div className="py-10 text-center text-xs text-slate-400">
                       No active business workspaces found yet.
@@ -1915,6 +1919,9 @@ export default function SuperAdminPage() {
                       </tr>
                     )
                   })}
+                  {loadingUsers && platformUsers.length === 0 && (
+                    <TableRowsSkeleton rows={6} cols={5} />
+                  )}
                   {!loadingUsers && platformUsers.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-slate-400">
@@ -2729,6 +2736,9 @@ export default function SuperAdminPage() {
                       <td className="py-2.5 px-3 text-slate-300">{log.reason || '—'}</td>
                     </tr>
                   ))}
+                  {loadingLogs && auditLogs.length === 0 && (
+                    <TableRowsSkeleton rows={5} cols={5} />
+                  )}
                   {!loadingLogs && auditLogs.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-slate-400">

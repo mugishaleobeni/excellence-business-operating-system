@@ -9,6 +9,7 @@ import DashboardTopNav from '../components/dashboard/layout/DashboardTopNav'
 import WorkspaceContentRouter from '../components/dashboard/layout/WorkspaceContentRouter'
 import MobileFloatingDock from '../components/dashboard/layout/MobileFloatingDock'
 import TradeSelectionModal from '../components/dashboard/make-and-sell/modals/TradeSelectionModal'
+import { DashboardOverviewSkeleton } from '../components/common/SkeletonLoader'
 import {
   MODULE_ICONS,
   MODULE_SHORT_LABELS
@@ -40,7 +41,8 @@ export default function DashboardPage() {
     agricultureTrade,
     applyAgricultureTrade,
     ownerNotifications = [],
-    markOwnerNotificationRead
+    markOwnerNotificationRead,
+    isInitialCloudLoading
   } = useExbos()
 
   const {
@@ -395,40 +397,44 @@ export default function DashboardPage() {
             onScroll={handleWorkspaceScroll}
           >
             {/* DYNAMIC CONTENT ROUTING INSIDE MAIN WORKSPACE */}
-            <WorkspaceContentRouter
-              searchQuery={searchQuery}
-              activeArchId={activeArchId}
-              currentArch={currentArch}
-              activeModule={activeModule}
-              activePage={activePage}
-              handleArchSwitch={handleArchSwitch}
-              handleModuleClick={handleModuleClick}
-              navigateToModulePage={navigateToModulePage}
-              setActiveModule={setActiveModule}
-              setActivePage={setActivePage}
-              availableWidgets={AVAILABLE_WIDGETS}
-              isCardVisible={isCardVisible}
-              handleRemoveCard={handleRemoveCard}
-              widgetStyle={widgetStyle}
-              filteredWidgets={filteredWidgets}
-              handleToggleWidget={handleToggleWidget}
-              setVisibleMetricCards={setVisibleMetricCards}
-              archTransactions={archTransactions}
-              hideFinancials={hideFinancials}
-              setHideFinancials={setHideFinancials}
-              user={user}
-              liveDashboardData={liveDashboardData}
-              notifOpen={notifOpen}
-              setNotifOpen={setNotifOpen}
-              activeBusinessAlerts={activeBusinessAlerts}
-              onLogout={() => {
-                if (logout) logout()
-                navigate('/login')
-              }}
-              addDemoRecord={addDemoRecord}
-              widgetSearch={widgetSearch}
-              setWidgetSearch={setWidgetSearch}
-            />
+            {isInitialCloudLoading ? (
+              <DashboardOverviewSkeleton />
+            ) : (
+              <WorkspaceContentRouter
+                searchQuery={searchQuery}
+                activeArchId={activeArchId}
+                currentArch={currentArch}
+                activeModule={activeModule}
+                activePage={activePage}
+                handleArchSwitch={handleArchSwitch}
+                handleModuleClick={handleModuleClick}
+                navigateToModulePage={navigateToModulePage}
+                setActiveModule={setActiveModule}
+                setActivePage={setActivePage}
+                availableWidgets={AVAILABLE_WIDGETS}
+                isCardVisible={isCardVisible}
+                handleRemoveCard={handleRemoveCard}
+                widgetStyle={widgetStyle}
+                filteredWidgets={filteredWidgets}
+                handleToggleWidget={handleToggleWidget}
+                setVisibleMetricCards={setVisibleMetricCards}
+                archTransactions={archTransactions}
+                hideFinancials={hideFinancials}
+                setHideFinancials={setHideFinancials}
+                user={user}
+                liveDashboardData={liveDashboardData}
+                notifOpen={notifOpen}
+                setNotifOpen={setNotifOpen}
+                activeBusinessAlerts={activeBusinessAlerts}
+                onLogout={() => {
+                  if (logout) logout()
+                  navigate('/login')
+                }}
+                addDemoRecord={addDemoRecord}
+                widgetSearch={widgetSearch}
+                setWidgetSearch={setWidgetSearch}
+              />
+            )}
           </div>
         </main>
       </div>

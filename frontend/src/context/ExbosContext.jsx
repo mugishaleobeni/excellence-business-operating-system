@@ -903,6 +903,7 @@ export function ExbosProvider({ children }) {
     }))
   }
 
+  const [isInitialCloudLoading, setIsInitialCloudLoading] = useState(false)
   const isHydratedRef = useRef(false)
   const isFetchingCloudRef = useRef(false)
   const lastPostedHashRef = useRef('')
@@ -985,12 +986,17 @@ export function ExbosProvider({ children }) {
     setExportHistory([])
 
     const fetchAndSyncCloud = (isInitial = false) => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        if (isInitial && isMounted) setIsInitialCloudLoading(false)
+        return
+      }
       // Do not fetch tenant workspaces or transactions when no authenticated user scope is active
       if (!effectiveScope) {
         isHydratedRef.current = false
+        if (isInitial && isMounted) setIsInitialCloudLoading(false)
         return
       }
+      if (isInitial && isMounted) setIsInitialCloudLoading(true)
       // Avoid racing right in the middle of a local mutation (within 2.5s)
       if (!isInitial && Date.now() - lastMutationTsRef.current < 2500) return
 
@@ -1092,6 +1098,7 @@ export function ExbosProvider({ children }) {
         .finally(() => {
           if (isMounted) {
             isHydratedRef.current = true
+            if (isInitial) setIsInitialCloudLoading(false)
             setTimeout(() => {
               isFetchingCloudRef.current = false
             }, 150)
@@ -2571,6 +2578,7 @@ export function ExbosProvider({ children }) {
         setHideFinancials,
         toasts,
         addToast,
+        isInitialCloudLoading,
         removeToast,
         isOnline,
         dbConnected,
