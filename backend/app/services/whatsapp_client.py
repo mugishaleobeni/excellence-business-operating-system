@@ -259,6 +259,7 @@ def send_whatsapp_message(
     db: Any = None,
     metadata: Optional[dict[str, Any]] = None,
     force_template: bool = False,
+    is_inbound_reply: bool = False,
 ) -> dict[str, Any]:
     """
     Send a WhatsApp text/template message via Meta WhatsApp Cloud API with Hybrid Sandbox awareness:
@@ -302,9 +303,16 @@ def send_whatsapp_message(
         result["error"] = "Missing destination phone number."
         return result
 
-    # Hybrid Sandbox Guard: if in sandbox mode and recipient is not registered in Meta's test list,
-    # return clean wa.me fallback rather than failing with Meta #131030.
-    if mode == "sandbox" and registered_phones and not is_registered:
+    # Hybrid Sandbox Guard: only pre-flight fallback for COLD outbound messages in sandbox mode
+    # when the recipient has no open 24h session window. Inbound replies ALWAYS attempt live Meta delivery!
+    should_preflight_sandbox_fallback = (
+        mode == "sandbox"
+        and registered_phones
+        and not is_registered
+        and not is_inbound_reply
+        and not window_info["sessionWindowOpen"]
+    )
+    if should_preflight_sandbox_fallback:
         result["status"] = "sandbox_fallback_wa_me"
         result["note"] = (
             "Sandbox Mode: This number is not in your Meta Registered Recipients list yet. "

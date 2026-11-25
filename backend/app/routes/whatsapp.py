@@ -173,6 +173,7 @@ def receive_meta_webhook():
                         engine_res["reply"],
                         db=db,
                         metadata={"action": engine_res.get("action")},
+                        is_inbound_reply=True,
                     )
                     processed.append({
                         "from": normalize_phone(from_phone),
