@@ -7,6 +7,12 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.seed_defaults import create_empty_record_buckets, get_default_workspaces
+from app.services.catalog_sync import (
+    mirror_product_to_products_collection,
+    mirror_record_to_module_records,
+    sync_catalog_product_delete,
+    sync_catalog_product_update,
+)
 from app.services.whatsapp_client import (
     ARCH_LABELS,
     build_welcome_message,
@@ -175,6 +181,21 @@ def _append_record_and_tx(
         {"$set": {"records": records, "metrics": metrics, "updated_at": now_iso}},
         upsert=True,
     )
+
+    # Mirror EVERY WhatsApp record (Sales, Purchases, Expenses, Products, Customers) into canonical collections
+    # so Web Frontend and WhatsApp share 100% of the exact same MongoDB collections!
+    mirror_record_to_module_records(db, scope_key, arch_id, module_name, entry, now_iso)
+    if module_name in ("Products", "Inventory", "RawMaterials", "Services", "MenuItems", "HybridItems"):
+        mirror_product_to_products_collection(db, scope_key, arch_id, entry, now_iso)
+        if module_name == "Products":
+            inv_list = list(records.get("Inventory") or [])
+            inv_list = [entry] + [r for r in inv_list if str(r.get("id")) != rec_id]
+            records["Inventory"] = inv_list
+            db.workspaces.update_one(
+                {"scopeKey": scope_key, "architectureId": arch_id},
+                {"$set": {"records.Inventory": inv_list, "updated_at": now_iso}},
+            )
+            mirror_record_to_module_records(db, scope_key, arch_id, "Inventory", entry, now_iso)
 
     if tx_type and tx_amount > 0:
         tx_id = f"TX-{int(time.time() * 1000) % 10000000}"
@@ -598,40 +619,23 @@ def _adjust_product_stock(
     new_unit_cost: Optional[float] = None,
     branch_id: Optional[str] = None,
 ) -> Optional[float]:
-    """Update product stock quantity in workspaces.records after a confirmed Sale or Purchase."""
+    """Update product stock quantity across ALL catalog buckets + db.products + db.module_records."""
     if not product_id or db is None:
         return None
-    ws = _get_or_init_workspace(db, scope_key, arch_id)
-    records = ws.get("records") or {}
-    buckets = ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]
-    updated_qty: Optional[float] = None
-
-    for bucket in buckets:
-        items = list(records.get(bucket) or [])
-        changed = False
-        for idx, item in enumerate(items):
-            if str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id):
-                cur_q = float(item.get("quantity") if item.get("quantity") is not None else item.get("currentStock") or 0)
-                next_q = max(0.0, cur_q + float(delta_qty))
-                next_item = dict(item)
-                next_item["quantity"] = int(next_q) if next_q.is_integer() else round(next_q, 2)
-                next_item["currentStock"] = next_item["quantity"]
-                if new_unit_cost is not None and new_unit_cost > 0:
-                    next_item["purchasePriceRWF"] = new_unit_cost
-                    next_item["unitCostRWF"] = new_unit_cost
-                items[idx] = next_item
-                updated_qty = next_q
-                changed = True
-                break
-        if changed:
-            records[bucket] = items
-            db.workspaces.update_one(
-                {"scopeKey": scope_key, "architectureId": arch_id},
-                {"$set": {"records": records, "updated_at": datetime.now(timezone.utc).isoformat()}},
-            )
-            break
-
-    return updated_qty
+    updates: dict[str, Any] = {"deltaQty": float(delta_qty)}
+    if new_unit_cost is not None and new_unit_cost > 0:
+        updates["costPriceRWF"] = float(new_unit_cost)
+    updated = sync_catalog_product_update(
+        db,
+        scope_key,
+        arch_id,
+        product_id=str(product_id),
+        updates=updates,
+        branch_id=branch_id,
+    )
+    if not updated:
+        return None
+    return float(updated.get("quantity") or 0)
 
 
 def _update_catalog_product(
@@ -643,50 +647,16 @@ def _update_catalog_product(
     updates: dict[str, Any],
     branch_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
-    """Update a product's name, prices, or stock quantity in workspaces.records."""
-    if not product_id or db is None:
-        return None
-    ws = _get_or_init_workspace(db, scope_key, arch_id)
-    records = ws.get("records") or {}
-    buckets_to_check = [bucket] if bucket else []
-    for b in ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]:
-        if b not in buckets_to_check:
-            buckets_to_check.append(b)
-
-    updated_item: Optional[dict[str, Any]] = None
-    for b in buckets_to_check:
-        items = list(records.get(b) or [])
-        changed = False
-        for idx, item in enumerate(items):
-            if str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id):
-                next_item = dict(item)
-                if "name" in updates:
-                    next_item["title"] = updates["name"]
-                    next_item["name"] = updates["name"]
-                if "sellingPriceRWF" in updates:
-                    next_item["sellingPriceRWF"] = float(updates["sellingPriceRWF"])
-                    next_item["amountRWF"] = float(updates["sellingPriceRWF"])
-                if "costPriceRWF" in updates:
-                    next_item["purchasePriceRWF"] = float(updates["costPriceRWF"])
-                    next_item["unitCostRWF"] = float(updates["costPriceRWF"])
-                if "quantity" in updates:
-                    q = float(updates["quantity"])
-                    q_clean = int(q) if q.is_integer() else round(q, 2)
-                    next_item["quantity"] = q_clean
-                    next_item["currentStock"] = q_clean
-                next_item["updated_at"] = datetime.now(timezone.utc).isoformat()
-                items[idx] = next_item
-                updated_item = next_item
-                changed = True
-                break
-        if changed:
-            records[b] = items
-            db.workspaces.update_one(
-                {"scopeKey": scope_key, "architectureId": arch_id},
-                {"$set": {"records": records, "updated_at": datetime.now(timezone.utc).isoformat()}},
-            )
-            break
-    return updated_item
+    """Update a product across ALL catalog buckets (Products + Inventory) + db.products + db.module_records."""
+    return sync_catalog_product_update(
+        db,
+        scope_key,
+        arch_id,
+        product_id=str(product_id),
+        updates=updates,
+        branch_id=branch_id,
+        primary_bucket=bucket,
+    )
 
 
 def _delete_catalog_product(
@@ -697,32 +667,15 @@ def _delete_catalog_product(
     bucket: str = "",
     branch_id: Optional[str] = None,
 ) -> bool:
-    """Permanently delete a product from workspaces.records."""
-    if not product_id or db is None:
-        return False
-    ws = _get_or_init_workspace(db, scope_key, arch_id)
-    records = ws.get("records") or {}
-    buckets_to_check = [bucket] if bucket else []
-    for b in ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]:
-        if b not in buckets_to_check:
-            buckets_to_check.append(b)
-
-    removed = False
-    for b in buckets_to_check:
-        items = list(records.get(b) or [])
-        filtered = [
-            item for item in items
-            if not (str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id))
-        ]
-        if len(filtered) != len(items):
-            records[b] = filtered
-            removed = True
-    if removed:
-        db.workspaces.update_one(
-            {"scopeKey": scope_key, "architectureId": arch_id},
-            {"$set": {"records": records, "updated_at": datetime.now(timezone.utc).isoformat()}},
-        )
-    return removed
+    """Permanently delete a product across ALL catalog buckets + db.products + db.module_records."""
+    return sync_catalog_product_delete(
+        db,
+        scope_key,
+        arch_id,
+        product_id=str(product_id),
+        branch_id=branch_id,
+        primary_bucket=bucket,
+    )
 
 
 def _t(lang: str, en: str, rw: str) -> str:
@@ -928,20 +881,46 @@ def _expense_verification_rows(step_data: dict[str, Any], lang: str = "en") -> l
     ]
 
 
+def _format_profit_margin_row(sell: float, cost: float, lang: str = "en") -> tuple[str, str]:
+    """Compute frontend-parity unit profit, margin %, and explicit LOSS WARNING when cost > selling."""
+    profit = sell - cost
+    margin = round((profit / sell) * 100, 1) if sell > 0 else 0.0
+    is_rw = str(lang or "en").lower() in ("rw", "kin", "kinyarwanda")
+    if profit < 0:
+        loss_abs = _fmt_rwf(abs(profit))
+        if is_rw:
+            return (
+                "UMUBURO W'IGIHOMBO",
+                f"-{loss_abs} kuri kimwe (Irangura riruta kugurisha! Subiza HINDURA ukosore)",
+            )
+        return (
+            "WARNING (LOSS PER UNIT)",
+            f"-{loss_abs} ({margin}%) — Cost exceeds Selling Price! Reply EDIT to fix",
+        )
+    if is_rw:
+        return ("Inyungu kuri Kimwe", f"+{_fmt_rwf(profit)} ({margin}%)")
+    return ("Expected Unit Profit", f"+{_fmt_rwf(profit)} ({margin}% margin)")
+
+
 def _product_verification_rows(step_data: dict[str, Any], lang: str = "en") -> list[tuple[str, str]]:
     qty = float(step_data.get("quantity") or 0)
     qty_disp = int(qty) if qty.is_integer() else qty
+    sell = float(step_data.get("sellingPriceRWF") or 0)
+    cost = float(step_data.get("costPriceRWF") or 0)
+    profit_row = _format_profit_margin_row(sell, cost, lang)
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
         return [
             ("Izina ry'Igicuruzwa", str(step_data.get("name") or "")),
-            ("Igiciro cyo Kugurisha", _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
-            ("Igiciro cy'Irangura", _fmt_rwf(step_data.get("costPriceRWF") or 0)),
+            ("Igiciro cyo Kugurisha", _fmt_rwf(sell)),
+            ("Igiciro cy'Irangura", _fmt_rwf(cost)),
+            profit_row,
             ("Ububiko bw'Itangiriro", f"{qty_disp}"),
         ]
     return [
         ("Product Name", str(step_data.get("name") or "")),
-        ("Selling Price", _fmt_rwf(step_data.get("sellingPriceRWF") or 0)),
-        ("Cost Price", _fmt_rwf(step_data.get("costPriceRWF") or 0)),
+        ("Selling Price", _fmt_rwf(sell)),
+        ("Cost Price", _fmt_rwf(cost)),
+        profit_row,
         ("Opening Stock", f"{qty_disp} unit(s)"),
     ]
 
@@ -2236,6 +2215,7 @@ def handle_incoming_whatsapp_message(
         step_data["editField"] = "sellingPriceRWF"
         step_data["newValue"] = val
         set_session("confirm_product_edit", step_data)
+        profit_row = _format_profit_margin_row(val, float(step_data.get("costPriceRWF") or 0), lang)
         return {
             "reply": _format_verification_card(
                 "UPDATE SELLING PRICE",
@@ -2243,6 +2223,7 @@ def handle_incoming_whatsapp_message(
                     (_t(lang, "Product", "Igicuruzwa"), str(step_data["productTitle"])),
                     (_t(lang, "Old Selling Price", "Igiciro Cya Kera"), _fmt_rwf(step_data["sellingPriceRWF"])),
                     (_t(lang, "New Selling Price", "Igiciro Gishya"), _fmt_rwf(val)),
+                    profit_row,
                 ],
                 lang=lang,
                 title_rw="HINDURA IGICIRO CYO KUGURISHA",
@@ -2260,6 +2241,7 @@ def handle_incoming_whatsapp_message(
         step_data["editField"] = "costPriceRWF"
         step_data["newValue"] = val
         set_session("confirm_product_edit", step_data)
+        profit_row = _format_profit_margin_row(float(step_data.get("sellingPriceRWF") or 0), val, lang)
         return {
             "reply": _format_verification_card(
                 "UPDATE COST PRICE",
@@ -2267,6 +2249,7 @@ def handle_incoming_whatsapp_message(
                     (_t(lang, "Product", "Igicuruzwa"), str(step_data["productTitle"])),
                     (_t(lang, "Old Cost Price", "Igiciro Cya Kera"), _fmt_rwf(step_data["costPriceRWF"])),
                     (_t(lang, "New Cost Price", "Igiciro Gishya"), _fmt_rwf(val)),
+                    profit_row,
                 ],
                 lang=lang,
                 title_rw="HINDURA IGICIRO CY'IRANGURA",

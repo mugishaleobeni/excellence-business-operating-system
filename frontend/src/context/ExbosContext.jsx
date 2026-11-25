@@ -914,7 +914,6 @@ export function ExbosProvider({ children }) {
       const nextRecords = {}
 
       allBuckets.forEach((bName) => {
-        const localArr = Array.isArray(lRecs[bName]) ? lRecs[bName] : []
         const serverArr = Array.isArray(sRecs[bName]) ? sRecs[bName] : []
         const extraProductArr =
           bName === 'Inventory'
@@ -926,7 +925,9 @@ export function ExbosProvider({ children }) {
             : []
         const seen = new Set()
         const combined = []
-        for (const item of [...localArr, ...serverArr, ...extraProductArr]) {
+        // Server (MongoDB Atlas) is the single source of truth so updates & deletes from WhatsApp
+        // or other devices reflect immediately without requiring a page refresh.
+        for (const item of [...serverArr, ...extraProductArr]) {
           if (!item || typeof item !== 'object') continue
           const idStr = String(item.id || '')
           if (!idStr || seen.has(idStr) || deletedIds.has(idStr)) continue
@@ -1024,13 +1025,9 @@ export function ExbosProvider({ children }) {
               )
             )
             setTransactions((prev) => {
-              if (isInitial) {
-                if (JSON.stringify(prev) === JSON.stringify(serverTxs)) return prev
-                return serverTxs
-              }
               const seen = new Set()
               const out = []
-              for (const tx of [...prev, ...serverTxs]) {
+              for (const tx of serverTxs) {
                 if (!tx || !tx.id) continue
                 if (tx.scopeKey && String(tx.scopeKey).toLowerCase() !== effectiveScope) continue
                 const tid = String(tx.id)

@@ -1291,7 +1291,7 @@ export default function SuperAdminPage() {
                           <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] text-[#9EDCFF] font-semibold">
                             {s.plan}
                           </span>
-                          {!s.isSuperAdmin && String(s.email || '').toLowerCase() !== String(user?.email || '').toLowerCase() && (
+                          {!s.isSuperAdmin && String(s.email || '').toLowerCase() !== String(currentUser?.email || '').toLowerCase() && (
                             <button
                               type="button"
                               disabled={isBusy(`delete:${s.email}`)}
