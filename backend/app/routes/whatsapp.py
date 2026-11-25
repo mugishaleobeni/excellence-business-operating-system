@@ -293,9 +293,12 @@ def list_unpaid_customers():
     if not user_doc:
         return error_response("User workspace not found.", status_code=404)
 
-    scope_key = user_doc.get("email", "").strip().lower()
+    scope_key = (user_doc.get("ownerScopeKey") or user_doc.get("email") or "").strip().lower()
     arch_id = request.args.get("archId") or user_doc.get("architectureId") or "buy-and-sell"
-    items = get_unpaid_customers_summary(db, scope_key, arch_id)
+    role_str = str(user_doc.get("role") or "").strip().lower()
+    assigned_branch = str(user_doc.get("assignedBranchId") or "").strip()
+    branch_filter = assigned_branch if (role_str == "branch manager" or (assigned_branch and assigned_branch != "main")) else None
+    items = get_unpaid_customers_summary(db, scope_key, arch_id, branch_id=branch_filter)
     return success_response(
         data={"unpaid": items, "count": len(items)},
         message="Unpaid customers fetched.",

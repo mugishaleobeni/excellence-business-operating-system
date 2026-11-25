@@ -210,18 +210,38 @@ def _load_or_init_workspace(
     return serialize_doc(new_doc)
 
 
+def _filter_workspace_for_branch_manager(ws: dict, is_manager: bool, assigned_branch_id: str) -> dict:
+    """Strictly isolate workspace records so a Branch Manager never receives Main HQ or other branches' data."""
+    if not is_manager or not assigned_branch_id or assigned_branch_id == "main":
+        return ws
+    records = ws.get("records")
+    if not isinstance(records, dict):
+        return ws
+    filtered_records = {}
+    for bucket, items in records.items():
+        if isinstance(items, list):
+            filtered_records[bucket] = [
+                rec for rec in items
+                if isinstance(rec, dict) and str(rec.get("branchId") or "main").strip() == assigned_branch_id
+            ]
+        else:
+            filtered_records[bucket] = items
+    return {**ws, "records": filtered_records}
+
+
 @workspaces_bp.route("", methods=["GET"])
 @workspaces_bp.route("/", methods=["GET"])
 def list_workspaces():
     """Return all 6 architecture workspaces without inserting empty unused workspaces."""
     db = get_db()
     scope_key = _resolve_scope_key(db)
+    _, is_manager, effective_branch_id, _ = _resolve_actor_and_branch(db, scope_key)
     result = {}
     for arch_id in ARCHITECTURE_IDS:
         ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
         ws.pop("_id", None)
         ws.pop("scopeKey", None)
-        result[arch_id] = ws
+        result[arch_id] = _filter_workspace_for_branch_manager(ws, is_manager, effective_branch_id)
     return success_response(data=result)
 
 
@@ -235,9 +255,11 @@ def get_workspace(arch_id: str):
         )
     db = get_db()
     scope_key = _resolve_scope_key(db)
+    _, is_manager, effective_branch_id, _ = _resolve_actor_and_branch(db, scope_key)
     ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
     ws.pop("_id", None)
     ws.pop("scopeKey", None)
+    ws = _filter_workspace_for_branch_manager(ws, is_manager, effective_branch_id)
     return success_response(data=ws)
 
 

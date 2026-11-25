@@ -1060,7 +1060,7 @@ def transfer_branch_stock(branch_id: str):
 
 @branches_bp.route("/<branch_id>", methods=["DELETE"])
 def delete_branch(branch_id: str):
-    """Delete a sub-branch (Main HQ branch is protected)."""
+    """Permanently delete a sub-branch and cascade-delete ALL data belonging to that branch."""
     db = get_db()
     scope_key, user_doc = _resolve_scope_and_user(db)
     if _is_branch_manager(user_doc):
@@ -1072,7 +1072,69 @@ def delete_branch(branch_id: str):
     if res.deleted_count == 0:
         return error_response("Branch not found.", status_code=404)
 
-    return success_response(data={"deletedId": branch_id}, message="Branch deleted.")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    removed_workspace_records = 0
+
+    # 1. Remove every record belonging to this branch across all workspace buckets
+    for ws in db.workspaces.find({"scopeKey": scope_key}):
+        records = ws.get("records") or {}
+        changed = False
+        new_records = {}
+        for bucket_name, bucket_items in records.items():
+            if not isinstance(bucket_items, list):
+                new_records[bucket_name] = bucket_items
+                continue
+            kept = [
+                rec for rec in bucket_items
+                if not (isinstance(rec, dict) and str(rec.get("branchId") or "main").strip() == branch_id)
+            ]
+            diff = len(bucket_items) - len(kept)
+            if diff > 0:
+                removed_workspace_records += diff
+                changed = True
+            new_records[bucket_name] = kept
+        if changed:
+            db.workspaces.update_one(
+                {"_id": ws["_id"]},
+                {"$set": {"records": new_records, "updated_at": now_iso}},
+            )
+
+    # 2. Delete all branch transactions, module_records, and mirrored products
+    tx_res = db.transactions.delete_many({"scopeKey": scope_key, "branchId": branch_id})
+    mod_res = db.module_records.delete_many({"scopeKey": scope_key, "branchId": branch_id})
+    prod_res = db.products.delete_many({"scopeKey": scope_key, "branchId": branch_id})
+
+    # 3. Delete branch manager user accounts, their integrations, and WhatsApp sessions
+    from app.services.whatsapp_client import normalize_phone
+    branch_managers = list(
+        db.users.find({"ownerScopeKey": scope_key, "assignedBranchId": branch_id}, {"_id": 0, "email": 1, "phone": 1})
+    )
+    for mgr in branch_managers:
+        m_email = str(mgr.get("email") or "").strip().lower()
+        m_phone = normalize_phone(mgr.get("phone") or "")
+        if m_email:
+            db.integrations.delete_many({"userEmail": m_email})
+        if m_phone:
+            db.whatsapp_sessions.delete_many({"phone": m_phone})
+            db.whatsapp_window_sessions.delete_many({"phone": m_phone})
+    mgr_res = db.users.delete_many({"ownerScopeKey": scope_key, "assignedBranchId": branch_id})
+
+    # 4. Delete pending branch manager invites and branch notifications
+    inv_res = db.branch_invites.delete_many({"scopeKey": scope_key, "branchId": branch_id})
+    db.owner_notifications.delete_many({"scopeKey": scope_key, "branchId": branch_id})
+
+    return success_response(
+        data={
+            "deletedId": branch_id,
+            "removedWorkspaceRecords": removed_workspace_records,
+            "removedTransactions": tx_res.deleted_count,
+            "removedModuleRecords": mod_res.deleted_count,
+            "removedProducts": prod_res.deleted_count,
+            "removedManagers": mgr_res.deleted_count,
+            "removedInvites": inv_res.deleted_count,
+        },
+        message="Branch and all associated branch data permanently deleted.",
+    )
 
 
 @branches_bp.route("/analytics", methods=["GET"])
@@ -1116,12 +1178,16 @@ def branch_analytics():
     # Daily heatmap aggregator (date -> {count, revenueRWF, byBranch})
     daily_map: dict[str, dict] = defaultdict(lambda: {"count": 0, "revenueRWF": 0.0})
 
-    def _b_id(rec: dict) -> str:
-        raw = rec.get("branchId") or "main"
-        return raw if raw in branch_stats else "main"
+    def _b_id(rec: dict) -> str | None:
+        raw = str(rec.get("branchId") or "main").strip()
+        if raw in branch_stats:
+            return raw
+        return None
 
     for s in sales_list:
         bid = _b_id(s)
+        if not bid:
+            continue
         amt = float(s.get("amountRWF") or s.get("totalAmount") or 0)
         branch_stats[bid]["revenueRWF"] += amt
         branch_stats[bid]["salesCount"] += 1
@@ -1132,6 +1198,8 @@ def branch_analytics():
 
     for p in purchases_list:
         bid = _b_id(p)
+        if not bid:
+            continue
         amt = float(p.get("amountRWF") or 0)
         branch_stats[bid]["purchasesRWF"] += amt
         d_str = str(p.get("date") or "")[:10]
@@ -1140,6 +1208,8 @@ def branch_analytics():
 
     for e in expenses_list:
         bid = _b_id(e)
+        if not bid:
+            continue
         amt = float(e.get("amountRWF") or 0)
         branch_stats[bid]["expensesRWF"] += amt
         d_str = str(e.get("date") or "")[:10]
@@ -1148,6 +1218,8 @@ def branch_analytics():
 
     for prod in products_list:
         bid = _b_id(prod)
+        if not bid:
+            continue
         branch_stats[bid]["productsCount"] += 1
 
     perf_list = []

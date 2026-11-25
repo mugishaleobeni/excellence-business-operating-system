@@ -1,4 +1,5 @@
 import difflib
+from functools import partial
 import logging
 import re
 import time
@@ -96,13 +97,24 @@ def _get_or_init_workspace(db: Any, scope_key: str, arch_id: str, business_name:
     return ws
 
 
-def _catalog_items(ws: dict[str, Any], arch_id: str) -> list[dict[str, Any]]:
+def _matches_branch(rec: Any, branch_id: Optional[str]) -> bool:
+    """Return True if a record belongs to the requested branch (or if no branch restriction applies)."""
+    if not branch_id:
+        return True
+    if not isinstance(rec, dict):
+        return False
+    return str(rec.get("branchId") or "main").strip() == str(branch_id).strip()
+
+
+def _catalog_items(ws: dict[str, Any], arch_id: str, branch_id: Optional[str] = None) -> list[dict[str, Any]]:
     records = ws.get("records") or {}
     buckets = ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])["catalog"]
     seen: set[str] = set()
     items: list[dict[str, Any]] = []
     for b in buckets:
         for item in records.get(b) or []:
+            if not _matches_branch(item, branch_id):
+                continue
             item_id = str(item.get("id") or "")
             if item_id and item_id in seen:
                 continue
@@ -122,18 +134,22 @@ def _append_record_and_tx(
     tx_amount: float = 0.0,
     tx_title: str = "",
     tx_category: str = "",
+    branch_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """Insert a record into workspaces.records[module_name] and sync 1 canonical transaction."""
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     today_str = now.strftime("%Y-%m-%d")
     rec_id = str(record.get("id") or f"{module_name[:3].upper()}-{int(time.time() * 1000) % 1000000}")
+    effective_branch = str(branch_id or record.get("branchId") or "main").strip()
     entry = {
         "id": rec_id,
         "date": today_str,
         "source": "WhatsApp",
+        "branchId": effective_branch,
         **record,
     }
+    entry["branchId"] = effective_branch
 
     ws = _get_or_init_workspace(db, scope_key, arch_id)
     records = ws.get("records") or {}
@@ -166,6 +182,7 @@ def _append_record_and_tx(
             "id": tx_id,
             "scopeKey": scope_key,
             "architectureId": arch_id,
+            "branchId": effective_branch,
             "recordId": rec_id,
             "sourceModule": module_name,
             "title": tx_title or entry.get("title") or module_name,
@@ -186,7 +203,12 @@ def _append_record_and_tx(
     return entry
 
 
-def get_unpaid_customers_summary(db: Any, scope_key: str, arch_id: str) -> list[dict[str, Any]]:
+def get_unpaid_customers_summary(
+    db: Any,
+    scope_key: str,
+    arch_id: str,
+    branch_id: Optional[str] = None,
+) -> list[dict[str, Any]]:
     """
     Collect all unpaid / part-paid sales and customer debt records, including
     products bought, amount paid, and remaining balance owed.
@@ -196,7 +218,7 @@ def get_unpaid_customers_summary(db: Any, scope_key: str, arch_id: str) -> list[
     buckets = ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])
     sales_bucket = buckets["sales"]
 
-    customers = list(records.get("Customers") or [])
+    customers = [c for c in (records.get("Customers") or []) if _matches_branch(c, branch_id)]
     customer_phone_by_name = {}
     for c in customers:
         cname = str(c.get("title") or c.get("name") or "").strip().lower()
@@ -209,6 +231,8 @@ def get_unpaid_customers_summary(db: Any, scope_key: str, arch_id: str) -> list[
 
     # 1. Unpaid / Part-paid sales records (primary source with exact products bought)
     for s in list(records.get(sales_bucket) or []) + list(records.get("Sales") or []):
+        if not _matches_branch(s, branch_id):
+            continue
         sid = str(s.get("id") or "")
         if not sid or sid in seen_ids:
             continue
@@ -289,12 +313,13 @@ def send_debt_reminders(
     arch_id: str,
     target_id: Optional[str] = None,
     business_name: str = "ExBOS Business",
+    branch_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Send WhatsApp debt reminders showing products bought, amount paid, and remaining balance.
     If target_id is None or 'ALL', sends to all unpaid customers with a valid phone number.
     """
-    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
+    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id, branch_id=branch_id)
     if target_id and str(target_id).upper() != "ALL":
         t_low = str(target_id).strip().lower()
         unpaid = [
@@ -357,6 +382,7 @@ def verify_customer_payment(
     amount: Optional[float] = None,
     payment_method: str = "MoMo / Cash",
     source: str = "Dashboard",
+    branch_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Business owner verifies that an unpaid customer has paid.
@@ -365,7 +391,7 @@ def verify_customer_payment(
     """
     ws = _get_or_init_workspace(db, scope_key, arch_id)
     records = ws.get("records") or {}
-    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
+    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id, branch_id=branch_id)
     t_low = str(target_id).strip().lower()
     match = next(
         (u for u in unpaid if str(u["id"]).lower() == t_low or t_low in u["customerName"].lower()),
@@ -477,18 +503,26 @@ def verify_customer_payment(
     }
 
 
-def _build_report_text(db: Any, scope_key: str, arch_id: str, business_name: str) -> str:
+def _build_report_text(
+    db: Any,
+    scope_key: str,
+    arch_id: str,
+    business_name: str,
+    branch_id: Optional[str] = None,
+    hide_profit: bool = False,
+) -> str:
     ws = _get_or_init_workspace(db, scope_key, arch_id, business_name)
     records = ws.get("records") or {}
     buckets = ARCH_BUCKETS.get(arch_id, ARCH_BUCKETS["buy-and-sell"])
 
-    sales_list = list(records.get(buckets["sales"]) or []) + (
+    sales_raw = list(records.get(buckets["sales"]) or []) + (
         list(records.get("Sales") or []) if buckets["sales"] != "Sales" else []
     )
-    purchases_list = list(records.get(buckets["purchases"]) or [])
-    expenses_list = list(records.get(buckets["expenses"]) or [])
-    catalog = _catalog_items(ws, arch_id)
-    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id)
+    sales_list = [s for s in sales_raw if _matches_branch(s, branch_id)]
+    purchases_list = [p for p in (records.get(buckets["purchases"]) or []) if _matches_branch(p, branch_id)]
+    expenses_list = [e for e in (records.get(buckets["expenses"]) or []) if _matches_branch(e, branch_id)]
+    catalog = _catalog_items(ws, arch_id, branch_id=branch_id)
+    unpaid = get_unpaid_customers_summary(db, scope_key, arch_id, branch_id=branch_id)
 
     total_sales = sum(float(s.get("amountRWF") or s.get("totalAmount") or 0) for s in sales_list)
     total_purchases = sum(float(p.get("amountRWF") or 0) for p in purchases_list)
@@ -500,6 +534,7 @@ def _build_report_text(db: Any, scope_key: str, arch_id: str, business_name: str
         for i in catalog
     )
     total_owed = sum(u["remainingAmountRWF"] for u in unpaid)
+    profit_line = "" if hide_profit else f"- *Net Profit:* *{_fmt_rwf(net_profit)}*\n"
 
     return (
         f"*{business_name} — Live Business Report*\n"
@@ -507,7 +542,7 @@ def _build_report_text(db: Any, scope_key: str, arch_id: str, business_name: str
         f"- *Total Sales:* {_fmt_rwf(total_sales)} ({len(sales_list)} records)\n"
         f"- *Total Purchases:* {_fmt_rwf(total_purchases)} ({len(purchases_list)} records)\n"
         f"- *Total Expenses:* {_fmt_rwf(total_expenses)} ({len(expenses_list)} records)\n"
-        f"- *Net Profit:* *{_fmt_rwf(net_profit)}*\n"
+        f"{profit_line}"
         f"- *Catalog Items:* {len(catalog)} (Est. Value: {_fmt_rwf(stock_val)})\n"
         f"- *Unpaid Customers:* {len(unpaid)} (Total Owed: {_fmt_rwf(total_owed)})\n\n"
         "Reply *0* for Menu or *6* to manage Unpaid Customers."
@@ -561,6 +596,7 @@ def _adjust_product_stock(
     product_id: Optional[str],
     delta_qty: float,
     new_unit_cost: Optional[float] = None,
+    branch_id: Optional[str] = None,
 ) -> Optional[float]:
     """Update product stock quantity in workspaces.records after a confirmed Sale or Purchase."""
     if not product_id or db is None:
@@ -574,7 +610,7 @@ def _adjust_product_stock(
         items = list(records.get(bucket) or [])
         changed = False
         for idx, item in enumerate(items):
-            if str(item.get("id") or "") == str(product_id):
+            if str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id):
                 cur_q = float(item.get("quantity") if item.get("quantity") is not None else item.get("currentStock") or 0)
                 next_q = max(0.0, cur_q + float(delta_qty))
                 next_item = dict(item)
@@ -605,6 +641,7 @@ def _update_catalog_product(
     product_id: str,
     bucket: str,
     updates: dict[str, Any],
+    branch_id: Optional[str] = None,
 ) -> Optional[dict[str, Any]]:
     """Update a product's name, prices, or stock quantity in workspaces.records."""
     if not product_id or db is None:
@@ -621,7 +658,7 @@ def _update_catalog_product(
         items = list(records.get(b) or [])
         changed = False
         for idx, item in enumerate(items):
-            if str(item.get("id") or "") == str(product_id):
+            if str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id):
                 next_item = dict(item)
                 if "name" in updates:
                     next_item["title"] = updates["name"]
@@ -658,6 +695,7 @@ def _delete_catalog_product(
     arch_id: str,
     product_id: str,
     bucket: str = "",
+    branch_id: Optional[str] = None,
 ) -> bool:
     """Permanently delete a product from workspaces.records."""
     if not product_id or db is None:
@@ -672,7 +710,10 @@ def _delete_catalog_product(
     removed = False
     for b in buckets_to_check:
         items = list(records.get(b) or [])
-        filtered = [item for item in items if str(item.get("id") or "") != str(product_id)]
+        filtered = [
+            item for item in items
+            if not (str(item.get("id") or "") == str(product_id) and _matches_branch(item, branch_id))
+        ]
         if len(filtered) != len(items):
             records[b] = filtered
             removed = True
@@ -741,6 +782,7 @@ def _save_customer_phone_on_record(
     bucket: str,
     customer_name: str,
     phone: str,
+    branch_id: Optional[str] = None,
 ) -> str:
     """Persist a customer's WhatsApp phone number onto their Sale/Customer record and Customers directory."""
     normalized = normalize_phone(phone)
@@ -749,12 +791,13 @@ def _save_customer_phone_on_record(
     ws = _get_or_init_workspace(db, scope_key, arch_id)
     records = ws.get("records") or {}
     now_iso = datetime.now(timezone.utc).isoformat()
+    effective_branch = str(branch_id or "main").strip()
 
     # 1. Update matching sale/record in its bucket
     if bucket and record_id:
         bucket_list = list(records.get(bucket) or [])
         for idx, rec in enumerate(bucket_list):
-            if str(rec.get("id") or "") == str(record_id):
+            if str(rec.get("id") or "") == str(record_id) and _matches_branch(rec, branch_id):
                 upd = dict(rec)
                 if bucket == "Customers":
                     upd["phone"] = normalized
@@ -770,7 +813,7 @@ def _save_customer_phone_on_record(
     matched_cust = False
     if cname_low and cname_low != "walk-in client":
         for idx, c in enumerate(cust_list):
-            if str(c.get("title") or c.get("name") or "").strip().lower() == cname_low:
+            if str(c.get("title") or c.get("name") or "").strip().lower() == cname_low and _matches_branch(c, branch_id):
                 c_upd = dict(c)
                 c_upd["phone"] = normalized
                 cust_list[idx] = c_upd
@@ -782,6 +825,7 @@ def _save_customer_phone_on_record(
                 "title": customer_name,
                 "name": customer_name,
                 "phone": normalized,
+                "branchId": effective_branch,
                 "status": "Active",
                 "source": "WhatsApp",
                 "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -987,6 +1031,45 @@ def handle_incoming_whatsapp_message(
     if lang not in ("en", "rw"):
         lang = "rw" if lang in ("kin", "kinyarwanda") else "en"
 
+    # Strict Branch Manager Isolation: a Branch Manager ONLY sees & modifies their own branch's data
+    role_str = str(user_doc.get("role") or "").strip().lower()
+    assigned_branch_id = str(user_doc.get("assignedBranchId") or "").strip()
+    is_branch_manager = role_str == "branch manager" or (bool(assigned_branch_id) and assigned_branch_id != "main")
+    effective_branch_id: Optional[str] = assigned_branch_id if is_branch_manager and assigned_branch_id else None
+    branch_frozen = False
+    branch_perms: dict[str, Any] = {}
+    if is_branch_manager and effective_branch_id:
+        branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": effective_branch_id}, {"_id": 0})
+        if not branch_doc:
+            db.whatsapp_sessions.delete_one({"phone": normalized_phone})
+            return {
+                "reply": _t(
+                    lang,
+                    "Your assigned branch has been closed or deleted by the Business Owner. WhatsApp access for this branch is disabled.",
+                    "Ishami ryawe ryafunzwe cyangwa ryasibwe na nyir'ubucuruzi. Kwinjira kuri WhatsApp kuri iri shami byahagaritswe.",
+                ),
+                "action": "branch_deleted",
+            }
+        branch_name = str(branch_doc.get("name") or effective_branch_id).strip()
+        if branch_name and branch_name.lower() not in business_name.lower():
+            business_name = f"{business_name} ({branch_name})"
+        branch_frozen = str(branch_doc.get("status") or "Active").strip().lower() == "frozen"
+        branch_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
+
+    hide_profit = bool(is_branch_manager and not branch_perms.get("canViewProfitReports", False))
+
+    # Bind branch-scoped wrappers so EVERY read & write in this request is strictly isolated to effective_branch_id
+    _catalog_items = partial(globals()["_catalog_items"], branch_id=effective_branch_id)
+    _append_record_and_tx = partial(globals()["_append_record_and_tx"], branch_id=effective_branch_id or "main")
+    get_unpaid_customers_summary = partial(globals()["get_unpaid_customers_summary"], branch_id=effective_branch_id)
+    send_debt_reminders = partial(globals()["send_debt_reminders"], branch_id=effective_branch_id)
+    verify_customer_payment = partial(globals()["verify_customer_payment"], branch_id=effective_branch_id)
+    _build_report_text = partial(globals()["_build_report_text"], branch_id=effective_branch_id, hide_profit=hide_profit)
+    _adjust_product_stock = partial(globals()["_adjust_product_stock"], branch_id=effective_branch_id)
+    _update_catalog_product = partial(globals()["_update_catalog_product"], branch_id=effective_branch_id)
+    _delete_catalog_product = partial(globals()["_delete_catalog_product"], branch_id=effective_branch_id)
+    _save_customer_phone_on_record = partial(globals()["_save_customer_phone_on_record"], branch_id=effective_branch_id)
+
     def set_user_language(next_lang: str) -> str:
         clean_l = "rw" if str(next_lang).lower() in ("rw", "kin", "kinyarwanda", "2") else "en"
         if user_doc.get("email"):
@@ -1099,6 +1182,25 @@ def handle_incoming_whatsapp_message(
         return {
             "reply": build_welcome_message(business_name, arch_id, lang=lang, is_super_admin=is_sa),
             "action": "menu",
+        }
+
+    # Frozen Branch Guard: block any write commands/confirmations while branch is frozen by owner
+    if branch_frozen and (
+        upper_text in ("2", "3", "4", "8", "EDIT PRODUCT", "DELETE PRODUCT")
+        or upper_text.startswith(("SALE ", "PURCHASE ", "EXPENSE ", "ADD PRODUCT "))
+        or current_step in (
+            "confirm_sale", "confirm_purchase", "confirm_expense",
+            "confirm_product", "confirm_product_edit", "confirm_product_delete",
+        )
+    ):
+        set_session(None)
+        return {
+            "reply": _t(
+                lang,
+                "This branch is currently *FROZEN* by the Business Owner. Recording, editing, or deleting items is temporarily disabled.",
+                "Iri shami rirafunzwe by'agateganyo (*FROZEN*) na nyir'ubucuruzi. Kwandika, guhindura cyangwa gusiba byahagaritswe.",
+            ),
+            "action": "branch_frozen",
         }
 
     # Global cancel when inside a guided session
@@ -2030,6 +2132,11 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_name",
             }
         if clean_text == "2":
+            if is_branch_manager and not branch_perms.get("canEditPrices", False):
+                return {
+                    "reply": _t(lang, "Permission denied: Only the Business Owner can edit product prices.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe guhindura ibiciro."),
+                    "action": "permission_denied",
+                }
             set_session("catalog_edit_sell_price", step_data)
             return {
                 "reply": _t(
@@ -2040,6 +2147,11 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_sell_price",
             }
         if clean_text == "3":
+            if is_branch_manager and not branch_perms.get("canEditPrices", False):
+                return {
+                    "reply": _t(lang, "Permission denied: Only the Business Owner can edit product prices.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe guhindura ibiciro."),
+                    "action": "permission_denied",
+                }
             set_session("catalog_edit_cost_price", step_data)
             return {
                 "reply": _t(
@@ -2060,6 +2172,11 @@ def handle_incoming_whatsapp_message(
                 "action": "catalog_edit_qty",
             }
         if clean_text == "5":
+            if is_branch_manager and not branch_perms.get("canDeleteRecords", False):
+                return {
+                    "reply": _t(lang, "Permission denied: Only the Business Owner can delete products.", "Ntibyemewe: Nyir'ubucuruzi gusa ni we wemerewe gusiba ibicuruzwa."),
+                    "action": "permission_denied",
+                }
             set_session("confirm_product_delete", step_data)
             qty_val = float(step_data.get("quantity") or 0)
             return {
