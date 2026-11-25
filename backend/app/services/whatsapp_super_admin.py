@@ -209,7 +209,9 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
     expiry = str(target_user.get("subscriptionExpiry") or "N/A")
     has_proof = bool(target_user.get("paymentScreenshot") or target_user.get("paymentMessageCopy"))
 
+    is_target_sa = is_whatsapp_super_admin(target_user)
     if str(lang or "en").lower() in ("rw", "kin", "kinyarwanda"):
+        del_line = "*5.* Siba Konti y'Umukoresha Burundu (Delete)\n" if not is_target_sa else ""
         return (
             f"*KONTI Y'UMUKORESHA — {biz}*\n"
             "--------------------------------\n"
@@ -226,8 +228,10 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
             "*2.* Guhagarika Konti (Suspend)\n"
             "*3.* Gukonjesha Konti (Freeze)\n"
             "*4.* Guhindura Ifatabuguzi (Change Plan)\n"
+            f"{del_line}"
             "*0.* Subira kuri Menu ya Super Admin"
         )
+    del_line = "*5.* Delete User Account Permanently\n" if not is_target_sa else ""
     return (
         f"*USER ACCOUNT PROFILE — {biz}*\n"
         "--------------------------------\n"
@@ -244,6 +248,7 @@ def _build_user_profile_card(target_user: dict[str, Any], lang: str) -> str:
         "*2.* Suspend Account\n"
         "*3.* Freeze Account\n"
         "*4.* Change Subscription Plan\n"
+        f"{del_line}"
         "*0.* Back to Super Admin Menu"
     )
 
@@ -528,8 +533,35 @@ def handle_super_admin_whatsapp_message(
                 ),
                 "action": "sa_user_pick_plan",
             }
+        if clean_text == "5":
+            if not target_email or target_email == actor_email or is_whatsapp_super_admin(target_user):
+                return {
+                    "reply": _t(
+                        lang,
+                        "Protected account: You cannot delete your own or another Super Admin account.\nReply *0* for Super Admin Menu.",
+                        "Konti irinzwe: Ntushobora gusiba konti yawe cyangwa iya Super Admin.\nSubiza *0* usubire kuri Menu ya Super Admin.",
+                    ),
+                    "action": "sa_delete_blocked",
+                }
+            set_session(
+                "sa_confirm_action",
+                {"op": "delete_user", "targetEmail": target_email, "targetBiz": target_biz},
+            )
+            return {
+                "reply": _build_sa_verify_card(
+                    _t(lang, "DELETE USER PERMANENTLY", "SIBA KONTI BURUNDU"),
+                    [
+                        (_t(lang, "Business", "Ubucuruzi"), target_biz),
+                        (_t(lang, "Email", "Imeri"), target_email),
+                        (_t(lang, "Phone", "Telefoni"), str(target_user.get("phone") or "N/A")),
+                        (_t(lang, "Action", "Igikorwa"), _t(lang, "Permanent removal of user, staff, workspaces & records", "Gusiba burundu konti, abakozi, ububiko n'amakuru yose")),
+                    ],
+                    lang,
+                ),
+                "action": "sa_confirm_action",
+            }
         return {
-            "reply": _t(lang, "Reply *1–4* to manage this user, or *0* for Super Admin Menu.", "Subiza *1–4* cyangwa *0* usubire kuri Menu ya Super Admin."),
+            "reply": _t(lang, "Reply *1–5* to manage this user, or *0* for Super Admin Menu.", "Subiza *1–5* cyangwa *0* usubire kuri Menu ya Super Admin."),
             "action": "sa_user_action_retry",
         }
 
@@ -826,6 +858,55 @@ def handle_super_admin_whatsapp_message(
                     f"*Ubwishyu Bwahagaritswe:* *{target_email}* yasubijwe ku ifatabuguzi ry'ubuntu (*Free*).\n\n",
                 ) + _build_sa_menu(actor_name, lang),
                 "action": "sa_payment_revoked",
+            }
+
+        if op == "delete_user":
+            t_doc = db.users.find_one({"email": target_email})
+            if not t_doc:
+                set_session("sa_menu", {})
+                return {
+                    "reply": _t(lang, f"User *{target_email}* was already deleted.\n\n", f"Umukoresha *{target_email}* yamaze gusibwa.\n\n") + _build_sa_menu(actor_name, lang),
+                    "action": "sa_user_not_found",
+                }
+            if target_email == actor_email or is_whatsapp_super_admin(t_doc):
+                set_session("sa_menu", {})
+                return {
+                    "reply": _t(lang, "Cannot delete a Super Admin account.\n\n", "Ntushobora gusiba konti ya Super Admin.\n\n") + _build_sa_menu(actor_name, lang),
+                    "action": "sa_delete_blocked",
+                }
+            is_owner = not bool(t_doc.get("ownerScopeKey"))
+            t_phone = normalize_phone(t_doc.get("phone", ""))
+            db.users.delete_one({"email": target_email})
+            removed_staff = 0
+            if is_owner:
+                res_staff = db.users.delete_many({"ownerScopeKey": target_email})
+                removed_staff = res_staff.deleted_count
+                db.businesses.delete_many({"email": target_email})
+                db.workspaces.delete_many({"scopeKey": target_email})
+                db.module_records.delete_many({"scopeKey": target_email})
+                db.products.delete_many({"scopeKey": target_email})
+                db.transactions.delete_many({"scopeKey": target_email})
+                db.branches.delete_many({"scopeKey": target_email})
+                db.subscription_requests.delete_many({"email": target_email})
+                db.tax_profiles.delete_many({"scopeKey": target_email})
+                db.integrations.delete_many({"userEmail": target_email})
+            if t_phone:
+                db.whatsapp_sessions.delete_many({"phone": t_phone})
+            _record_sa_audit(
+                db,
+                actor_email,
+                target_email,
+                f"DELETE_USER_ACCOUNT ({'Owner + ' + str(removed_staff) + ' staff' if is_owner else 'Staff'})",
+                {"isOwner": is_owner, "removedStaff": removed_staff},
+            )
+            set_session("sa_menu", {})
+            return {
+                "reply": _t(
+                    lang,
+                    f"*User Permanently Deleted:* *{target_email}* and all associated workspaces/records have been removed.\n\n",
+                    f"*Konti Yasibwe Burundu:* *{target_email}* n'amakuru yayo yose byasibwe.\n\n",
+                ) + _build_sa_menu(actor_name, lang),
+                "action": "sa_user_deleted",
             }
 
         if op == "set_wa_mode":

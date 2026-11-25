@@ -1243,9 +1243,21 @@ export default function SuperAdminPage() {
                           <div className="font-bold text-white truncate">{s.businessName}</div>
                           <div className="text-[10px] text-slate-400 truncate">{s.email}</div>
                         </div>
-                        <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] text-[#9EDCFF] font-semibold shrink-0">
-                          {s.plan}
-                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] text-[#9EDCFF] font-semibold">
+                            {s.plan}
+                          </span>
+                          {!s.isSuperAdmin && String(s.email || '').toLowerCase() !== String(user?.email || '').toLowerCase() && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(s)}
+                              className="p-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/40 border border-rose-500/35 text-rose-200 transition-colors cursor-pointer"
+                              title={`Permanently delete ${s.email}`}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

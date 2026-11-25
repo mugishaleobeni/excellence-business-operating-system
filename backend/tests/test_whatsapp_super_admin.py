@@ -160,6 +160,34 @@ class WhatsAppSuperAdminTestCase(unittest.TestCase):
             self.assertEqual(r10["action"], "menu")
             self.assertIn("*10.* Super Admin Command Center", r10["reply"])
 
+    def test_3_super_admin_delete_user_with_verification_and_self_protection(self):
+        with self.app.app_context():
+            db = get_db()
+
+            # Enter Super Admin -> Manage User (4) -> search target -> Delete (5) -> YES
+            handle_incoming_whatsapp_message(db, self.sa_phone, "10")
+            handle_incoming_whatsapp_message(db, self.sa_phone, "4")
+            r_prof = handle_incoming_whatsapp_message(db, self.sa_phone, self.target_email)
+            self.assertEqual(r_prof["action"], "sa_user_profile")
+            self.assertIn("*5.* Delete User Account Permanently", r_prof["reply"])
+
+            r_ver = handle_incoming_whatsapp_message(db, self.sa_phone, "5")
+            self.assertEqual(r_ver["action"], "sa_confirm_action")
+            self.assertIn("DELETE USER PERMANENTLY", r_ver["reply"])
+
+            r_del = handle_incoming_whatsapp_message(db, self.sa_phone, "YES")
+            self.assertEqual(r_del["action"], "sa_user_deleted")
+            self.assertIsNone(db.users.find_one({"email": self.target_email}))
+            self.assertIsNone(db.subscription_requests.find_one({"email": self.target_email}))
+
+            # Verify self-deletion is blocked
+            handle_incoming_whatsapp_message(db, self.sa_phone, "4")
+            r_self = handle_incoming_whatsapp_message(db, self.sa_phone, self.sa_email)
+            self.assertNotIn("Delete User Account Permanently", r_self["reply"])
+            r_block = handle_incoming_whatsapp_message(db, self.sa_phone, "5")
+            self.assertEqual(r_block["action"], "sa_delete_blocked")
+            self.assertIsNotNone(db.users.find_one({"email": self.sa_email}))
+
 
 if __name__ == "__main__":
     unittest.main()

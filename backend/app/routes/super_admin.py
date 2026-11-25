@@ -639,6 +639,11 @@ def super_admin_delete_user(target_email: str):
         db.branches.delete_many({"scopeKey": email})
         db.subscription_requests.delete_many({"email": email})
         db.tax_profiles.delete_many({"scopeKey": email})
+        db.integrations.delete_many({"userEmail": email})
+    from app.services.whatsapp_client import normalize_phone
+    target_phone = normalize_phone(user_doc.get("phone", ""))
+    if target_phone:
+        db.whatsapp_sessions.delete_many({"phone": target_phone})
 
     _record_audit_log(
         db=db,
