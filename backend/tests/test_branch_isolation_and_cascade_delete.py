@@ -186,14 +186,28 @@ class BranchIsolationAndCascadeDeleteTestCase(unittest.TestCase):
             self.assertIn("TX-NYB", tx_ids)
             self.assertNotIn("TX-HQ", tx_ids)
 
-            # 7. Branch Manager cannot delete HQ transaction (403), while Owner CAN delete a sub-branch record
+            # 7. Branch Manager cannot delete HQ transaction (403) OR create a new branch (403), while Owner CAN
             r_del_hq_tx = self.client.delete(
                 "/api/v1/transactions/TX-HQ",
                 headers={"Authorization": f"Bearer {mgr_token}"},
             )
             self.assertEqual(r_del_hq_tx.status_code, 403)
 
+            r_mgr_create_br = self.client.post(
+                "/api/v1/branches",
+                headers={"Authorization": f"Bearer {mgr_token}"},
+                json={"name": "Unauthorized Sub-Branch", "location": "Kigali"},
+            )
+            self.assertEqual(r_mgr_create_br.status_code, 403)
+            self.assertIsNone(db.branches.find_one({"scopeKey": self.owner_email, "name": "Unauthorized Sub-Branch"}))
+
             owner_token = create_access_token(identity=self.owner_email)
+            r_own_create_br = self.client.post(
+                "/api/v1/branches",
+                headers={"Authorization": f"Bearer {owner_token}"},
+                json={"name": "Owner Authorized Branch", "location": "Huye"},
+            )
+            self.assertIn(r_own_create_br.status_code, (200, 201))
             r_owner_del = self.client.delete(
                 f"/api/v1/workspaces/buy-and-sell/records/Products/{added['id']}",
                 headers={"Authorization": f"Bearer {owner_token}"},

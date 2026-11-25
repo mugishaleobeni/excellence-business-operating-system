@@ -63,7 +63,14 @@ def _is_branch_manager(user_doc: dict | None) -> bool:
         return False
     role = str(user_doc.get("role") or "").strip().lower()
     assigned = str(user_doc.get("assignedBranchId") or "").strip()
-    return role == "branch manager" or (bool(assigned) and assigned != "main")
+    owner_scope = str(user_doc.get("ownerScopeKey") or "").strip().lower()
+    user_email = str(user_doc.get("email") or "").strip().lower()
+    is_sub_staff = bool(owner_scope and user_email and owner_scope != user_email)
+    return (
+        role in ("branch manager", "branch_manager")
+        or (bool(assigned) and assigned != "main")
+        or is_sub_staff
+    )
 
 
 def _resolve_scope_and_user(db):

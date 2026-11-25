@@ -312,8 +312,15 @@ export function ExbosProvider({ children }) {
   const isBranchManager = useMemo(() => {
     const roleStr = String(user?.role || '').trim().toLowerCase()
     const assigned = String(user?.assignedBranchId || '').trim()
-    return roleStr === 'branch manager' || (Boolean(assigned) && assigned !== 'main')
-  }, [user?.role, user?.assignedBranchId])
+    const ownerScope = String(user?.ownerScopeKey || '').trim().toLowerCase()
+    const selfEmail = String(user?.email || '').trim().toLowerCase()
+    return (
+      roleStr === 'branch manager' ||
+      roleStr === 'branch_manager' ||
+      (Boolean(assigned) && assigned !== 'main') ||
+      (Boolean(ownerScope) && Boolean(selfEmail) && ownerScope !== selfEmail)
+    )
+  }, [user?.role, user?.assignedBranchId, user?.ownerScopeKey, user?.email])
 
   const activeBranch = useMemo(() => {
     return (
@@ -458,6 +465,9 @@ export function ExbosProvider({ children }) {
   }
 
   const createBranch = async ({ name, location, architectureId, permissions, requirePinForMainSwitch, ownerPin }) => {
+    if (isBranchManager) {
+      return { ok: false, error: 'Only the Business Owner at Main HQ can create new branches.' }
+    }
     const trimmed = String(name || '').trim()
     if (!trimmed) return { ok: false, error: 'Branch name is required.' }
     const targetArch = architectureId || user?.architectureId || 'buy-and-sell'
