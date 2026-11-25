@@ -379,25 +379,7 @@ export default function MobileFintechDashboardHeader({
         </div>
       </div>
 
-      {/* 3. Action Progress Banner (Matching Image 1) */}
-      <div className="rounded-2xl p-3.5 bg-white/5 border border-white/10 flex items-center justify-between gap-3 shadow-md">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center text-xs font-orbitron font-bold shrink-0">
-            3/3
-          </div>
-          <div className="min-w-0">
-            <strong className="block text-xs font-bold text-white truncate">
-              {currentArch?.name || 'Buy & Sell Enterprise'}
-            </strong>
-            <p className="text-[11px] text-slate-300 truncate">
-              All 27 modular ledger buckets active and verified
-            </p>
-          </div>
-        </div>
-        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-      </div>
-
-      {/* 4. QUICK LINKS Card (Matching Image 1 Exactly) */}
+      {/* 3. QUICK LINKS Card (Matching Image 1 Exactly) */}
       <div className="rounded-3xl p-5 bg-[#071536]/90 border border-white/10 shadow-xl space-y-3.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-orbitron uppercase tracking-widest text-[#9EDCFF] font-bold">
