@@ -302,6 +302,7 @@ def get_platform_analytics():
             recent_signups.append(
                 {
                     "email": email,
+                    "phone": u.get("phone") or "",
                     "fullName": u.get("fullName") or u.get("name") or email,
                     "businessName": u.get("businessName") or "ExBOS Workspace",
                     "architectureId": u.get("architectureId") or "buy-and-sell",

@@ -380,12 +380,13 @@ def handle_super_admin_whatsapp_message(
             for idx, u in enumerate(recent_users, start=1):
                 bname = u.get("businessName") or u.get("name") or "Business"
                 u_email = u.get("email") or ""
+                u_phone = str(u.get("phone") or "").strip() or "No phone"
                 u_plan = u.get("planTier") or u.get("plan") or "Free"
                 u_status = u.get("accountStatus") or "Active"
                 u_assigned = str(u.get("assignedBranchId") or "").strip()
                 is_bm = str(u.get("role") or "").strip().lower() == "branch manager" or (bool(u_assigned) and u_assigned != "main")
                 role_tag = " | Branch Manager" if is_bm else (" | Super Admin" if is_whatsapp_super_admin(u) else "")
-                lines.append(f"*{idx}.* {bname} ({u_plan} | {u_status}{role_tag})\n    {u_email}")
+                lines.append(f"*{idx}.* {bname} ({u_plan} | {u_status}{role_tag})\n    {u_email} | {u_phone}")
             lines.append("--------------------------------")
             lines.append(_t(lang, "Reply *1–10* to manage a user, or *0* for Super Admin Menu.", "Subiza *1–10* ucunge konti, cyangwa *0* usubire kuri Menu."))
             set_session("sa_pick_user", {"emails": emails_list})

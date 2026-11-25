@@ -1286,6 +1286,9 @@ export default function SuperAdminPage() {
                         <div className="min-w-0">
                           <div className="font-bold text-white truncate">{s.businessName}</div>
                           <div className="text-[10px] text-slate-400 truncate">{s.email}</div>
+                          {s.phone && (
+                            <div className="text-[10px] text-emerald-300 font-mono truncate">{s.phone}</div>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] text-[#9EDCFF] font-semibold">
@@ -1681,6 +1684,11 @@ export default function SuperAdminPage() {
                           <div className="text-[11px] text-slate-300">
                             {u.email} · <strong>{u.businessName}</strong>
                           </div>
+                          {u.phone && (
+                            <div className="text-[11px] text-emerald-300 font-mono mt-0.5">
+                              {u.phone}
+                            </div>
+                          )}
                           {u.ownerScopeKey && (
                             <div className="text-[10px] text-[#218DFF]">
                               Staff under {u.ownerScopeKey}
