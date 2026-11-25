@@ -18,6 +18,31 @@ transactions_bp = Blueprint(
 from app.utils.scope import resolve_scope_key as _resolve_scope_key
 
 
+def _resolve_tx_actor_branch(db, scope_key: str):
+    """Return (is_manager, assigned_branch_id, branch_doc) for the authenticated caller."""
+    actor_doc = None
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        if isinstance(ident, str) and ident.strip():
+            actor_doc = db.users.find_one({"email": ident.strip().lower()}, {"_id": 0})
+    except Exception:
+        pass
+    is_manager = False
+    assigned_branch = ""
+    if actor_doc:
+        role_str = str(actor_doc.get("role") or "").strip().lower()
+        assigned_branch = str(actor_doc.get("assignedBranchId") or "").strip()
+        if role_str == "branch manager" or (assigned_branch and assigned_branch != "main"):
+            is_manager = True
+    branch_doc = (
+        db.branches.find_one({"scopeKey": scope_key, "id": assigned_branch}, {"_id": 0})
+        if is_manager and assigned_branch
+        else None
+    )
+    return is_manager, assigned_branch, branch_doc
+
+
 def _normalize_tx_type(raw_type: str | None) -> str:
     if not raw_type:
         return "INFLOW"
@@ -32,6 +57,7 @@ def _normalize_tx_type(raw_type: str | None) -> str:
 def list_transactions():
     """
     List financial ledger transactions with optional filtering by architectureId and type.
+    Branch Managers strictly receive only their own branch's transactions.
     """
     db = get_db()
     scope_key = _resolve_scope_key(db)
@@ -42,11 +68,15 @@ def list_transactions():
     if not scope_key or scope_key == "default":
         return success_response(data=[])
 
+    is_manager, assigned_branch, _ = _resolve_tx_actor_branch(db, scope_key)
+
     query: dict = {"scopeKey": scope_key}
     if arch_id:
         query["architectureId"] = arch_id
     if tx_type:
         query["type"] = _normalize_tx_type(tx_type)
+    if is_manager and assigned_branch:
+        query["branchId"] = assigned_branch
 
     cursor = db.transactions.find(query).sort("timestamp", -1).limit(limit)
     items = []
@@ -70,12 +100,20 @@ def create_transaction(validated_data: TransactionCreateSchema):
     now_iso = now.isoformat()
     now_ms = int(now.timestamp() * 1000)
     scope_key = _resolve_scope_key(db)
+    is_manager, assigned_branch, branch_doc = _resolve_tx_actor_branch(db, scope_key)
+
+    if is_manager and branch_doc and str(branch_doc.get("status") or "Active") == "Frozen":
+        return error_response(
+            f"Branch '{branch_doc.get('name', assigned_branch)}' is Frozen (Read-Only) by Main HQ.",
+            status_code=403,
+        )
 
     raw_dump = validated_data.model_dump(exclude_none=True)
     tx_id = str(raw_dump.get("id") or f"TX-{now_ms}")
     arch_id = raw_dump.get("architectureId", "make-and-sell")
     amount = float(raw_dump.get("amountRWF", 0))
     tx_type = _normalize_tx_type(raw_dump.get("type"))
+    effective_branch = assigned_branch if is_manager and assigned_branch else str(raw_dump.get("branchId") or "main").strip()
     payment_method = (
         raw_dump.get("paymentMethod")
         or raw_dump.get("account")
@@ -87,6 +125,7 @@ def create_transaction(validated_data: TransactionCreateSchema):
         "id": tx_id,
         "scopeKey": scope_key,
         "architectureId": arch_id,
+        "branchId": effective_branch,
         "type": tx_type,
         "amountRWF": amount,
         "paymentMethod": payment_method,
@@ -176,6 +215,20 @@ def edit_transaction_with_audit(
         return error_response(
             error=f"Transaction '{tx_id}' not found.", status_code=404
         )
+
+    is_manager, assigned_branch, branch_doc = _resolve_tx_actor_branch(db, scope_key)
+    tx_branch_id = str(tx_doc.get("branchId") or "main").strip()
+    if is_manager:
+        if tx_branch_id != assigned_branch:
+            return error_response(
+                "Access Denied: You cannot edit transactions belonging to Main HQ or another branch.",
+                status_code=403,
+            )
+        if branch_doc and str(branch_doc.get("status") or "Active") == "Frozen":
+            return error_response(
+                f"Branch '{branch_doc.get('name', assigned_branch)}' is Frozen (Read-Only) by Main HQ.",
+                status_code=403,
+            )
 
     prev_amount = float(tx_doc.get("amountRWF", 0))
     new_amount = (
@@ -273,6 +326,26 @@ def delete_transaction(tx_id: str):
             data={"id": tx_id, "alreadyDeleted": True},
             message=f"Transaction '{tx_id}' already removed or not present in ledger.",
         )
+
+    is_manager, assigned_branch, branch_doc = _resolve_tx_actor_branch(db, scope_key)
+    tx_branch_id = str(tx_doc.get("branchId") or "main").strip()
+    if is_manager:
+        if tx_branch_id != assigned_branch:
+            return error_response(
+                "Access Denied: You cannot delete transactions belonging to Main HQ or another branch.",
+                status_code=403,
+            )
+        if branch_doc and str(branch_doc.get("status") or "Active") == "Frozen":
+            return error_response(
+                f"Branch '{branch_doc.get('name', assigned_branch)}' is Frozen (Read-Only) by Main HQ.",
+                status_code=403,
+            )
+        b_perms = (branch_doc or {}).get("permissions") if isinstance((branch_doc or {}).get("permissions"), dict) else {}
+        if b_perms.get("canDeleteRecords", False) is False:
+            return error_response(
+                "Transaction deletion is disabled for this branch by Main HQ.",
+                status_code=403,
+            )
 
     # Reverse cashflow impact if workspace exists
     amount = float(tx_doc.get("amountRWF", 0))

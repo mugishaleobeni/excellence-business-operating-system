@@ -436,8 +436,14 @@ def list_module_records(arch_id: str, module_name: str):
         )
     db = get_db()
     scope_key = _resolve_scope_key(db)
+    _, is_manager, effective_branch_id, _ = _resolve_actor_and_branch(db, scope_key)
     ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=False)
     records = ws.get("records", {}).get(module_name, [])
+    if is_manager and effective_branch_id and effective_branch_id != "main":
+        records = [
+            rec for rec in records
+            if isinstance(rec, dict) and str(rec.get("branchId") or "main").strip() == effective_branch_id
+        ]
     return success_response(data=records)
 
 
@@ -1236,7 +1242,7 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
                 "Access Denied: You cannot delete records belonging to Main HQ or another branch.",
                 status_code=403,
             )
-        if branch_doc and item_branch_id != "main":
+        if is_manager and branch_doc and item_branch_id != "main":
             if str(branch_doc.get("status") or "Active") == "Frozen":
                 return error_response(
                     f"Branch '{branch_doc.get('name', item_branch_id)}' is Frozen (Read-Only) by Main HQ.",

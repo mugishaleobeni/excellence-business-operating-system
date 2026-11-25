@@ -167,6 +167,39 @@ class BranchIsolationAndCascadeDeleteTestCase(unittest.TestCase):
             self.assertNotIn("HQ Laptop Pro", titles)
             self.assertNotIn("Remera Phone", titles)
 
+            # 6. REST API GET /records/Products and GET /transactions NEVER leak HQ records to Branch Manager
+            r_rec = self.client.get(
+                "/api/v1/workspaces/buy-and-sell/records/Products",
+                headers={"Authorization": f"Bearer {mgr_token}"},
+            )
+            self.assertEqual(r_rec.status_code, 200)
+            rec_titles = [p.get("title") for p in r_rec.get_json()["data"]]
+            self.assertIn("Branch Router Mini", rec_titles)
+            self.assertNotIn("HQ Laptop Pro", rec_titles)
+
+            r_tx = self.client.get(
+                "/api/v1/transactions",
+                headers={"Authorization": f"Bearer {mgr_token}"},
+            )
+            self.assertEqual(r_tx.status_code, 200)
+            tx_ids = [t.get("id") for t in r_tx.get_json()["data"]]
+            self.assertIn("TX-NYB", tx_ids)
+            self.assertNotIn("TX-HQ", tx_ids)
+
+            # 7. Branch Manager cannot delete HQ transaction (403), while Owner CAN delete a sub-branch record
+            r_del_hq_tx = self.client.delete(
+                "/api/v1/transactions/TX-HQ",
+                headers={"Authorization": f"Bearer {mgr_token}"},
+            )
+            self.assertEqual(r_del_hq_tx.status_code, 403)
+
+            owner_token = create_access_token(identity=self.owner_email)
+            r_owner_del = self.client.delete(
+                f"/api/v1/workspaces/buy-and-sell/records/Products/{added['id']}",
+                headers={"Authorization": f"Bearer {owner_token}"},
+            )
+            self.assertEqual(r_owner_del.status_code, 200)
+
     def test_2_delete_branch_cascade_deletes_all_branch_data_and_preserves_hq(self):
         with self.app.app_context():
             db = get_db()
