@@ -825,8 +825,9 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}"
     copy_reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}&copy=1"
 
-    # Resolve user's registered phone number for WhatsApp fallback or direct WhatsApp delivery
-    raw_phone = str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
+    # Resolve user's phone number: prefer user-supplied WhatsApp fallback phone when channel == 'whatsapp'
+    supplied_phone = str(getattr(validated_data, "phone", None) or "").strip()
+    raw_phone = supplied_phone or str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
     if not raw_phone:
         integ = db.integrations.find_one({"userEmail": email_lower}) or {}
         wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
@@ -858,6 +859,7 @@ def forgot_password(validated_data: ForgotPasswordSchema):
                 wa_text,
                 db=db,
                 metadata={"type": "password_reset_otp", "email": email_lower},
+                is_inbound_reply=bool(supplied_phone),
             )
             return bool(wa_res.get("ok") or wa_res.get("sent") or wa_res.get("queued"))
         except Exception as exc:
@@ -867,7 +869,7 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     if requested_channel == "whatsapp":
         if not user_phone:
             return error_response(
-                error="No WhatsApp phone number is linked to this account. Please use Email recovery or contact support.",
+                error="Please enter a valid WhatsApp phone number (e.g. 0788123456 or +250788123456).",
                 status_code=400,
             )
         whatsapp_sent = _dispatch_whatsapp_reset()

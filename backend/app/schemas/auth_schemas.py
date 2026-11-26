@@ -94,6 +94,7 @@ class ForgotPasswordSchema(BaseModel):
 
     email: EmailStr
     channel: Optional[str] = "email"
+    phone: Optional[str] = None
 
 
 class ResetPasswordSchema(BaseModel):

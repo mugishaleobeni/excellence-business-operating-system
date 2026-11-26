@@ -213,21 +213,35 @@ export default function LoginPage({ isForgotPassword = false }) {
   }
 
   const [resetDeliveryInfo, setResetDeliveryInfo] = useState(null)
+  const [showWhatsAppFallbackInput, setShowWhatsAppFallbackInput] = useState(false)
+  const [fallbackWhatsAppPhone, setFallbackWhatsAppPhone] = useState('')
 
-  const handleRequestPasswordReset = async (e, preferredChannel = 'email') => {
+  const handleRequestPasswordReset = async (e, preferredChannel = 'email', customPhone = '') => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault()
     setErrorMsg('')
     if (!email.trim()) {
       setErrorMsg('Please enter your registered business email.')
       return
     }
+    if (preferredChannel === 'whatsapp' && customPhone && customPhone.trim().length < 9) {
+      setErrorMsg('Please enter a valid WhatsApp phone number (e.g. 0788 123 456 or +250788123456).')
+      return
+    }
     setSubmitting(true)
     try {
-      const res = await exbosApi.forgotPassword(email.trim().toLowerCase(), preferredChannel)
+      const res = await exbosApi.forgotPassword(
+        email.trim().toLowerCase(),
+        preferredChannel,
+        customPhone ? customPhone.trim() : ''
+      )
       if (!res.ok) {
         setErrorMsg(res.error || 'Could not send reset code.')
+        if (res.status === 503 || res.status === 400) {
+          setShowWhatsAppFallbackInput(true)
+        }
         return
       }
+      setShowWhatsAppFallbackInput(false)
       const d = res?.data?.data || res?.data || {}
       const info = {
         channel: d.deliveryChannel || (d.whatsappSent && !d.emailSent ? 'whatsapp' : 'email'),
@@ -598,6 +612,35 @@ export default function LoginPage({ isForgotPassword = false }) {
                     >
                       {submitting ? 'Sending Code...' : 'Send 6-Digit Reset Code'}
                     </button>
+
+                    {showWhatsAppFallbackInput && (
+                      <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-400/35 space-y-3">
+                        <div className="space-y-0.5">
+                          <div className="text-xs font-bold text-emerald-300">
+                            Receive Verification Code via WhatsApp
+                          </div>
+                          <p className="text-[11px] text-slate-300 leading-relaxed">
+                            Enter your active WhatsApp phone number below and we will send your 6-digit password reset code directly on WhatsApp.
+                          </p>
+                        </div>
+                        <input
+                          type="tel"
+                          value={fallbackWhatsAppPhone}
+                          onChange={(e) => setFallbackWhatsAppPhone(e.target.value)}
+                          placeholder="0788 123 456 or +250788123456"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white/15 border border-white/20 outline-none text-sm text-white placeholder-white/60 focus:bg-white/25 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/40 transition-all"
+                        />
+                        <button
+                          type="button"
+                          disabled={submitting || !fallbackWhatsAppPhone.trim()}
+                          onClick={() => handleRequestPasswordReset(null, 'whatsapp', fallbackWhatsAppPhone)}
+                          className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer disabled:opacity-50 transition-all shadow-lg"
+                        >
+                          {submitting ? 'Sending to WhatsApp...' : 'Send 6-Digit Code via WhatsApp'}
+                        </button>
+                      </div>
+                    )}
+
                     <div className="text-center pt-1">
                       <Link to="/login" className="text-xs font-semibold text-[#9EDCFF] hover:text-white transition-colors no-underline">
                         ← Back to Sign In
