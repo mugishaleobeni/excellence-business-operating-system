@@ -247,7 +247,7 @@ export default function BranchPerformanceCenterPanel({
   return (
     <div className="rounded-3xl border border-[#218DFF]/30 bg-gradient-to-br from-[#06143D]/95 via-[#040D29]/95 to-[#07184A]/95 p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl overflow-hidden max-w-full">
       {/* Header + Visualization Switcher */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 border-b border-white/10 pb-4">
+      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 border-b border-white/10 pb-4">
         <div className="flex items-start gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF] shrink-0 mt-0.5">
             <GitBranch className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -270,13 +270,13 @@ export default function BranchPerformanceCenterPanel({
           </div>
         </div>
 
-        {/* Visualization Mode Switcher */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 w-full lg:w-auto min-w-0">
+        {/* Visualization Mode Switcher — all 4 tabs always visible on desktop without scrolling */}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full 2xl:w-auto shrink-0">
           {branches.length > 1 && (
             <select
               value={selectedBranchFilter}
               onChange={(e) => setSelectedBranchFilter(e.target.value)}
-              className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white cursor-pointer"
+              className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-[#071644] border border-white/20 text-xs font-semibold text-white cursor-pointer shrink-0"
             >
               <option value="ALL">All Branches</option>
               {branches.map((b) => (
@@ -287,8 +287,8 @@ export default function BranchPerformanceCenterPanel({
             </select>
           )}
 
-          <div className="w-full sm:w-auto overflow-x-auto no-scrollbar">
-            <div className="grid grid-cols-4 sm:inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1 min-w-0">
+          <div className="w-full sm:w-auto shrink-0">
+            <div className="grid grid-cols-4 sm:inline-flex rounded-xl bg-white/5 border border-white/10 p-1 gap-1">
               {[
                 { id: 'both', label: 'Both', shortLabel: 'Both', icon: Layers },
                 { id: 'heatmap', label: 'Activity Pulse', shortLabel: 'Pulse', icon: Grid3X3 },
