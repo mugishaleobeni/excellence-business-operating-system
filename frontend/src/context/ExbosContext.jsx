@@ -906,9 +906,42 @@ export function ExbosProvider({ children }) {
   const [isInitialCloudLoading, setIsInitialCloudLoading] = useState(false)
   const isHydratedRef = useRef(false)
   const isFetchingCloudRef = useRef(false)
+  const isFlushingRef = useRef(false)
   const lastPostedHashRef = useRef('')
   const lastMutationTsRef = useRef(0)
   const recentlyDeletedIdsRef = useRef(new Set())
+  const activeScopeRef = useRef('')
+  activeScopeRef.current = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+
+  const getScopedCacheKey = (scope) =>
+    scope ? `exbos_offline_cache_${scope}` : ''
+
+  const readScopedOfflineCache = (scope) => {
+    const key = getScopedCacheKey(scope)
+    if (!key) return null
+    try {
+      const raw = localStorage.getItem(key)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') return parsed
+    } catch {}
+    return null
+  }
+
+  const writeScopedOfflineCache = (scope, wsData, txData) => {
+    const key = getScopedCacheKey(scope)
+    if (!key) return
+    try {
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          workspaces: wsData,
+          transactions: txData,
+          cachedAt: new Date().toISOString()
+        })
+      )
+    } catch {}
+  }
 
   const mergeServerWorkspacesWithLocal = (serverWsMap, localWsMap) => {
     const cleanBase = createCleanWorkspaces()
@@ -959,8 +992,10 @@ export function ExbosProvider({ children }) {
   }
 
   const [workspaces, setWorkspaces] = useState(() => {
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      return createCleanWorkspaces()
+    const initialScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+    const cached = readScopedOfflineCache(initialScope)
+    if (cached?.workspaces) {
+      return sanitizeUserWorkspaces(cached.workspaces)
     }
     try {
       const saved = localStorage.getItem('exbos_workspaces_v2')
@@ -977,13 +1012,34 @@ export function ExbosProvider({ children }) {
     const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
     const scopeParam = effectiveScope ? `?scopeKey=${encodeURIComponent(effectiveScope)}` : ''
 
-    // Reset in-memory state when the authenticated user scope changes so one user's records/transactions
-    // never bleed into another user's dashboard or get posted under the new user's scopeKey.
-    isHydratedRef.current = false
-    setWorkspaces(createCleanWorkspaces())
-    setTransactions([])
-    setSavedAnalyses([])
-    setExportHistory([])
+    // Hydrate tenant-scoped offline cache immediately so offline reloads & slow networks
+    // never wipe the user's dashboard or lose unsynced offline CRUD changes.
+    const cachedSnapshot = readScopedOfflineCache(effectiveScope)
+    const pendingOfflineForScope = getOfflineQueue(effectiveScope).length > 0
+    if (cachedSnapshot && (pendingOfflineForScope || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+      isHydratedRef.current = true
+      if (cachedSnapshot.workspaces) {
+        setWorkspaces(sanitizeUserWorkspaces(cachedSnapshot.workspaces))
+      }
+      if (Array.isArray(cachedSnapshot.transactions)) {
+        setTransactions(sanitizeUserTransactions(cachedSnapshot.transactions))
+      }
+    } else if (cachedSnapshot?.workspaces) {
+      // Warm start from tenant-scoped cache while online cloud fetch runs in background
+      isHydratedRef.current = true
+      setWorkspaces(sanitizeUserWorkspaces(cachedSnapshot.workspaces))
+      if (Array.isArray(cachedSnapshot.transactions)) {
+        setTransactions(sanitizeUserTransactions(cachedSnapshot.transactions))
+      }
+    } else {
+      // Brand-new or switched user scope with no local cache: start clean
+      isHydratedRef.current = false
+      setWorkspaces(createCleanWorkspaces())
+      setTransactions([])
+      setSavedAnalyses([])
+      setExportHistory([])
+    }
+    setOfflineQueueCount(getOfflineQueue(effectiveScope).length)
 
     const fetchAndSyncCloud = (isInitial = false) => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -996,7 +1052,16 @@ export function ExbosProvider({ children }) {
         if (isInitial && isMounted) setIsInitialCloudLoading(false)
         return
       }
-      if (isInitial && isMounted) setIsInitialCloudLoading(true)
+      // Critical Offline-Sync Guard: if offline CRUD actions are still queued or flushing,
+      // flush them to MongoDB FIRST and skip overwriting local optimistic state until done!
+      if (getOfflineQueue(effectiveScope).length > 0 || isFlushingRef.current) {
+        if (isInitial && isMounted) setIsInitialCloudLoading(false)
+        if (!isFlushingRef.current) {
+          flushOfflineQueue(effectiveScope)
+        }
+        return
+      }
+      if (isInitial && isMounted && !cachedSnapshot) setIsInitialCloudLoading(true)
       // Avoid racing right in the middle of a local mutation (within 2.5s)
       if (!isInitial && Date.now() - lastMutationTsRef.current < 2500) return
 
@@ -1135,7 +1200,11 @@ export function ExbosProvider({ children }) {
         window.location.href = `/login?suspended=1`
       }
     }
+    const onOfflineSynced = () => {
+      fetchAndSyncCloud(false)
+    }
     window.addEventListener('exbos:account-suspended', onAccountSuspended)
+    window.addEventListener('exbos:offline-synced', onOfflineSynced)
     window.addEventListener('focus', onFocusOrVisible)
     document.addEventListener('visibilitychange', onFocusOrVisible)
     const syncTimer = setInterval(() => fetchAndSyncCloud(false), 7000)
@@ -1143,28 +1212,30 @@ export function ExbosProvider({ children }) {
     return () => {
       isMounted = false
       window.removeEventListener('exbos:account-suspended', onAccountSuspended)
+      window.removeEventListener('exbos:offline-synced', onOfflineSynced)
       window.removeEventListener('focus', onFocusOrVisible)
       document.removeEventListener('visibilitychange', onFocusOrVisible)
       clearInterval(syncTimer)
     }
   }, [user?.email, user?.ownerScopeKey])
 
-  // Persist live user data directly to Flask + MongoDB Atlas backend when online; only cache in browser when offline
+  // Continuously maintain tenant-scoped offline cache (both online & offline) once hydrated,
+  // and sync state to Flask + MongoDB Atlas only when online.
   useEffect(() => {
+    const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
+    if (effectiveScope && isHydratedRef.current) {
+      writeScopedOfflineCache(effectiveScope, workspaces, transactions)
+    }
+    // Remove legacy unscoped keys so different accounts never bleed across sessions
     try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        localStorage.setItem('exbos_workspaces_v2', JSON.stringify(workspaces))
-        localStorage.setItem('exbos_transactions', JSON.stringify(transactions))
-      } else {
-        localStorage.removeItem('exbos_workspaces_v2')
-        localStorage.removeItem('exbos_transactions')
-      }
+      localStorage.removeItem('exbos_workspaces_v2')
+      localStorage.removeItem('exbos_transactions')
     } catch {}
 
     if (!isHydratedRef.current || isFetchingCloudRef.current) return
-
-    const effectiveScope = (user?.ownerScopeKey || user?.email || '').toLowerCase()
     if (!effectiveScope) return
+    // Never fire background POST /storage requests while offline
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
 
     const stateFingerprint = JSON.stringify({
       workspaces,
@@ -1235,72 +1306,136 @@ export function ExbosProvider({ children }) {
     }
   })
 
-  const getOfflineQueue = () => {
+  const getOfflineQueueKey = (scopeOverride) => {
+    const scope = String(scopeOverride ?? activeScopeRef.current ?? '').trim().toLowerCase()
+    return scope ? `exbos_offline_queue_${scope}` : 'exbos_offline_queue'
+  }
+
+  const getOfflineQueue = (scopeOverride) => {
     try {
-      const q = localStorage.getItem('exbos_offline_queue')
-      return q ? JSON.parse(q) : []
+      const key = getOfflineQueueKey(scopeOverride)
+      const q = localStorage.getItem(key)
+      if (q) {
+        const parsed = JSON.parse(q)
+        return Array.isArray(parsed) ? parsed : []
+      }
+      // One-time migration from legacy unscoped queue if present
+      if (key !== 'exbos_offline_queue') {
+        const legacy = localStorage.getItem('exbos_offline_queue')
+        if (legacy) {
+          const parsedLegacy = JSON.parse(legacy)
+          if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+            localStorage.setItem(key, JSON.stringify(parsedLegacy))
+            localStorage.removeItem('exbos_offline_queue')
+            return parsedLegacy
+          }
+        }
+      }
+      return []
     } catch {
       return []
     }
   }
 
-  const saveOfflineQueue = (q) => {
+  const saveOfflineQueue = (q, scopeOverride) => {
+    const safeList = Array.isArray(q) ? q : []
     try {
-      localStorage.setItem('exbos_offline_queue', JSON.stringify(q))
+      localStorage.setItem(getOfflineQueueKey(scopeOverride), JSON.stringify(safeList))
     } catch {}
-    setOfflineQueueCount(Array.isArray(q) ? q.length : 0)
+    setOfflineQueueCount(safeList.length)
   }
 
   const enqueueOfflineAction = (action) => {
-    const queue = getOfflineQueue()
-    queue.push(action)
-    saveOfflineQueue(queue)
+    const scope = activeScopeRef.current
+    const queue = getOfflineQueue(scope)
+    queue.push({
+      ...action,
+      scopeKey: scope,
+      queuedAt: Date.now()
+    })
+    saveOfflineQueue(queue, scope)
     setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending')
   }
 
-  const flushOfflineQueue = async () => {
-    const queue = getOfflineQueue()
+  const flushOfflineQueue = async (scopeOverride) => {
+    // Concurrency lock prevents duplicate MongoDB inserts when online event,
+    // heartbeat timer, and manual sync click overlap.
+    if (isFlushingRef.current) return
+    const scope = String(scopeOverride ?? activeScopeRef.current ?? '').trim().toLowerCase()
+    const queue = getOfflineQueue(scope)
     if (!queue || queue.length === 0) {
       setSyncStatus((prev) => (prev === 'offline' || prev === 'db_error' ? prev : 'synced'))
       return
     }
 
+    isFlushingRef.current = true
     setSyncStatus('syncing')
     const remaining = []
+    const failedRecordIds = new Set()
     let processedCount = 0
 
-    for (const item of queue) {
-      try {
-        let res
-        if (item.type === 'add') {
-          res = await exbosApi.addModuleRecord(item.archId, item.moduleName, item.entry)
-        } else if (item.type === 'add_tx') {
-          res = await exbosApi.createTransaction(item.payload)
-        } else if (item.type === 'update') {
-          res = await exbosApi.updateModuleRecord(item.archId, item.moduleName, item.recordId, item.updatedFields)
-        } else if (item.type === 'delete') {
-          res = await exbosApi.deleteModuleRecord(item.archId, item.moduleName, item.recordId)
-        } else if (item.type === 'delete_tx') {
-          res = await exbosApi.deleteTransaction(item.txId)
-        } else if (item.type === 'workspace') {
-          res = await exbosApi.patchWorkspace(item.archId, item.payload)
+    try {
+      for (const item of queue) {
+        // Safety guard: never replay another user's queued mutation into the active account
+        if (item.scopeKey && scope && item.scopeKey !== scope) {
+          remaining.push(item)
+          continue
         }
-        if (res?.ok) {
-          processedCount++
-        } else if (
-          res?.status === 0 ||
-          res?.status >= 500 ||
-          (typeof navigator !== 'undefined' && !navigator.onLine)
-        ) {
+
+        const itemRecordId = String(item.recordId || item.entry?.id || item.txId || item.payload?.id || '')
+        // Preserve strict FIFO dependency order per record: if an earlier action on this record failed,
+        // hold subsequent updates/deletes for the same record in the queue.
+        if (itemRecordId && failedRecordIds.has(itemRecordId)) {
+          remaining.push(item)
+          continue
+        }
+
+        try {
+          let res
+          if (item.type === 'add') {
+            res = await exbosApi.addModuleRecord(item.archId, item.moduleName, item.entry)
+          } else if (item.type === 'add_tx') {
+            res = await exbosApi.createTransaction(item.payload)
+          } else if (item.type === 'update') {
+            res = await exbosApi.updateModuleRecord(item.archId, item.moduleName, item.recordId, item.updatedFields)
+          } else if (item.type === 'delete') {
+            res = await exbosApi.deleteModuleRecord(item.archId, item.moduleName, item.recordId)
+          } else if (item.type === 'delete_tx') {
+            res = await exbosApi.deleteTransaction(item.txId)
+          } else if (item.type === 'workspace') {
+            res = await exbosApi.patchWorkspace(item.archId, item.payload)
+          }
+
+          // Treat 404 on delete/delete_tx as already deleted on server (idempotent success)
+          const isIdempotentDelete =
+            (item.type === 'delete' || item.type === 'delete_tx') && res?.status === 404
+
+          if (res?.ok || isIdempotentDelete) {
+            processedCount++
+          } else if (
+            res?.status === 0 ||
+            res?.status >= 500 ||
+            (typeof navigator !== 'undefined' && !navigator.onLine)
+          ) {
+            if (itemRecordId) failedRecordIds.add(itemRecordId)
+            remaining.push(item)
+          }
+        } catch {
+          if (itemRecordId) failedRecordIds.add(itemRecordId)
           remaining.push(item)
         }
-      } catch {
-        remaining.push(item)
       }
+    } finally {
+      isFlushingRef.current = false
     }
 
-    saveOfflineQueue(remaining)
-    if (remaining.length === 0) {
+    // Re-read any new offline actions enqueued while flushing so we never drop them
+    const latestQueue = getOfflineQueue(scope)
+    const newlyAdded = latestQueue.slice(queue.length)
+    const finalQueue = [...remaining, ...newlyAdded]
+    saveOfflineQueue(finalQueue, scope)
+
+    if (finalQueue.length === 0) {
       setDbConnected(true)
       setSyncStatus('synced')
       if (processedCount > 0) {
@@ -1309,6 +1444,10 @@ export function ExbosProvider({ children }) {
           title: 'Database Synchronized',
           message: `${processedCount} offline update${processedCount === 1 ? ' was' : 's were'} synchronized with MongoDB.`
         })
+        // Reconcile server-computed stock/KPI totals cleanly after flush completes
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('exbos:offline-synced'))
+        }
       }
     } else {
       setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending')
@@ -1738,12 +1877,27 @@ export function ExbosProvider({ children }) {
     )
 
     const persistDelete = async () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const queueLinkedDeletes = () => {
         enqueueOfflineAction({
           type: 'delete',
           archId: targetArch,
           moduleName,
           recordId: recIdStr
+        })
+        enqueueOfflineAction({ type: 'delete_tx', txId: recIdStr })
+        linkedTxIds.forEach((txId) => {
+          if (txId !== recIdStr) {
+            enqueueOfflineAction({ type: 'delete_tx', txId })
+          }
+        })
+      }
+
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        queueLinkedDeletes()
+        addToast({
+          type: 'warning',
+          title: 'Deleted Locally (Offline)',
+          message: 'Removed on this device. Deletion will sync to MongoDB once online.'
         })
         return
       }
@@ -1756,7 +1910,7 @@ export function ExbosProvider({ children }) {
         }
       })
 
-      if (!res?.ok && res?.status >= 400 && res?.status < 500) {
+      if (!res?.ok && res?.status >= 400 && res?.status < 500 && res?.status !== 404) {
         addToast({
           type: 'error',
           title: 'Delete Blocked',
@@ -1765,12 +1919,12 @@ export function ExbosProvider({ children }) {
         return
       }
 
-      if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
-        enqueueOfflineAction({
-          type: 'delete',
-          archId: targetArch,
-          moduleName,
-          recordId: recIdStr
+      if (!res?.ok && (res?.status === 0 || res?.status >= 500 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+        queueLinkedDeletes()
+        addToast({
+          type: 'warning',
+          title: 'Deleted Locally (Queued)',
+          message: 'Network or database unavailable. Deletion queued and will auto-sync.'
         })
       }
     }
@@ -1971,12 +2125,21 @@ export function ExbosProvider({ children }) {
           type: 'delete_tx',
           txId: txIdStr
         })
+        addToast({
+          type: 'warning',
+          title: 'Deleted Locally (Offline)',
+          message: 'Transaction removed locally and queued to sync when online.'
+        })
         return
       }
       try {
-        await exbosApi.deleteTransaction(txIdStr)
+        const res = await exbosApi.deleteTransaction(txIdStr)
+        if (!res?.ok && (res?.status === 0 || res?.status >= 500 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+          enqueueOfflineAction({ type: 'delete_tx', txId: txIdStr })
+        }
       } catch (err) {
-        console.warn('Transaction delete backend note:', err.message)
+        enqueueOfflineAction({ type: 'delete_tx', txId: txIdStr })
+        console.warn('Transaction delete queued for retry:', err.message)
       }
     }
     persistTxDelete()
@@ -1985,6 +2148,7 @@ export function ExbosProvider({ children }) {
   const updateRecord = (archId, moduleName, recordId, updatedFields) => {
     const targetArch = archId || user?.architectureId || 'buy-and-sell'
     isHydratedRef.current = true
+    lastMutationTsRef.current = Date.now()
 
     const persistUpdate = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -1994,6 +2158,11 @@ export function ExbosProvider({ children }) {
           moduleName,
           recordId,
           updatedFields
+        })
+        addToast({
+          type: 'warning',
+          title: 'Updated Locally (Offline)',
+          message: 'Changes saved on this device and will auto-sync to MongoDB once online.'
         })
         return
       }
@@ -2006,13 +2175,18 @@ export function ExbosProvider({ children }) {
         })
         return
       }
-      if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
+      if (!res?.ok && (res?.status === 0 || res?.status >= 500 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
         enqueueOfflineAction({
           type: 'update',
           archId: targetArch,
           moduleName,
           recordId,
           updatedFields
+        })
+        addToast({
+          type: 'warning',
+          title: 'Updated Locally (Queued)',
+          message: 'Connection issue detected. Changes saved locally and queued to auto-sync.'
         })
       }
     }

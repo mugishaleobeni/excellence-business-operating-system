@@ -310,7 +310,11 @@ export default function DashboardTopNav({
                 ? `${offlineQueueCount} pending local changes. Click to sync now.`
                 : 'Online and synchronized with MongoDB'
             }
-            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold border transition-all cursor-pointer ${
+            className={`${
+              !isOnline || !dbConnected || syncStatus === 'syncing' || offlineQueueCount > 0
+                ? 'inline-flex'
+                : 'hidden sm:inline-flex'
+            } items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl text-[10px] font-semibold border transition-all cursor-pointer ${
               !isOnline
                 ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
                 : !dbConnected || syncStatus === 'db_error'
