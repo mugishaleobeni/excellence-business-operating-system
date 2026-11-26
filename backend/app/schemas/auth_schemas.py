@@ -93,6 +93,7 @@ class ForgotPasswordSchema(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     email: EmailStr
+    channel: Optional[str] = "email"
 
 
 class ResetPasswordSchema(BaseModel):

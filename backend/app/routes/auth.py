@@ -794,9 +794,12 @@ def update_current_user(validated_data: UpdateProfileSchema):
 @auth_bp.route("/forgot-password", methods=["POST"])
 @validate_json(ForgotPasswordSchema)
 def forgot_password(validated_data: ForgotPasswordSchema):
-    """Generate a 6-digit password reset code, verify user exists, and send via Gmail SMTP."""
+    """Generate a 6-digit password reset code and send via Email, with automatic WhatsApp fallback if email fails."""
+    from app.services.whatsapp_client import normalize_phone, send_whatsapp_message
+
     db = get_db()
     email_lower = validated_data.email.lower()
+    requested_channel = str(getattr(validated_data, "channel", "email") or "email").strip().lower()
     user_doc = db.users.find_one({"email": email_lower})
     if not user_doc:
         return error_response(
@@ -822,33 +825,108 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}"
     copy_reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}&copy=1"
 
-    email_sent = send_gmail_email(
-        to_email=email_lower,
-        subject=f"ExBOS Password Reset Code: {code}",
-        text_body=(
-            f"Your ExBOS password reset code is: {code} (valid for 15 minutes).\n"
-            f"Or open this verified reset link: {reset_link}"
-        ),
-        html_body=render_exbos_email(
-            category="Password Reset",
-            title="Reset Your ExBOS Password",
-            intro_html="We received a request to reset the password for your ExBOS account. Use the 6-digit verification code below or click the button to open the password reset form pre-filled.",
-            code=code,
-            code_label="6-Digit Password Reset Code",
-            primary_cta=("Reset Password via Verified Link", reset_link),
-            secondary_cta=("Copy 6-Digit Code", copy_reset_link),
-            footer_note="This reset code expires in 15 minutes. If you did not request a password reset, no action is required.",
-            fallback_link=reset_link,
-        ),
+    # Resolve user's registered phone number for WhatsApp fallback or direct WhatsApp delivery
+    raw_phone = str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
+    if not raw_phone:
+        integ = db.integrations.find_one({"userEmail": email_lower}) or {}
+        wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
+        raw_phone = str(wa_cfg.get("phone") or "").strip()
+    user_phone = normalize_phone(raw_phone)
+    masked_phone = (
+        f"{user_phone[:7]}***{user_phone[-3:]}"
+        if len(user_phone) >= 10
+        else (user_phone if user_phone else "")
     )
+
+    email_sent = False
+    whatsapp_sent = False
+    email_failed_fallback_used = False
+
+    def _dispatch_whatsapp_reset() -> bool:
+        if not user_phone:
+            return False
+        wa_text = (
+            "*EXBOS PASSWORD RESET CODE*\n"
+            f"Account: {email_lower}\n"
+            f"Your 6-digit verification code is: *{code}*\n"
+            "Valid for 15 minutes. Do not share this code with anyone.\n"
+            f"Reset link: {reset_link}"
+        )
+        try:
+            wa_res = send_whatsapp_message(
+                user_phone,
+                wa_text,
+                db=db,
+                metadata={"type": "password_reset_otp", "email": email_lower},
+            )
+            return bool(wa_res.get("ok") or wa_res.get("sent") or wa_res.get("queued"))
+        except Exception as exc:
+            logger.warning("WhatsApp password reset fallback failed for %s: %s", email_lower, exc)
+            return False
+
+    if requested_channel == "whatsapp":
+        if not user_phone:
+            return error_response(
+                error="No WhatsApp phone number is linked to this account. Please use Email recovery or contact support.",
+                status_code=400,
+            )
+        whatsapp_sent = _dispatch_whatsapp_reset()
+    else:
+        email_sent = send_gmail_email(
+            to_email=email_lower,
+            subject=f"ExBOS Password Reset Code: {code}",
+            text_body=(
+                f"Your ExBOS password reset code is: {code} (valid for 15 minutes).\n"
+                f"Or open this verified reset link: {reset_link}"
+            ),
+            html_body=render_exbos_email(
+                category="Password Reset",
+                title="Reset Your ExBOS Password",
+                intro_html="We received a request to reset the password for your ExBOS account. Use the 6-digit verification code below or click the button to open the password reset form pre-filled.",
+                code=code,
+                code_label="6-Digit Password Reset Code",
+                primary_cta=("Reset Password via Verified Link", reset_link),
+                secondary_cta=("Copy 6-Digit Code", copy_reset_link),
+                footer_note="This reset code expires in 15 minutes. If you did not request a password reset, no action is required.",
+                fallback_link=reset_link,
+            ),
+        )
+        # Automatic WhatsApp fallback when Email delivery fails
+        if not email_sent and user_phone:
+            whatsapp_sent = _dispatch_whatsapp_reset()
+            if whatsapp_sent:
+                email_failed_fallback_used = True
+
+    if not email_sent and not whatsapp_sent:
+        return error_response(
+            error=(
+                "We could not deliver your verification code via email"
+                + (" or WhatsApp" if user_phone else " (and no WhatsApp number is linked to this account)")
+                + ". Please try again in a moment."
+            ),
+            status_code=503,
+        )
+
+    delivery_channel = "email" if email_sent else "whatsapp"
+    if email_failed_fallback_used:
+        msg = f"Email delivery failed, so we sent your 6-digit verification code via WhatsApp ({masked_phone})."
+    elif delivery_channel == "whatsapp":
+        msg = f"A 6-digit password reset verification code was sent to your WhatsApp ({masked_phone})."
+    else:
+        msg = f"Password reset verification code and verified link sent to {email_lower}."
 
     return success_response(
         data={
             "email": email_lower,
             "emailSent": email_sent,
+            "whatsappSent": whatsapp_sent,
+            "deliveryChannel": delivery_channel,
+            "maskedPhone": masked_phone,
+            "hasWhatsApp": bool(user_phone),
+            "emailFailedFallbackUsed": email_failed_fallback_used,
             "expiresInMinutes": 15,
         },
-        message="Password reset verification code and verified link sent to your email.",
+        message=msg,
     )
 
 

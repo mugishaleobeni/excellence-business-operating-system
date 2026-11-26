@@ -172,8 +172,8 @@ export const exbosApi = {
   register: (payload) => apiRequest('/auth/register', { method: 'POST', body: payload }),
   getMe: () => apiRequest('/auth/me'),
   updateProfile: (payload) => apiRequest('/auth/me', { method: 'PATCH', body: payload }),
-  forgotPassword: (email) =>
-    apiRequest('/auth/forgot-password', { method: 'POST', body: { email } }),
+  forgotPassword: (email, channel = 'email') =>
+    apiRequest('/auth/forgot-password', { method: 'POST', body: { email, channel } }),
   resetPassword: (payload) =>
     apiRequest('/auth/reset-password', { method: 'POST', body: payload }),
   deleteAccount: (payload = {}) =>

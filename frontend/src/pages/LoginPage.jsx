@@ -212,8 +212,10 @@ export default function LoginPage({ isForgotPassword = false }) {
     }
   }
 
-  const handleRequestPasswordReset = async (e) => {
-    e.preventDefault()
+  const [resetDeliveryInfo, setResetDeliveryInfo] = useState(null)
+
+  const handleRequestPasswordReset = async (e, preferredChannel = 'email') => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
     setErrorMsg('')
     if (!email.trim()) {
       setErrorMsg('Please enter your registered business email.')
@@ -221,15 +223,34 @@ export default function LoginPage({ isForgotPassword = false }) {
     }
     setSubmitting(true)
     try {
-      const res = await exbosApi.forgotPassword(email.trim().toLowerCase())
+      const res = await exbosApi.forgotPassword(email.trim().toLowerCase(), preferredChannel)
       if (!res.ok) {
         setErrorMsg(res.error || 'Could not send reset code.')
         return
       }
+      const d = res?.data?.data || res?.data || {}
+      const info = {
+        channel: d.deliveryChannel || (d.whatsappSent && !d.emailSent ? 'whatsapp' : 'email'),
+        emailSent: Boolean(d.emailSent),
+        whatsappSent: Boolean(d.whatsappSent),
+        maskedPhone: d.maskedPhone || '',
+        hasWhatsApp: Boolean(d.hasWhatsApp),
+        emailFailedFallbackUsed: Boolean(d.emailFailedFallbackUsed),
+        message: res?.data?.message || res?.message || ''
+      }
+      setResetDeliveryInfo(info)
       addToast({
-        type: 'success',
-        title: 'Verification Code Sent',
-        message: `A 6-digit password reset code has been sent to ${email.trim()}.`
+        type: info.emailFailedFallbackUsed ? 'warning' : 'success',
+        title: info.emailFailedFallbackUsed
+          ? 'Email Failed — Sent via WhatsApp'
+          : info.channel === 'whatsapp'
+          ? 'Code Sent via WhatsApp'
+          : 'Verification Code Sent',
+        message:
+          info.message ||
+          (info.channel === 'whatsapp'
+            ? `A 6-digit password reset code has been sent to your WhatsApp (${info.maskedPhone}).`
+            : `A 6-digit password reset code has been sent to ${email.trim()}.`)
       })
       setForgotStep(2)
     } finally {
@@ -587,8 +608,39 @@ export default function LoginPage({ isForgotPassword = false }) {
 
                 {forgotStep === 2 && (
                   <form onSubmit={handleConfirmPasswordReset} className="space-y-4">
-                    <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 text-xs sm:text-sm text-emerald-200 backdrop-blur-md">
-                      Verification code sent to <strong className="text-white">{email}</strong>. Enter the 6-digit code and your new password below.
+                    <div
+                      className={`p-3.5 rounded-2xl text-xs sm:text-sm backdrop-blur-md space-y-2 ${
+                        resetDeliveryInfo?.emailFailedFallbackUsed
+                          ? 'bg-amber-500/20 border border-amber-400/50 text-amber-100'
+                          : 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200'
+                      }`}
+                    >
+                      {resetDeliveryInfo?.emailFailedFallbackUsed ? (
+                        <p>
+                          Email delivery failed, so we sent your 6-digit verification code to your WhatsApp{' '}
+                          <strong className="text-white">{resetDeliveryInfo.maskedPhone}</strong>.
+                        </p>
+                      ) : resetDeliveryInfo?.channel === 'whatsapp' ? (
+                        <p>
+                          Verification code sent to your WhatsApp{' '}
+                          <strong className="text-white">{resetDeliveryInfo.maskedPhone}</strong>. Enter the 6-digit code and your new password below.
+                        </p>
+                      ) : (
+                        <p>
+                          Verification code sent to <strong className="text-white">{email}</strong>. Enter the 6-digit code and your new password below.
+                        </p>
+                      )}
+
+                      {resetDeliveryInfo?.channel !== 'whatsapp' && (
+                        <button
+                          type="button"
+                          disabled={submitting}
+                          onClick={() => handleRequestPasswordReset(null, 'whatsapp')}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60 transition-all"
+                        >
+                          <span>Didn&apos;t receive the email? Send code via WhatsApp</span>
+                        </button>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
