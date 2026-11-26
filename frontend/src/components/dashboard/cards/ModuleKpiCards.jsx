@@ -21,6 +21,7 @@ import {
   RefreshCw
 } from "lucide-react";
 import { formatRWF } from "../../../utils/currencyWords";
+import AnimatedNumber from "../../common/AnimatedNumber";
 
 /**
  * MetricCard with In-Card Explanation Overlay on Hover/Click
@@ -122,7 +123,7 @@ function MetricCard({
 
         <div className="mt-2 min-w-0">
           <div className="font-orbitron font-extrabold text-lg sm:text-xl xl:text-2xl text-white tracking-tight break-words tabular-nums leading-tight">
-            {displayValue}
+            <AnimatedNumber value={displayValue} />
           </div>
           {subtitle && (
             <div className="text-[11px] text-slate-400 font-medium mt-1 break-words leading-normal">

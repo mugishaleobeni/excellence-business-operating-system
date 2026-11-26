@@ -1,5 +1,6 @@
 import React from 'react'
 import { X, ArrowUpRight } from 'lucide-react'
+import AnimatedNumber from '../../common/AnimatedNumber'
 
 export default function OverviewMetricsGrid({
   availableWidgets = [],
@@ -50,7 +51,7 @@ export default function OverviewMetricsGrid({
             {/* Metric Value & Subtitle - fully visible, wrapping gracefully without truncation */}
             <div className="space-y-1 my-3 min-w-0">
               <div className="font-orbitron text-xl sm:text-2xl xl:text-3xl font-extrabold text-white tracking-tight break-words leading-tight">
-                {w.getValue()}
+                <AnimatedNumber value={w.getValue()} />
               </div>
               <p className="text-xs text-slate-300 break-words mt-1 leading-relaxed">{w.getSubtitle()}</p>
             </div>

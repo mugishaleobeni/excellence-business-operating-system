@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Scale
 } from 'lucide-react'
+import AnimatedNumber from '../../../common/AnimatedNumber'
 
 export default function AgricultureKpiCards({
   animals = [],
@@ -64,7 +65,7 @@ export default function AgricultureKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">
-          {totalPopulation} Heads
+          <AnimatedNumber value={`${totalPopulation} Heads`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5 truncate">
           {totalBreedingHeads} breeders · {totalBatchHeads} in batches
@@ -86,7 +87,7 @@ export default function AgricultureKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-sky-300 mt-1">
-          {totalFeedKg.toLocaleString()} kg
+          <AnimatedNumber value={`${totalFeedKg.toLocaleString()} kg`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           {feeds.length} Feed rations configured
@@ -108,7 +109,7 @@ export default function AgricultureKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-emerald-300 mt-1">
-          {activeGestations} Active
+          <AnimatedNumber value={`${activeGestations} Active`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           Gestation &amp; farrowing timeline
@@ -136,7 +137,7 @@ export default function AgricultureKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-teal-300 mt-1">
-          {totalStoredYields} Units
+          <AnimatedNumber value={`${totalStoredYields} Units`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           {production.length} Daily production logs

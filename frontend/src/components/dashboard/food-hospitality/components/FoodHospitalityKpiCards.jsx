@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Percent
 } from 'lucide-react'
+import AnimatedNumber from '../../../common/AnimatedNumber'
 
 export default function FoodHospitalityKpiCards({
   menuItems = [],
@@ -51,7 +52,7 @@ export default function FoodHospitalityKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-white mt-1">
-          {activeOrders.length} In Kitchen
+          <AnimatedNumber value={`${activeOrders.length} In Kitchen`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5 truncate">
           {readyOrders.length} Ready for service · {kitchenOrders.length} total
@@ -73,7 +74,7 @@ export default function FoodHospitalityKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-sky-300 mt-1">
-          {totalRooms > 0 ? `${occupancyPercent}%` : 'N/A'}
+          <AnimatedNumber value={totalRooms > 0 ? `${occupancyPercent}%` : 'N/A'} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           {totalRooms > 0 ? `${occupiedRooms} of ${totalRooms} rooms active` : 'Dining venue mode'}
@@ -95,7 +96,7 @@ export default function FoodHospitalityKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-emerald-300 mt-1">
-          {avgFoodCostPercent}%
+          <AnimatedNumber value={`${avgFoodCostPercent}%`} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           Benchmark target: 28% – 35%
@@ -117,7 +118,7 @@ export default function FoodHospitalityKpiCards({
           </div>
         </div>
         <div className="text-xl sm:text-2xl font-bold font-orbitron text-amber-300 mt-1">
-          {totalFolioBalance > 0 ? `${totalFolioBalance.toLocaleString()} RWF` : 'Zero Debt'}
+          <AnimatedNumber value={totalFolioBalance > 0 ? `${totalFolioBalance.toLocaleString()} RWF` : 'Zero Debt'} />
         </div>
         <div className="text-[11px] text-slate-400 mt-0.5">
           {guestFolios.length} Active guest accounts

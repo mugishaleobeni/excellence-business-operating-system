@@ -5,6 +5,7 @@ import { formatRWF } from '../utils/currencyWords'
 import MoneyInput from '../components/common/MoneyInput'
 import CustomSelect from '../components/common/CustomSelect'
 import { ListRowsSkeleton, TableRowsSkeleton } from '../components/common/SkeletonLoader'
+import AnimatedNumber from '../components/common/AnimatedNumber'
 import { apiClient } from '../utils/apiClient'
 import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
 import {
@@ -1018,7 +1019,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-white/10">
               <div className="text-[10px] font-orbitron uppercase text-[#9EDCFF]/80">Total Users</div>
               <div className="font-orbitron text-2xl font-black text-white mt-1">
-                {summary.totalUsers ?? 0}
+                <AnimatedNumber value={summary.totalUsers ?? 0} />
               </div>
               <div className="text-[10px] text-emerald-300 mt-0.5">
                 {summary.activeUsers ?? 0} active
@@ -1028,7 +1029,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-white/10">
               <div className="text-[10px] font-orbitron uppercase text-[#9EDCFF]/80">Businesses</div>
               <div className="font-orbitron text-2xl font-black text-white mt-1">
-                {summary.totalBusinesses ?? 0}
+                <AnimatedNumber value={summary.totalBusinesses ?? 0} />
               </div>
               <div className="text-[10px] text-sky-300 mt-0.5">
                 {summary.activeLast7Days ?? 0} active 7d
@@ -1038,7 +1039,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-emerald-400/25">
               <div className="text-[10px] font-orbitron uppercase text-emerald-300">Verified Paid MRR</div>
               <div className="font-orbitron text-lg font-black text-emerald-400 mt-1.5 truncate">
-                {formatRWF(summary.paidMrrRWF ?? 0)}
+                <AnimatedNumber value={formatRWF(summary.paidMrrRWF ?? 0)} />
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">0% inflated</div>
             </div>
@@ -1046,7 +1047,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-purple-400/25">
               <div className="text-[10px] font-orbitron uppercase text-purple-300">Complimentary</div>
               <div className="font-orbitron text-2xl font-black text-purple-200 mt-1">
-                {summary.complimentaryCount ?? 0}
+                <AnimatedNumber value={summary.complimentaryCount ?? 0} />
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">0 RWF grants</div>
             </div>
@@ -1054,7 +1055,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-[#218DFF]/30">
               <div className="text-[10px] font-orbitron uppercase text-[#9EDCFF]">Live Records</div>
               <div className="font-orbitron text-2xl font-black text-white mt-1">
-                {(summary.totalRecords ?? 0) + (summary.totalTransactions ?? 0)}
+                <AnimatedNumber value={(summary.totalRecords ?? 0) + (summary.totalTransactions ?? 0)} />
               </div>
               <div className="text-[10px] text-[#9EDCFF]/80 mt-0.5">
                 {summary.totalTransactions ?? 0} ledger tx
@@ -1064,7 +1065,7 @@ export default function SuperAdminPage() {
             <div className="p-3.5 rounded-2xl bg-[#03091F]/70 border border-rose-400/25">
               <div className="text-[10px] font-orbitron uppercase text-rose-300">Suspended</div>
               <div className="font-orbitron text-2xl font-black text-rose-400 mt-1">
-                {summary.suspendedUsers ?? 0}
+                <AnimatedNumber value={summary.suspendedUsers ?? 0} />
               </div>
               <div className="text-[10px] text-slate-400 mt-0.5">Locked accounts</div>
             </div>

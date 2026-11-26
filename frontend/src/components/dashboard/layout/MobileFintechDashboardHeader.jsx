@@ -24,6 +24,7 @@ import {
 import { OPTIMIZED_IMAGES } from '../../../assets/optimized/imageManifest'
 const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
 import { formatRWF } from '../../../utils/currencyWords'
+import AnimatedNumber from '../../common/AnimatedNumber'
 import { useExbos } from '../../../context/ExbosContext'
 import TradeSelectionModal from '../make-and-sell/modals/TradeSelectionModal'
 import { TRADE_PRESETS } from '../make-and-sell/data/tradePresets'
@@ -341,7 +342,7 @@ export default function MobileFintechDashboardHeader({
                   ••••••
                 </span>
               ) : (
-                Number(activeMetricObj.amount || 0).toLocaleString()
+                <AnimatedNumber value={Number(activeMetricObj.amount || 0).toLocaleString()} />
               )}
             </div>
           </div>

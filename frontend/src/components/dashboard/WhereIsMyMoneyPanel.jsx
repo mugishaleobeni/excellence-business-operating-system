@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { useExbos } from '../../context/ExbosContext'
 import { formatRWF, amountToWords } from '../../utils/currencyWords'
+import AnimatedNumber from '../common/AnimatedNumber'
 import { calculateFinancialIntelligence } from '../../utils/financialIntelligenceEngine'
 import MoneyInput from '../common/MoneyInput'
 import {
@@ -225,7 +226,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
               Money I Really Have = Cash + MoMo + Bank + Owed to Me − Money I Owe
             </h2>
             <div className="font-orbitron text-3xl sm:text-5xl font-black text-white pt-1">
-              {formatRWF(moneyIReallyHave, hideFinancials)}
+              <AnimatedNumber value={formatRWF(moneyIReallyHave, hideFinancials)} />
             </div>
             {!hideFinancials && (
               <p className="text-xs italic text-[#9EDCFF]">
@@ -243,7 +244,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
               <Package className="w-4 h-4 text-[#218DFF]" />
             </div>
             <div className="font-orbitron text-2xl sm:text-3xl font-extrabold text-[#9EDCFF]">
-              {formatRWF(dynamicBalances.stockAndMaterials, hideFinancials)}
+              <AnimatedNumber value={formatRWF(dynamicBalances.stockAndMaterials, hideFinancials)} />
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
               Shown next to your real money—not added in—because stock value is sleeping on the shelf and is not spendable until sold.
@@ -259,7 +260,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
             Total Sales vs Received
           </span>
           <div className="font-orbitron text-base sm:text-lg font-extrabold text-white">
-            {formatRWF(finIntel.totalSalesRevenueRWF, hideFinancials)}
+            <AnimatedNumber value={formatRWF(finIntel.totalSalesRevenueRWF, hideFinancials)} />
           </div>
           <span className="text-[11px] text-emerald-300 block">
             Received: {formatRWF(finIntel.actualPaymentsReceivedRWF, hideFinancials)}
@@ -271,7 +272,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
             Gross Profit &amp; COGS
           </span>
           <div className="font-orbitron text-base sm:text-lg font-extrabold text-emerald-400">
-            {formatRWF(finIntel.grossProfitRWF, hideFinancials)}
+            <AnimatedNumber value={formatRWF(finIntel.grossProfitRWF, hideFinancials)} />
           </div>
           <span className="text-[11px] text-slate-300 block">
             COGS: {formatRWF(finIntel.costOfGoodsSoldRWF, hideFinancials)}
@@ -287,7 +288,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
               finIntel.netProfitRWF >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}
           >
-            {formatRWF(finIntel.netProfitRWF, hideFinancials)}
+            <AnimatedNumber value={formatRWF(finIntel.netProfitRWF, hideFinancials)} />
           </div>
           <span className="text-[11px] text-slate-300 block">
             OpEx: {formatRWF(finIntel.operatingExpensesRWF, hideFinancials)}
@@ -299,7 +300,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
             PO Commitments &amp; Reserves
           </span>
           <div className="font-orbitron text-base sm:text-lg font-extrabold text-amber-300">
-            {formatRWF(finIntel.purchaseCommitmentsRWF, hideFinancials)}
+            <AnimatedNumber value={formatRWF(finIntel.purchaseCommitmentsRWF, hideFinancials)} />
           </div>
           <span className="text-[11px] text-slate-300 block">
             Ops Reserve: {formatRWF(finIntel.reservedOperationalFundsRWF, hideFinancials)}
@@ -311,7 +312,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
             Available Purchasing Budget
           </span>
           <div className="font-orbitron text-base sm:text-lg font-black text-white">
-            {formatRWF(finIntel.availablePurchasingBudgetRWF, hideFinancials)}
+            <AnimatedNumber value={formatRWF(finIntel.availablePurchasingBudgetRWF, hideFinancials)} />
           </div>
           <span className="text-[11px] text-[#9EDCFF] block">
             Cash: {formatRWF(finIntel.availableBusinessCashRWF, hideFinancials)}
@@ -339,7 +340,7 @@ export default function WhereIsMyMoneyPanel({ activeArchId = 'buy-and-sell' }) {
                   {b.title}
                 </h3>
                 <div className="font-orbitron text-xl sm:text-2xl font-extrabold text-[#071544] dark:text-white break-words leading-tight">
-                  {formatRWF(b.amount, hideFinancials)}
+                  <AnimatedNumber value={formatRWF(b.amount, hideFinancials)} />
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-300">{b.subtitle}</p>
               </div>

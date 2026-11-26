@@ -14,6 +14,7 @@ import {
   Info
 } from 'lucide-react'
 import { formatRWF } from '../../../utils/currencyWords'
+import AnimatedNumber from '../../common/AnimatedNumber'
 import { FINANCIAL_DATASETS } from '../data/financialDatasets'
 
 const ARCH_METADATA = {
@@ -686,7 +687,7 @@ export default function CashFlowCurveChart({
             <ArrowUpRight className="w-3.5 h-3.5 text-[#218DFF]" />
           </div>
           <div className="font-orbitron text-base sm:text-xl font-extrabold text-white">
-            {formatRWF(periodKpi.totalInc, hideFinancials)}
+            <AnimatedNumber value={formatRWF(periodKpi.totalInc, hideFinancials)} />
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
             Total {graphTimeframe.toLowerCase()} inflows
@@ -710,7 +711,7 @@ export default function CashFlowCurveChart({
             <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
           </div>
           <div className="font-orbitron text-base sm:text-xl font-extrabold text-rose-300">
-            {formatRWF(periodKpi.totalExp, hideFinancials)}
+            <AnimatedNumber value={formatRWF(periodKpi.totalExp, hideFinancials)} />
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
             Total operating burn
@@ -732,11 +733,11 @@ export default function CashFlowCurveChart({
               <span>Net Profit Velocity</span>
             </span>
             <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-              {periodKpi.margin}%
+              <AnimatedNumber value={`${periodKpi.margin}%`} />
             </span>
           </div>
           <div className={`font-orbitron text-base sm:text-xl font-extrabold ${periodKpi.netTakeHome >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {periodKpi.netTakeHome >= 0 ? '+' : ''}{formatRWF(periodKpi.netTakeHome, hideFinancials)}
+            <AnimatedNumber value={`${periodKpi.netTakeHome >= 0 ? '+' : ''}${formatRWF(periodKpi.netTakeHome, hideFinancials)}`} />
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
             Net take-home margin
@@ -755,7 +756,7 @@ export default function CashFlowCurveChart({
             </span>
           </div>
           <div className="font-orbitron text-base sm:text-xl font-extrabold text-amber-300">
-            {formatRWF(periodKpi.peakIncome, hideFinancials)}
+            <AnimatedNumber value={formatRWF(periodKpi.peakIncome, hideFinancials)} />
           </div>
           <div className="text-[10px] text-slate-400 mt-0.5">
             Highest period turnover

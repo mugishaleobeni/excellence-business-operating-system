@@ -9,6 +9,7 @@ import {
   Users,
   Package
 } from 'lucide-react'
+import AnimatedNumber from '../../../common/AnimatedNumber'
 
 export default function ServiceKpiCards({
   services = [],
@@ -106,7 +107,7 @@ export default function ServiceKpiCards({
               </div>
             </div>
             <div className="font-orbitron text-lg sm:text-xl font-bold text-white tracking-tight">
-              {card.value}
+              <AnimatedNumber value={card.value} />
             </div>
             <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
               <span>{card.subtext}</span>

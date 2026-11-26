@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Info, X } from 'lucide-react'
 import { formatRWF } from '../../../utils/currencyWords'
+import AnimatedNumber from '../../common/AnimatedNumber'
 
 function SummaryCardItem({
   title,
@@ -95,7 +96,7 @@ function SummaryCardItem({
             className={`font-orbitron text-lg sm:text-xl xl:text-2xl font-extrabold tracking-tight ${c.accent} break-words leading-tight`}
             title={String(value)}
           >
-            {displayValue}
+            <AnimatedNumber value={displayValue} />
           </div>
           {subtitle && (
             <div className="text-[11px] text-slate-400 mt-1 break-words leading-normal">
