@@ -23,6 +23,10 @@ export default function BranchPerformanceCenterPanel({
     switchBranch
   } = useExbos()
 
+  const currentYear = new Date().getFullYear()
+  const availableYears = [currentYear, currentYear - 1, currentYear - 2]
+  const [selectedYear, setSelectedYear] = useState(currentYear)
+  const [hoveredDay, setHoveredDay] = useState(null)
   const [viewMode, setViewMode] = useState('both') // 'both' | 'heatmap' | 'bar' | 'profit'
   const [selectedBranchFilter, setSelectedBranchFilter] = useState('ALL')
   const [backendAnalytics, setBackendAnalytics] = useState(null)
@@ -169,30 +173,56 @@ export default function BranchPerformanceCenterPanel({
     const bestBranch = perfList[0] || null
     const maxRevenue = Math.max(...perfList.map((b) => b.revenueRWF), 1)
 
-    // 24 weeks (168 days) GitHub contribution grid
+    // Full 52-week GitHub-style contribution grid aligned to Sun..Sat rows with Month labels
+    const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     const today = new Date()
-    const days = 168
-    const cells = []
+    const endDate =
+      selectedYear === currentYear
+        ? new Date(today.getFullYear(), today.getMonth(), today.getDate())
+        : new Date(selectedYear, 11, 31)
+    const rawStart =
+      selectedYear === currentYear
+        ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 364)
+        : new Date(selectedYear, 0, 1)
+    // Align start to Sunday so rows match Sun(0), Mon(1), Tue(2), Wed(3), Thu(4), Fri(5), Sat(6)
+    const startDate = new Date(rawStart)
+    startDate.setDate(startDate.getDate() - startDate.getDay())
+
     const maxDayRev = Math.max(...Object.values(dailyMap).map((v) => v.revenueRWF), 1)
     const maxDayCnt = Math.max(...Object.values(dailyMap).map((v) => v.count), 1)
 
-    for (let i = days - 1; i >= 0; i--) {
-      const dt = new Date(today)
-      dt.setDate(today.getDate() - i)
-      const iso = dt.toISOString().slice(0, 10)
-      const entry = dailyMap[iso] || { count: 0, revenueRWF: 0 }
-      let level = 0
-      if (entry.count > 0 || entry.revenueRWF > 0) {
-        const ratio = Math.max(entry.revenueRWF / maxDayRev, entry.count / maxDayCnt)
-        level = ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.75 ? 3 : 4
-      }
-      cells.push({ date: iso, ...entry, level })
-    }
-
-    // Group into 24 columns of 7 days (like GitHub)
     const weeks = []
-    for (let w = 0; w < cells.length; w += 7) {
-      weeks.push(cells.slice(w, w + 7))
+    const monthLabels = []
+    let lastMonthKey = ''
+    let yearTotalOps = 0
+    const cursor = new Date(startDate)
+
+    while (cursor <= endDate || weeks.length === 0) {
+      const weekCol = []
+      const weekIdx = weeks.length
+      for (let d = 0; d < 7; d++) {
+        const dt = new Date(cursor)
+        const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+        const inRange = dt >= rawStart && dt <= endDate
+        const entry = inRange ? (dailyMap[iso] || { count: 0, revenueRWF: 0 }) : { count: 0, revenueRWF: 0 }
+        if (inRange) yearTotalOps += entry.count
+        let level = 0
+        if (inRange && (entry.count > 0 || entry.revenueRWF > 0)) {
+          const ratio = Math.max(entry.revenueRWF / maxDayRev, entry.count / maxDayCnt)
+          level = ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.75 ? 3 : 4
+        }
+        if (d === 0 && inRange) {
+          const mKey = `${dt.getFullYear()}-${dt.getMonth()}`
+          if (mKey !== lastMonthKey) {
+            monthLabels.push({ weekIdx, label: MONTH_NAMES[dt.getMonth()] })
+            lastMonthKey = mKey
+          }
+        }
+        weekCol.push({ date: iso, ...entry, level, inRange })
+        cursor.setDate(cursor.getDate() + 1)
+      }
+      weeks.push(weekCol)
+      if (weeks.length >= 54) break
     }
 
     return {
@@ -200,10 +230,12 @@ export default function BranchPerformanceCenterPanel({
       bestBranch,
       maxRevenue,
       weeks,
+      monthLabels,
+      yearTotalOps,
       totalOps: Object.values(dailyMap).reduce((a, b) => a + b.count, 0),
       totalBranchRev: perfList.reduce((a, b) => a + b.revenueRWF, 0)
     }
-  }, [allWorkspaces, activeArchId, branches, selectedBranchFilter, backendAnalytics])
+  }, [allWorkspaces, activeArchId, branches, selectedBranchFilter, backendAnalytics, selectedYear, currentYear])
 
   const customBranches = branches.filter((b) => !b.isMain && b.id !== 'main')
   // Only the Main HQ Dashboard visualizes cross-branch performance, and only when at least 1 custom branch exists
@@ -288,46 +320,119 @@ export default function BranchPerformanceCenterPanel({
       </div>
 
       {/* Visualizations */}
-      <div className={`grid gap-4 sm:gap-5 ${viewMode === 'both' ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1'}`}>
-        {/* 1. GitHub-Style Contribution Heatmap */}
+      <div className="grid grid-cols-1 gap-4 sm:gap-5">
+        {/* 1. GitHub-Style 52-Week Contribution Heatmap with ExBOS Sapphire Theme & Year Selector */}
         {(viewMode === 'both' || viewMode === 'heatmap') && (
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 min-w-0 overflow-hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <span className="font-orbitron font-bold text-[#9EDCFF]">
-                Daily Contribution Heatmap (Last 24 Weeks)
-              </span>
-              <span className="font-mono text-slate-300 whitespace-nowrap">
-                {computed.totalOps} transactions
-              </span>
-            </div>
+          <div className="flex flex-col md:flex-row gap-4 min-w-0">
+            <div className="flex-1 min-w-0 space-y-2.5">
+              {/* Top Count Header (GitHub-style) */}
+              <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+                <div className="text-xs sm:text-sm font-semibold text-white">
+                  <span className="font-orbitron font-bold text-[#9EDCFF]">
+                    {computed.yearTotalOps.toLocaleString()}
+                  </span>{' '}
+                  operations {selectedYear === currentYear ? 'in the last year' : `in ${selectedYear}`}
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  {hoveredDay
+                    ? `${hoveredDay.date}: ${hoveredDay.count} ${hoveredDay.count === 1 ? 'entry' : 'entries'} · ${formatRWF(hoveredDay.revenueRWF, hideFinancials)}`
+                    : 'Branch activity pulse'}
+                </span>
+              </div>
 
-            <div className="overflow-x-auto pb-1">
-              <div className="inline-flex gap-1.5 min-w-max">
-                {computed.weeks.map((week, wi) => (
-                  <div key={wi} className="flex flex-col gap-1.5">
-                    {week.map((day) => (
-                      <div
-                        key={day.date}
-                        title={`${day.date}: ${day.count} entries · ${formatRWF(day.revenueRWF, hideFinancials)}`}
-                        className={`w-3.5 h-3.5 rounded-[3px] border transition-transform hover:scale-125 cursor-pointer ${
-                          LEVEL_COLORS[day.level] || LEVEL_COLORS[0]
-                        }`}
-                      />
-                    ))}
+              {/* Framed Contribution Matrix Card */}
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-[#030B24]/80 border border-[#218DFF]/25 space-y-2.5 min-w-0 overflow-hidden">
+                <div className="overflow-x-auto pb-1">
+                  <div className="inline-block min-w-max">
+                    {/* Month Labels Row */}
+                    <div className="flex items-center mb-1.5 pl-8">
+                      <div className="relative h-4" style={{ width: `${computed.weeks.length * 14}px` }}>
+                        {computed.monthLabels.map((m) => (
+                          <span
+                            key={`${m.weekIdx}-${m.label}`}
+                            style={{ left: `${m.weekIdx * 14}px` }}
+                            className="absolute top-0 text-[10px] font-medium text-slate-300 select-none whitespace-nowrap"
+                          >
+                            {m.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Weekday Labels + 52-Week Squares Grid */}
+                    <div className="flex items-start gap-2">
+                      {/* Weekday Axis (Mon, Wed, Fri) */}
+                      <div className="flex flex-col justify-between text-[10px] text-slate-400 font-medium select-none w-6 shrink-0 pt-[14px] h-[95px]">
+                        <span className="leading-[11px]">Mon</span>
+                        <span className="leading-[11px]">Wed</span>
+                        <span className="leading-[11px]">Fri</span>
+                      </div>
+
+                      {/* Week Columns */}
+                      <div className="inline-flex gap-[3px]">
+                        {computed.weeks.map((week, wi) => (
+                          <div key={wi} className="flex flex-col gap-[3px]">
+                            {week.map((day) => (
+                              <div
+                                key={day.date}
+                                onMouseEnter={() => day.inRange && setHoveredDay(day)}
+                                onMouseLeave={() => setHoveredDay(null)}
+                                onClick={() => day.inRange && setHoveredDay(day)}
+                                title={
+                                  day.inRange
+                                    ? `${day.date}: ${day.count} entries · ${formatRWF(day.revenueRWF, hideFinancials)}`
+                                    : ''
+                                }
+                                className={`w-[11px] h-[11px] rounded-[2px] border transition-transform ${
+                                  day.inRange
+                                    ? `hover:scale-125 cursor-pointer ${LEVEL_COLORS[day.level] || LEVEL_COLORS[0]}`
+                                    : 'opacity-0 pointer-events-none border-transparent'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                ))}
+                </div>
+
+                {/* Footer Legend Row */}
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 pt-1.5 border-t border-white/10">
+                  <span>Hover or tap any square to inspect daily branch volume</span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span>Less</span>
+                    {LEVEL_COLORS.map((cls, idx) => (
+                      <span key={idx} className={`w-[11px] h-[11px] rounded-[2px] border inline-block ${cls}`} />
+                    ))}
+                    <span>More</span>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-slate-400 pt-1">
-              <span>Tap or hover any square for daily volume</span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span>Less</span>
-                {LEVEL_COLORS.map((cls, idx) => (
-                  <span key={idx} className={`w-3 h-3 rounded-[2px] border inline-block ${cls}`} />
-                ))}
-                <span>More</span>
-              </div>
+            {/* Right-Hand Year Selector Sidebar (GitHub-style, ExBOS Sapphire Blue Active Pill) */}
+            <div className="flex flex-row md:flex-col gap-1.5 md:w-24 shrink-0 md:pt-7">
+              {availableYears.map((yr) => {
+                const active = selectedYear === yr
+                return (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => {
+                      setSelectedYear(yr)
+                      setHoveredDay(null)
+                    }}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold text-left transition-all cursor-pointer ${
+                      active
+                        ? 'bg-[#218DFF] text-white shadow-[0_4px_14px_rgba(33,141,255,0.4)]'
+                        : 'text-slate-400 hover:text-white hover:bg-white/10 bg-transparent'
+                    }`}
+                  >
+                    {yr}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}

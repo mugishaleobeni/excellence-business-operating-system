@@ -20,9 +20,10 @@ const VISIBLE_BENEFITS = 5
 
 function PlanCard({ plan, language, onSelect }) {
   const [expanded, setExpanded] = useState(false)
-  const isFeatured = plan.recommended || plan.tier === 'Gold'
-  const firstFeatures = plan.features.slice(0, VISIBLE_BENEFITS)
-  const moreFeatures = plan.features.slice(VISIBLE_BENEFITS)
+  const isFeatured = Boolean(plan?.recommended || plan?.tier === 'Gold')
+  const safeFeatures = Array.isArray(plan?.features) ? plan.features : []
+  const firstFeatures = safeFeatures.slice(0, VISIBLE_BENEFITS)
+  const moreFeatures = safeFeatures.slice(VISIBLE_BENEFITS)
 
   const renderFeature = (feat) => (
     <li key={feat.name} className="flex items-start gap-3" style={{ opacity: feat.included ? 1 : 0.55 }}>
