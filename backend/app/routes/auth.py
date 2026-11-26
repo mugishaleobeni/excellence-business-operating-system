@@ -856,6 +856,22 @@ def forgot_password(validated_data: ForgotPasswordSchema):
             status_code=404,
         )
 
+    # Validate registered phone BEFORE generating/storing any OTP (prevents mismatched phone from creating unused OTPs)
+    stored_raw_phone = str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
+    if not stored_raw_phone:
+        integ = db.integrations.find_one({"userEmail": email_lower}) or {}
+        wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
+        stored_raw_phone = str(wa_cfg.get("phone") or wa_cfg.get("linkedBusinessPhone") or "").strip()
+    registered_phone = normalize_phone(stored_raw_phone)
+
+    supplied_phone = normalize_phone(str(getattr(validated_data, "phone", None) or "").strip())
+    if supplied_phone:
+        if not registered_phone or supplied_phone != registered_phone:
+            return error_response(
+                error="The WhatsApp number entered does not match the phone number registered on this account.",
+                status_code=400,
+            )
+
     code = generate_numeric_code(6)
     now = datetime.now(timezone.utc)
 
@@ -873,22 +889,6 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     frontend_origin = _resolve_frontend_origin()
     reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}"
     copy_reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}&copy=1"
-
-    # Resolve the account's REGISTERED phone number (NEVER send a reset OTP to an arbitrary unverified phone)
-    stored_raw_phone = str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
-    if not stored_raw_phone:
-        integ = db.integrations.find_one({"userEmail": email_lower}) or {}
-        wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
-        stored_raw_phone = str(wa_cfg.get("phone") or wa_cfg.get("linkedBusinessPhone") or "").strip()
-    registered_phone = normalize_phone(stored_raw_phone)
-
-    supplied_phone = normalize_phone(str(getattr(validated_data, "phone", None) or "").strip())
-    if supplied_phone:
-        if not registered_phone or supplied_phone != registered_phone:
-            return error_response(
-                error="The WhatsApp number entered does not match the phone number registered on this account.",
-                status_code=400,
-            )
 
     user_phone = registered_phone
     masked_phone = (

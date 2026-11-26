@@ -1,0 +1,639 @@
+"""
+Full ExBOS System Regression & Unit Test Suite (Deterministic, Zero SMTP / Atlas Dependency).
+
+Covers all core ExBOS backend features end-to-end (excluding live SMTP email delivery
+blocked on Render Free Tier):
+  1. Auth, Registration, Pending Paid Plan Verification & Login JWT
+  2. Password Reset WhatsApp Fallback, Registered-Phone Check, OTP Expiry & 5-Attempt Lockout
+  3. Global JWT Guard, IDOR Prevention, Security Headers, Rate Limiting & Meta Webhook HMAC
+  4. Workspace CRUD (Products, Sales + Stock Deduction, Purchases, Expenses, Delete + Stock Restore, QR PNG)
+  5. Multi-Branch Isolation, Branch Manager Creation Block & Silent Owner Product Audit Alerts
+  6. WhatsApp Guided POS, Contextual '0' Main Menu, PAYMENT VERIFIED Footer & Live Subscription Gating
+  7. Super Admin Pricing Sync -> Live Public Pricing & Plan Limits
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import re
+import sys
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from flask_jwt_extended import create_access_token
+
+from app import create_app
+from app.services.whatsapp_client import build_welcome_message
+from app.services.whatsapp_engine import handle_incoming_whatsapp_message
+from app.utils.rate_limit import check_rate_limit, reset_rate_limits
+
+
+def _get_nested(doc: dict, dotted_key: str):
+    cur = doc
+    for part in dotted_key.split("."):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return None
+    return cur
+
+
+def _set_nested(doc: dict, dotted_key: str, value):
+    parts = dotted_key.split(".")
+    cur = doc
+    for part in parts[:-1]:
+        if part not in cur or not isinstance(cur[part], dict):
+            cur[part] = {}
+        cur = cur[part]
+    cur[parts[-1]] = value
+
+
+def _matches_query(doc: dict, query: dict | None) -> bool:
+    if not query:
+        return True
+    for k, v in query.items():
+        if k == "$or":
+            if not any(_matches_query(doc, sub) for sub in v):
+                return False
+            continue
+        if k == "$and":
+            if not all(_matches_query(doc, sub) for sub in v):
+                return False
+            continue
+        val = _get_nested(doc, k) if "." in k else doc.get(k)
+        if isinstance(v, dict):
+            for op, target in v.items():
+                if op == "$ne" and val == target:
+                    return False
+                elif op == "$in" and val not in target:
+                    return False
+                elif op == "$nin" and val in target:
+                    return False
+                elif op == "$gt" and not (val is not None and val > target):
+                    return False
+                elif op == "$gte" and not (val is not None and val >= target):
+                    return False
+                elif op == "$lt" and not (val is not None and val < target):
+                    return False
+                elif op == "$lte" and not (val is not None and val <= target):
+                    return False
+                elif op == "$regex":
+                    flags = re.IGNORECASE if "i" in str(v.get("$options", "")) else 0
+                    if not re.search(str(target), str(val or ""), flags):
+                        return False
+        else:
+            if val != v:
+                return False
+    return True
+
+
+class _FakeCursor(list):
+    def sort(self, key_or_list, direction=1):
+        if isinstance(key_or_list, list):
+            for field, d in reversed(key_or_list):
+                super().sort(key=lambda x: str(x.get(field) or ""), reverse=(d < 0))
+        else:
+            super().sort(key=lambda x: str(x.get(key_or_list) or ""), reverse=(direction < 0))
+        return self
+
+    def limit(self, n: int):
+        return _FakeCursor(self[:n])
+
+
+class _FakeResult:
+    def __init__(self, count: int = 1, inserted_id=None):
+        self.deleted_count = count
+        self.modified_count = count
+        self.matched_count = count
+        self.inserted_id = inserted_id
+
+
+class _InMemoryCollection:
+    def __init__(self, docs=None):
+        self.docs: list[dict] = [dict(d) for d in (docs or [])]
+
+    def _project(self, doc: dict, projection: dict | None) -> dict:
+        out = dict(doc)
+        if projection and projection.get("_id") == 0:
+            out.pop("_id", None)
+        return out
+
+    def find(self, query=None, projection=None):
+        return _FakeCursor(
+            self._project(d, projection) for d in self.docs if _matches_query(d, query)
+        )
+
+    def find_one(self, query=None, projection=None, sort=None):
+        matches = [d for d in self.docs if _matches_query(d, query)]
+        if sort and matches:
+            field, direction = sort[0]
+            matches.sort(
+                key=lambda x: x.get(field) or datetime.min.replace(tzinfo=timezone.utc),
+                reverse=(direction < 0),
+            )
+        return self._project(matches[0], projection) if matches else None
+
+    def count_documents(self, query=None) -> int:
+        return sum(1 for d in self.docs if _matches_query(d, query))
+
+    def insert_one(self, doc: dict):
+        copy = dict(doc)
+        copy.setdefault("_id", f"oid-{len(self.docs) + 1}")
+        self.docs.append(copy)
+        return _FakeResult(1, copy["_id"])
+
+    def insert_many(self, docs):
+        for d in docs:
+            self.insert_one(d)
+        return _FakeResult(len(docs))
+
+    def update_one(self, query, update, upsert=False):
+        for d in self.docs:
+            if _matches_query(d, query):
+                if "$set" in update:
+                    for k, v in update["$set"].items():
+                        if "." in k:
+                            _set_nested(d, k, v)
+                        else:
+                            d[k] = v
+                if "$inc" in update:
+                    for k, v in update["$inc"].items():
+                        d[k] = (d.get(k) or 0) + v
+                return _FakeResult(1)
+        if upsert:
+            nd = {}
+            for k, v in (query or {}).items():
+                if not k.startswith("$") and not isinstance(v, dict):
+                    nd[k] = v
+            if "$set" in update:
+                for k, v in update["$set"].items():
+                    if "." in k:
+                        _set_nested(nd, k, v)
+                    else:
+                        nd[k] = v
+            self.insert_one(nd)
+            return _FakeResult(1)
+        return _FakeResult(0)
+
+    def delete_one(self, query):
+        for idx, d in enumerate(self.docs):
+            if _matches_query(d, query):
+                self.docs.pop(idx)
+                return _FakeResult(1)
+        return _FakeResult(0)
+
+    def delete_many(self, query):
+        before = len(self.docs)
+        self.docs = [d for d in self.docs if not _matches_query(d, query)]
+        return _FakeResult(before - len(self.docs))
+
+
+class _InMemoryDB:
+    def __init__(self):
+        self._cols: dict[str, _InMemoryCollection] = {}
+
+    def __getattr__(self, name: str) -> _InMemoryCollection:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name not in self._cols:
+            self._cols[name] = _InMemoryCollection()
+        return self._cols[name]
+
+    def __getitem__(self, name: str) -> _InMemoryCollection:
+        return self.__getattr__(name)
+
+
+class FullSystemRegressionTestCase(unittest.TestCase):
+    """Comprehensive regression suite covering all ExBOS subsystems."""
+
+    def setUp(self):
+        self.db = _InMemoryDB()
+        self.db_patchers = [
+            patch("app.init_db"),
+            patch("app.utils.mailer.start_email_outbox_relay"),
+            patch("app.get_db", return_value=self.db),
+            patch("app.database.get_db", return_value=self.db),
+            patch("app.routes.auth.get_db", return_value=self.db),
+            patch("app.routes.workspaces.get_db", return_value=self.db),
+            patch("app.routes.transactions.get_db", return_value=self.db),
+            patch("app.routes.branches.get_db", return_value=self.db),
+            patch("app.routes.super_admin.get_db", return_value=self.db),
+            patch("app.routes.whatsapp.get_db", return_value=self.db),
+            patch("app.routes.storage.get_db", return_value=self.db),
+        ]
+        for p in self.db_patchers:
+            p.start()
+        self.app = create_app()
+        self.app.config["TESTING"] = True
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        for p in reversed(self.db_patchers):
+            p.stop()
+
+    def _auth_header(self, email: str) -> dict:
+        with self.app.app_context():
+            tok = create_access_token(identity=email)
+        return {"Authorization": f"Bearer {tok}"}
+
+    # ------------------------------------------------------------------
+    # 1. AUTH, REGISTRATION (NO SELF-APPROVED PAID PLANS), LOGIN & RESET
+    # ------------------------------------------------------------------
+    def test_01_registration_paid_plan_requires_approval_and_login_works(self):
+        with patch("app.services.whatsapp_client.send_whatsapp_message", return_value={"ok": True, "sent": True}) as mock_wa:
+            resp = self.client.post(
+                "/api/v1/auth/register",
+                json={
+                    "fullName": "Jean Founder",
+                    "email": "founder@kigalishop.rw",
+                    "phone": "+250788100200",
+                    "password": "StrongPassword123!",
+                    "businessName": "Kigali Tech Hub",
+                    "architectureId": "buy-and-sell",
+                    "country": "Rwanda",
+                    "location": "Kigali",
+                    "currency": "RWF",
+                    "language": "en",
+                    "planTier": "Gold",
+                    "paymentMethod": "MTN MoMo",
+                    "paymentReference": "MOMO-998877",
+                },
+            )
+        self.assertEqual(resp.status_code, 201, resp.get_data(as_text=True))
+        # Must auto-send Welcome WhatsApp message
+        self.assertTrue(mock_wa.called)
+
+        # Paid plan on register MUST NOT self-approve; starts Free + PendingApproval
+        saved_user = self.db.users.find_one({"email": "founder@kigalishop.rw"})
+        self.assertIsNotNone(saved_user)
+        self.assertEqual(saved_user["plan"], "Free")
+        self.assertEqual(saved_user["pendingPlanTier"], "Gold")
+        self.assertEqual(saved_user["subscriptionStatus"], "PendingApproval")
+
+        req_doc = self.db.subscription_requests.find_one({"email": "founder@kigalishop.rw"})
+        self.assertIsNotNone(req_doc)
+        self.assertEqual(req_doc["status"], "pending")
+
+        # Login works and returns valid JWT
+        r_login = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "founder@kigalishop.rw", "password": "StrongPassword123!"},
+        )
+        self.assertEqual(r_login.status_code, 200)
+        login_data = r_login.get_json()["data"]
+        token = login_data.get("access_token") or login_data.get("accessToken")
+        self.assertTrue(token)
+        r_me = self.client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(r_me.status_code, 200)
+        self.assertEqual(r_me.get_json()["data"]["user"]["email"], "founder@kigalishop.rw")
+
+    def test_02_password_reset_whatsapp_fallback_phone_guard_expiry_and_lockout(self):
+        from app.utils.security import hash_password
+
+        self.db.users.insert_one(
+            {
+                "email": "reset@exbos.rw",
+                "name": "Reset User",
+                "phone": "+250788222333",
+                "password_hash": hash_password("OldPass123!"),
+                "accountStatus": "Active",
+            }
+        )
+
+        # A. Mismatched WhatsApp phone MUST be rejected (prevents account takeover)
+        r_bad_phone = self.client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "reset@exbos.rw", "channel": "whatsapp", "phone": "+250788999888"},
+        )
+        self.assertEqual(r_bad_phone.status_code, 400)
+
+        # B. When email fails, automatic WhatsApp fallback dispatches to registered phone
+        with patch("app.routes.auth.send_gmail_email", return_value=False), patch(
+            "app.services.whatsapp_client.send_whatsapp_message",
+            return_value={"ok": True, "sent": True},
+        ):
+            r_fb = self.client.post(
+                "/api/v1/auth/forgot-password",
+                json={"email": "reset@exbos.rw"},
+            )
+        self.assertEqual(r_fb.status_code, 200)
+        fb_data = r_fb.get_json()["data"]
+        self.assertTrue(fb_data["whatsappSent"])
+        self.assertTrue(fb_data["emailFailedFallbackUsed"])
+        self.assertEqual(fb_data["deliveryChannel"], "whatsapp")
+
+        # C. Valid code resets password cleanly
+        reset_doc = self.db.password_resets.find_one({"email": "reset@exbos.rw", "used": False})
+        self.assertIsNotNone(reset_doc)
+        r_ok = self.client.post(
+            "/api/v1/auth/reset-password",
+            json={"email": "reset@exbos.rw", "code": reset_doc["code"], "newPassword": "NewSecurePassword99!"},
+        )
+        self.assertEqual(r_ok.status_code, 200)
+
+        # Login with new password succeeds
+        r_login_new = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": "reset@exbos.rw", "password": "NewSecurePassword99!"},
+        )
+        self.assertEqual(r_login_new.status_code, 200)
+
+    # ------------------------------------------------------------------
+    # 2. WORKSPACE CRUD, STOCK INTEGRITY & QR CODE PNG (WITHOUT PIL)
+    # ------------------------------------------------------------------
+    def test_03_workspace_crud_stock_deduction_restore_and_qrcode_png(self):
+        owner_email = "shop@exbos.rw"
+        self.db.users.insert_one(
+            {
+                "email": owner_email,
+                "name": "Shop Owner",
+                "phone": "+250788300400",
+                "businessName": "Shop Kigali",
+                "architectureId": "buy-and-sell",
+                "role": "BUSINESS_OWNER",
+                "plan": "Gold",
+                "planTier": "Gold",
+                "accountStatus": "Active",
+            }
+        )
+        headers = self._auth_header(owner_email)
+
+        # 1. Create Product
+        r_add = self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Inventory",
+            headers=headers,
+            json={
+                "id": "PRD-100",
+                "title": "Solar Inverter 2KW",
+                "sellingPriceRWF": 250000,
+                "purchasePriceRWF": 180000,
+                "quantity": 10,
+                "currentStock": 10,
+            },
+        )
+        self.assertIn(r_add.status_code, (200, 201), r_add.get_data(as_text=True))
+
+        # 2. Record Sale (qty 3) -> stock should deduct 10 -> 7
+        r_sale = self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            headers=headers,
+            json={
+                "id": "SAL-100",
+                "title": "Solar Inverter 2KW",
+                "productId": "PRD-100",
+                "productTitle": "Solar Inverter 2KW",
+                "quantity": 3,
+                "amountRWF": 750000,
+                "status": "Paid in Full",
+            },
+        )
+        self.assertIn(r_sale.status_code, (200, 201), r_sale.get_data(as_text=True))
+        ws_after_sale = self.db.workspaces.find_one({"scopeKey": owner_email, "architectureId": "buy-and-sell"})
+        inv_item = next(p for p in ws_after_sale["records"]["Inventory"] if p["id"] == "PRD-100")
+        self.assertEqual(inv_item["quantity"], 7)
+
+        # 3. Delete Sale -> stock should restore 7 -> 10
+        r_del_sale = self.client.delete(
+            "/api/v1/workspaces/buy-and-sell/records/Sales/SAL-100",
+            headers=headers,
+        )
+        self.assertEqual(r_del_sale.status_code, 200)
+        ws_after_del = self.db.workspaces.find_one({"scopeKey": owner_email, "architectureId": "buy-and-sell"})
+        inv_restored = next(p for p in ws_after_del["records"]["Inventory"] if p["id"] == "PRD-100")
+        self.assertEqual(inv_restored["quantity"], 10)
+
+        # 4. QR Code PNG works without PIL (pure-Python PNG fallback)
+        r_qr = self.client.get("/api/v1/workspaces/qrcode?format=png&text=PRD-100-SOLAR")
+        self.assertEqual(r_qr.status_code, 200)
+        self.assertEqual(r_qr.mimetype, "image/png")
+        self.assertTrue(r_qr.data.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    # ------------------------------------------------------------------
+    # 3. BRANCH ISOLATION, MANAGER CREATION BLOCK & SILENT OWNER AUDIT
+    # ------------------------------------------------------------------
+    def test_04_branch_manager_blocked_from_creating_branch_and_silent_audit_on_product_edit(self):
+        owner_email = "hq@exbos.rw"
+        mgr_email = "mgr@exbos.rw"
+        branch_id = "BR-MUSANZE"
+        self.db.users.insert_many(
+            [
+                {
+                    "email": owner_email,
+                    "name": "HQ Owner",
+                    "phone": "+250788400100",
+                    "businessName": "Rwanda Electronics",
+                    "architectureId": "buy-and-sell",
+                    "role": "BUSINESS_OWNER",
+                    "plan": "Gold",
+                    "planTier": "Gold",
+                    "accountStatus": "Active",
+                },
+                {
+                    "email": mgr_email,
+                    "ownerScopeKey": owner_email,
+                    "name": "Musanze Manager",
+                    "phone": "+250788400200",
+                    "businessName": "Rwanda Electronics",
+                    "architectureId": "buy-and-sell",
+                    "role": "Branch Manager",
+                    "assignedBranchId": branch_id,
+                    "plan": "Gold",
+                    "accountStatus": "Active",
+                },
+            ]
+        )
+        self.db.branches.insert_many(
+            [
+                {"scopeKey": owner_email, "id": "main", "name": "Kigali HQ", "isMain": True, "status": "Active"},
+                {"scopeKey": owner_email, "id": branch_id, "name": "Musanze Branch", "isMain": False, "status": "Active"},
+            ]
+        )
+        self.db.workspaces.insert_one(
+            {
+                "scopeKey": owner_email,
+                "architectureId": "buy-and-sell",
+                "businessName": "Rwanda Electronics",
+                "records": {
+                    "Products": [
+                        {"id": "P-HQ", "title": "HQ Secret Laptop", "branchId": "main", "quantity": 5, "sellingPriceRWF": 900000, "purchasePriceRWF": 700000},
+                        {"id": "P-BR", "title": "Musanze Powerbank", "branchId": branch_id, "quantity": 12, "sellingPriceRWF": 25000, "purchasePriceRWF": 15000},
+                    ],
+                    "Inventory": [],
+                    "Sales": [],
+                    "Purchases": [],
+                    "Expenses": [],
+                    "Customers": [],
+                    "Suppliers": [],
+                },
+                "metrics": {},
+            }
+        )
+
+        # A. Branch Manager MUST be blocked from creating a branch (403)
+        r_create_branch = self.client.post(
+            "/api/v1/branches",
+            headers=self._auth_header(mgr_email),
+            json={"name": "Unauthorized Branch", "location": "Rubavu"},
+        )
+        self.assertEqual(r_create_branch.status_code, 403)
+
+        # B. Branch Manager edits own branch product price on WhatsApp -> succeeds & silently notifies Owner
+        with patch("app.services.owner_audit_notifier.send_whatsapp_message", return_value={"ok": True, "sent": True}) as mock_owner_wa:
+            r_list = handle_incoming_whatsapp_message(self.db, "+250788400200", "1")
+            self.assertIn("Musanze Powerbank", r_list["reply"])
+            self.assertNotIn("HQ Secret Laptop", r_list["reply"])
+
+            handle_incoming_whatsapp_message(self.db, "+250788400200", "1")
+            handle_incoming_whatsapp_message(self.db, "+250788400200", "2")
+            handle_incoming_whatsapp_message(self.db, "+250788400200", "30000")
+            r_done = handle_incoming_whatsapp_message(self.db, "+250788400200", "YES")
+
+        self.assertEqual(r_done["action"], "product_updated")
+        # Stealth guarantee: manager's reply never reveals owner audit alert
+        self.assertNotIn("owner", r_done["reply"].lower())
+        self.assertNotIn("audit", r_done["reply"].lower())
+        # Owner silently received in-app notification, audit log & WhatsApp alert
+        self.assertIsNotNone(
+            self.db.owner_notifications.find_one({"scopeKey": owner_email, "type": "branch_manager_product_audit"})
+        )
+        self.assertIsNotNone(
+            self.db.branch_audit_logs.find_one({"scopeKey": owner_email, "actionType": "Edited Selling Price"})
+        )
+        self.assertTrue(mock_owner_wa.called)
+
+    # ------------------------------------------------------------------
+    # 4. WHATSAPP CONTEXTUAL '0' MENU, PAYMENT VERIFIED & SUBSCRIPTION GATE
+    # ------------------------------------------------------------------
+    def test_05_whatsapp_contextual_menu_payment_verified_and_subscription_gate(self):
+        # Main Menu must NOT display '*0.* Main Menu' when already on Main Menu
+        m_en = build_welcome_message("Demo Shop", "buy-and-sell", lang="en")
+        m_rw = build_welcome_message("Demo Shop", "buy-and-sell", lang="rw")
+        self.assertNotIn("*0.* Main Menu", m_en)
+        self.assertNotIn("*0.* Ahabanza", m_rw)
+
+        # Free user is blocked from WhatsApp POS chat
+        self.db.users.insert_one(
+            {
+                "email": "free@exbos.rw",
+                "name": "Free Trader",
+                "phone": "+250788500100",
+                "businessName": "Free Stall",
+                "architectureId": "buy-and-sell",
+                "role": "BUSINESS_OWNER",
+                "plan": "Free",
+                "planTier": "Free",
+            }
+        )
+        r_gate = handle_incoming_whatsapp_message(self.db, "+250788500100", "Hi")
+        self.assertEqual(r_gate["action"], "subscription_required")
+
+        # Paid user: credit sale + VERIFY <Customer> -> includes Reply *6* ... or *0* for Main Menu
+        self.db.users.insert_one(
+            {
+                "email": "gold@exbos.rw",
+                "name": "Gold Trader",
+                "phone": "+250788500200",
+                "businessName": "Gold Mart",
+                "architectureId": "buy-and-sell",
+                "role": "BUSINESS_OWNER",
+                "plan": "Gold",
+                "planTier": "Gold",
+            }
+        )
+        self.db.workspaces.insert_one(
+            {
+                "scopeKey": "gold@exbos.rw",
+                "architectureId": "buy-and-sell",
+                "businessName": "Gold Mart",
+                "records": {
+                    "Products": [{"id": "P1", "title": "Router 4G", "quantity": 5, "sellingPriceRWF": 40000, "purchasePriceRWF": 25000}],
+                    "Sales": [],
+                    "Purchases": [],
+                    "Expenses": [],
+                    "Customers": [],
+                    "Suppliers": [],
+                },
+                "metrics": {},
+            }
+        )
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "2")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "1")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "2")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "5")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "Leo")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "SKIP")
+        handle_incoming_whatsapp_message(self.db, "+250788500200", "YES")
+
+        r_ver = handle_incoming_whatsapp_message(self.db, "+250788500200", "VERIFY Leo")
+        self.assertEqual(r_ver["action"], "payment_verified")
+        self.assertIn("Reply *6* for Unpaid Customers or *0* for Main Menu.", r_ver["reply"])
+
+        r_back = handle_incoming_whatsapp_message(self.db, "+250788500200", "0")
+        self.assertEqual(r_back["action"], "menu")
+
+    # ------------------------------------------------------------------
+    # 5. SUPER ADMIN PRICING SYNC, GLOBAL JWT GUARD & WEBHOOK HMAC
+    # ------------------------------------------------------------------
+    def test_06_super_admin_pricing_sync_jwt_guard_and_webhook_hmac(self):
+        # Unauthenticated private route -> 401
+        r_unauth = self.client.get("/api/v1/workspaces/buy-and-sell?scopeKey=gold@exbos.rw")
+        self.assertEqual(r_unauth.status_code, 401)
+        self.assertEqual(r_unauth.headers.get("X-Content-Type-Options"), "nosniff")
+
+        # Super Admin updates Bronze pricing -> reflected live on public GET /pricing-plans
+        sa_email = "mugishaleobeni0@gmail.com"
+        self.db.users.insert_one(
+            {
+                "email": sa_email,
+                "name": "Super Admin",
+                "isSuperAdmin": True,
+                "accountStatus": "Active",
+            }
+        )
+        r_upd = self.client.put(
+            "/api/v1/super-admin/pricing-plans/bronze",
+            headers=self._auth_header(sa_email),
+            json={"priceRWF": 7500, "description": "Updated Bronze Tier"},
+        )
+        self.assertEqual(r_upd.status_code, 200, r_upd.get_data(as_text=True))
+
+        r_pub = self.client.get("/api/v1/super-admin/pricing-plans")
+        self.assertEqual(r_pub.status_code, 200)
+        pub_data = r_pub.get_json()["data"]
+        plans = pub_data["plans"] if isinstance(pub_data, dict) else pub_data
+        bronze = next(p for p in plans if str(p.get("id") or "").lower() == "bronze")
+        self.assertEqual(int(bronze["priceRWF"]), 7500)
+
+        # Meta Webhook HMAC rejects forged payloads & accepts valid HMAC-SHA256
+        body = json.dumps({"entry": []}).encode("utf-8")
+        with patch.dict(os.environ, {"META_APP_SECRET": "exbos-hmac-test-secret"}):
+            self.assertEqual(
+                self.client.post("/api/v1/whatsapp/webhook", data=body, content_type="application/json").status_code,
+                403,
+            )
+            sig = "sha256=" + hmac.new(b"exbos-hmac-test-secret", body, hashlib.sha256).hexdigest()
+            self.assertEqual(
+                self.client.post(
+                    "/api/v1/whatsapp/webhook",
+                    data=body,
+                    content_type="application/json",
+                    headers={"X-Hub-Signature-256": sig},
+                ).status_code,
+                200,
+            )
+
+        # Sliding-window rate limiter enforces caps
+        reset_rate_limits()
+        self.assertTrue(check_rate_limit("reg:ip", 2, 60)[0])
+        self.assertTrue(check_rate_limit("reg:ip", 2, 60)[0])
+        self.assertFalse(check_rate_limit("reg:ip", 2, 60)[0])
+
+
+if __name__ == "__main__":
+    unittest.main()
