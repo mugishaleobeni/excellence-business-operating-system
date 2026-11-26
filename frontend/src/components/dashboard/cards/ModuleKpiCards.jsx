@@ -77,7 +77,7 @@ function MetricCard({
 
   return (
     <div
-      className={`relative exbos-glass-card p-4 sm:p-5 rounded-2xl border border-white/10 ${c.border} transition-all duration-200 overflow-hidden shadow-lg hover:shadow-2xl flex flex-col justify-between min-h-[128px]`}
+      className={`relative exbos-glass-card p-3 sm:p-5 rounded-2xl border border-white/10 ${c.border} transition-all duration-200 overflow-hidden shadow-lg hover:shadow-2xl flex flex-col justify-between min-h-[96px] sm:min-h-[128px]`}
     >
       {/* Top micro gradient line */}
       <div
@@ -86,15 +86,15 @@ function MetricCard({
 
       {/* Normal Metric Display */}
       <div>
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-start justify-between gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             {Icon && (
-              <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${c.badge}`}>
-                <Icon className="w-4 h-4" />
+              <div className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${c.badge}`}>
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             )}
             <span
-              className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate"
+              className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-300 leading-tight line-clamp-2 sm:truncate"
               title={title}
             >
               {title}
@@ -110,23 +110,23 @@ function MetricCard({
               e.stopPropagation();
               setShowExplanation(!showExplanation);
             }}
-            className={`p-1.5 rounded-xl transition-all duration-150 active:scale-95 cursor-pointer shrink-0 ${
+            className={`p-1 sm:p-1.5 rounded-lg sm:rounded-xl transition-all duration-150 active:scale-95 cursor-pointer shrink-0 ${
               showExplanation
                 ? "bg-[#218DFF] text-white shadow-md shadow-[#218DFF]/40"
                 : "text-slate-400 hover:text-[#9EDCFF] hover:bg-white/10"
             }`}
             title="Hover or click to view what this metric means"
           >
-            <Info className="w-3.5 h-3.5" />
+            <Info className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
         </div>
 
-        <div className="mt-2 min-w-0">
-          <div className="font-orbitron font-extrabold text-lg sm:text-xl xl:text-2xl text-white tracking-tight break-words tabular-nums leading-tight">
+        <div className="mt-1 sm:mt-2 min-w-0">
+          <div className="font-orbitron font-extrabold text-base sm:text-xl xl:text-2xl text-white tracking-tight break-words tabular-nums leading-tight">
             <AnimatedNumber value={displayValue} />
           </div>
           {subtitle && (
-            <div className="text-[11px] text-slate-400 font-medium mt-1 break-words leading-normal">
+            <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium mt-0.5 sm:mt-1 break-words leading-snug sm:leading-normal line-clamp-1 sm:line-clamp-none">
               {subtitle}
             </div>
           )}
@@ -136,7 +136,7 @@ function MetricCard({
       {/* In-Card Explanation Overlay on Hover/Click */}
       {showExplanation && (
         <div
-          className="absolute inset-0 p-4 rounded-2xl bg-[#040C26]/98 border-2 border-[#218DFF]/70 flex flex-col justify-between backdrop-blur-xl shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150"
+          className="absolute inset-0 p-2.5 sm:p-4 rounded-2xl bg-[#040C26]/98 border-2 border-[#218DFF]/70 flex flex-col justify-between backdrop-blur-xl shadow-2xl z-30 animate-in fade-in zoom-in-95 duration-150 overflow-y-auto"
           onMouseLeave={() => setShowExplanation(false)}
         >
           <div className="flex items-center justify-between border-b border-white/10 pb-2">
@@ -698,31 +698,42 @@ export function ModuleKpiCards({
       : activeMetricsList;
 
   // Grid columns class based on card count
-  const gridColsClass =
-    isPurchases && activeMetricsList.length === 3
-      ? "grid-cols-1 sm:grid-cols-3"
-      : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4";
+  const isThreeCardGrid = isPurchases && activeMetricsList.length === 3;
+  const gridColsClass = isThreeCardGrid
+    ? "grid-cols-2 sm:grid-cols-3"
+    : "grid-cols-2 lg:grid-cols-4";
 
   return (
-    <div className="space-y-3 animate-in fade-in duration-200">
-      {/* Header bar with optional "+ Show More Metrics" toggle */}
+    <div className="space-y-2.5 sm:space-y-3 animate-in fade-in duration-200">
+      {/* Header bar with single-line mobile layout and full desktop labels */}
       {hasMoreCards && (
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-              {activeModule} Key Metrics
+        <div className="flex items-center justify-between gap-2 px-0.5 sm:px-1">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 truncate">
+              <span className="sm:hidden">{activeModule} Metrics</span>
+              <span className="hidden sm:inline">{activeModule} Key Metrics</span>
             </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#218DFF]/15 text-[#9EDCFF] border border-[#218DFF]/30">
-              {displayedCards.length} of {activeMetricsList.length} shown
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#218DFF]/15 text-[#9EDCFF] border border-[#218DFF]/30 whitespace-nowrap shrink-0">
+              <span className="sm:hidden">
+                {displayedCards.length}/{activeMetricsList.length}
+              </span>
+              <span className="hidden sm:inline">
+                {displayedCards.length} of {activeMetricsList.length} shown
+              </span>
             </span>
           </div>
 
           <button
             type="button"
             onClick={() => setShowAllCards(!showAllCards)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#218DFF]/40 text-xs font-semibold text-[#9EDCFF] hover:text-white transition-all cursor-pointer shadow-sm group"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-[#218DFF]/40 text-[11px] sm:text-xs font-semibold text-[#9EDCFF] hover:text-white transition-all cursor-pointer shadow-sm group whitespace-nowrap shrink-0"
           >
-            <span>
+            <span className="sm:hidden">
+              {showAllCards
+                ? "Show Less"
+                : `+${activeMetricsList.length - 4} More`}
+            </span>
+            <span className="hidden sm:inline">
               {showAllCards
                 ? "Show Primary 4 Metrics"
                 : `+ Show ${activeMetricsList.length - 4} More (${activeMetricsList
@@ -731,7 +742,7 @@ export function ModuleKpiCards({
                     .join(", ")})`}
             </span>
             <ChevronDown
-              className={`w-3.5 h-3.5 text-[#218DFF] transition-transform duration-200 ${
+              className={`w-3.5 h-3.5 text-[#218DFF] transition-transform duration-200 shrink-0 ${
                 showAllCards ? "rotate-180" : ""
               }`}
             />
@@ -739,20 +750,26 @@ export function ModuleKpiCards({
         </div>
       )}
 
-      {/* Responsive 4-Column Card Grid */}
-      <div className={`grid ${gridColsClass} gap-4`}>
-        {displayedCards.map((card) => (
-          <MetricCard
+      {/* Responsive 2-col Mobile / 4-col Desktop Card Grid */}
+      <div className={`grid ${gridColsClass} gap-2.5 sm:gap-4`}>
+        {displayedCards.map((card, idx) => (
+          <div
             key={card.id}
-            title={card.title}
-            value={card.value}
-            subtitle={card.subtitle}
-            meaning={card.meaning}
-            icon={card.icon}
-            colorScheme={card.colorScheme}
-            isCurrency={card.isCurrency}
-            hideFinancials={hideFinancials}
-          />
+            className={
+              isThreeCardGrid && idx === 2 ? "col-span-2 sm:col-span-1" : ""
+            }
+          >
+            <MetricCard
+              title={card.title}
+              value={card.value}
+              subtitle={card.subtitle}
+              meaning={card.meaning}
+              icon={card.icon}
+              colorScheme={card.colorScheme}
+              isCurrency={card.isCurrency}
+              hideFinancials={hideFinancials}
+            />
+          </div>
         ))}
       </div>
     </div>
