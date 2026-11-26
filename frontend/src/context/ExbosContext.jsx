@@ -257,10 +257,15 @@ export function ExbosProvider({ children }) {
   const [preselectedArchitecture, setPreselectedArchitecture] = useState('buy-and-sell')
 
   // Multi-Branch State (Default Main HQ + sub-branches created in Settings)
+  const getScopedBranchesKey = (u) => {
+    const scope = String(u?.ownerScopeKey || u?.email || '').trim().toLowerCase()
+    return scope ? `exbos_branches_${scope}` : 'exbos_branches'
+  }
   const [branches, setBranches] = useState(() => {
-    if (typeof navigator !== 'undefined' && navigator.onLine) return []
     try {
-      const saved = localStorage.getItem('exbos_branches')
+      const saved =
+        localStorage.getItem(getScopedBranchesKey(user)) ||
+        localStorage.getItem('exbos_branches')
       return saved ? JSON.parse(saved) : []
     } catch {
       return []
@@ -276,13 +281,13 @@ export function ExbosProvider({ children }) {
 
   useEffect(() => {
     try {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        localStorage.setItem('exbos_branches', JSON.stringify(branches))
-      } else {
-        localStorage.removeItem('exbos_branches')
+      const key = getScopedBranchesKey(user)
+      if (user?.email && Array.isArray(branches) && branches.length > 0) {
+        localStorage.setItem(key, JSON.stringify(branches))
       }
+      localStorage.removeItem('exbos_branches')
     } catch {}
-  }, [branches])
+  }, [branches, user?.email, user?.ownerScopeKey])
 
   useEffect(() => {
     try {
@@ -1094,7 +1099,8 @@ export function ExbosProvider({ children }) {
           if (serverData.workspaces && typeof serverData.workspaces === 'object') {
             const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
             setWorkspaces((prev) => {
-              const nextWs = isInitial ? sanitized : mergeServerWorkspacesWithLocal(sanitized, prev)
+              // Always normalize & merge Products/FinishedGoods/Stock into Inventory even on initial load
+              const nextWs = mergeServerWorkspacesWithLocal(sanitized, isInitial ? createCleanWorkspaces() : prev)
               if (JSON.stringify(prev) === JSON.stringify(nextWs)) return prev
               return nextWs
             })
@@ -1706,15 +1712,23 @@ export function ExbosProvider({ children }) {
         m.iOweSuppliersRWF += owed
       }
 
+      const nextRecords = {
+        ...base.records,
+        [moduleName]: [entry, ...existingList.filter((r) => r.id !== entry.id)]
+      }
+      // Mirror newly added product into BOTH Inventory and Products buckets in memory
+      // so offline/online Products table, Sales picker, and Purchases picker stay 100% in sync.
+      if (isProductBucket) {
+        const existingProducts = Array.isArray(base.records?.Products) ? base.records.Products : []
+        nextRecords.Products = [entry, ...existingProducts.filter((r) => r.id !== entry.id)]
+      }
+
       return {
         ...prev,
         [targetArch]: {
           ...base,
           metrics: m,
-          records: {
-            ...base.records,
-            [moduleName]: [entry, ...existingList.filter((r) => r.id !== entry.id)]
-          }
+          records: nextRecords
         }
       }
     })

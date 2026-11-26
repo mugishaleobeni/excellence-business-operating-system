@@ -334,8 +334,24 @@ export default function InteractiveModulePanel({
   }, [rawModuleRecords, transactions, bucketKey, activePage, activeArchId, activeModule])
 
   // Available recorded products / items to sell based on architecture (ODT Section 2 Item Picker Rule)
+  // Merge all catalog buckets (Inventory, Products, FinishedGoods, Stock) so existing & newly created
+  // offline/WhatsApp products ALWAYS appear in Products, Sales, and Purchases pickers.
   const recordedProducts = useMemo(() => {
-    const customList = recordsMap['Inventory'] || []
+    const rawCombined = [
+      ...(Array.isArray(recordsMap['Inventory']) ? recordsMap['Inventory'] : []),
+      ...(Array.isArray(recordsMap['Products']) ? recordsMap['Products'] : []),
+      ...(Array.isArray(recordsMap['FinishedGoods']) ? recordsMap['FinishedGoods'] : []),
+      ...(Array.isArray(recordsMap['Stock']) ? recordsMap['Stock'] : [])
+    ]
+    const seenCatalog = new Set()
+    const customList = []
+    for (const item of rawCombined) {
+      if (!item || typeof item !== 'object') continue
+      const key = String(item.id || '').trim() || String(item.title || item.name || '').trim().toLowerCase()
+      if (!key || seenCatalog.has(key)) continue
+      seenCatalog.add(key)
+      customList.push(item)
+    }
 
     if (activeArchId === 'make-and-sell') {
       const prodBatches = (recordsMap['Production'] || []).map((b) => ({

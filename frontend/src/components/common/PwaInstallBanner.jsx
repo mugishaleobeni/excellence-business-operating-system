@@ -13,6 +13,27 @@ export default function PwaInstallBanner() {
   const [isOffline, setIsOffline] = useState(
     typeof navigator !== 'undefined' ? !navigator.onLine : false
   )
+  const [offlineBannerCollapsed, setOfflineBannerCollapsed] = useState(() => {
+    try {
+      return sessionStorage.getItem('exbos_offline_banner_collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
+
+  const collapseOfflineBanner = () => {
+    setOfflineBannerCollapsed(true)
+    try {
+      sessionStorage.setItem('exbos_offline_banner_collapsed', '1')
+    } catch {}
+  }
+
+  const expandOfflineBanner = () => {
+    setOfflineBannerCollapsed(false)
+    try {
+      sessionStorage.removeItem('exbos_offline_banner_collapsed')
+    } catch {}
+  }
 
   useEffect(() => {
     const handleBeforeInstall = (e) => {
@@ -58,10 +79,36 @@ export default function PwaInstallBanner() {
   return (
     <>
       {isOffline && (
-        <div className="fixed bottom-4 left-4 z-[99990] flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-amber-500/95 text-slate-950 text-xs font-extrabold shadow-2xl border border-amber-300">
-          <WifiOff className="w-4 h-4 shrink-0" />
-          <span>Offline Mode — App cached. Changes sync automatically when reconnected.</span>
-        </div>
+        offlineBannerCollapsed ? (
+          <button
+            type="button"
+            onClick={expandOfflineBanner}
+            title="Offline Mode — Tap for details"
+            aria-label="Offline Mode indicator"
+            className="fixed bottom-20 lg:bottom-4 left-4 z-[99990] w-10 h-10 rounded-full bg-[#071544]/95 hover:bg-[#0A2786] text-amber-400 border border-amber-400/60 shadow-[0_8px_24px_rgba(0,0,0,0.65)] backdrop-blur-xl flex items-center justify-center cursor-pointer active:scale-95 transition-all"
+          >
+            <WifiOff className="w-4 h-4 shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-amber-400 absolute top-1.5 right-1.5 animate-pulse" />
+          </button>
+        ) : (
+          <div className="fixed bottom-20 lg:bottom-4 left-4 right-4 sm:right-auto z-[99990] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-amber-500/95 text-slate-950 text-xs font-extrabold shadow-2xl border border-amber-300 max-w-md">
+            <div className="flex items-center gap-2 min-w-0">
+              <WifiOff className="w-4 h-4 shrink-0" />
+              <span className="leading-snug">
+                Offline Mode — Changes are saved locally and sync automatically when reconnected.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={collapseOfflineBanner}
+              aria-label="Minimize offline banner"
+              title="Minimize to floating offline icon"
+              className="p-1 rounded-lg text-slate-900/80 hover:text-slate-950 hover:bg-black/10 cursor-pointer shrink-0 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )
       )}
 
       {deferredPrompt && !dismissed && (
