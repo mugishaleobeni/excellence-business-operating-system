@@ -512,16 +512,64 @@ def register_business(validated_data: RegisterBusinessSchema):
                     },
                     upsert=True,
                 )
-                welcome_msg = build_welcome_message(
-                    validated_data.businessName,
-                    arch_id,
-                    official_num,
-                )
+                from app.utils.entitlements import get_all_plan_limits, get_plan_limits
+
+                plan_limits = get_plan_limits(validated_data.planTier, db=db)
+                all_plans = get_all_plan_limits(db=db)
+                wa_allowed = bool(plan_limits.get("allowWhatsappAutomation", False))
+                plan_display = str(plan_limits.get("name") or validated_data.planTier or "Forever Free")
+                bronze_price = int((all_plans.get("bronze") or {}).get("priceRWF") or 10000)
+                user_lang = str(validated_data.language or "en").strip().lower()
+                is_rw = user_lang in ("rw", "kin", "kinyarwanda")
+                frontend_url = _resolve_frontend_origin()
+
+                if wa_allowed:
+                    intro = (
+                        f"Murakaza neza kuri *ExBOS*, {validated_data.fullName}!\n"
+                        f"Ubucuruzi bwawe *{validated_data.businessName}* bwanditswe neza kuri gahunda ya *{plan_display}*.\n\n"
+                        if is_rw
+                        else f"Welcome to *ExBOS*, {validated_data.fullName}!\n"
+                        f"Your business *{validated_data.businessName}* is now live on the *{plan_display}* plan.\n\n"
+                    )
+                    welcome_msg = intro + build_welcome_message(
+                        validated_data.businessName,
+                        arch_id,
+                        official_num,
+                        lang="rw" if is_rw else "en",
+                    )
+                else:
+                    if is_rw:
+                        welcome_msg = (
+                            f"*MURAKAZA NEZA KURI EXCELLENCE BOS (ExBOS)*\n"
+                            f"Muraho *{validated_data.fullName}*,\n\n"
+                            f"Ubucuruzi bwawe *{validated_data.businessName}* bwanditswe neza kuri gahunda ya *{plan_display}*.\n"
+                            f"Injira kuri dashboard yawe hano: {frontend_url}/login\n\n"
+                            "--------------------------------\n"
+                            "*IKITONDERWA KURI WHATSAPP POS:*\n"
+                            f"Gukoresha WhatsApp Business POS (kwandika igurisha, ububiko n'ibindi hano kuri WhatsApp) bifungurwa guhera kuri gahunda ya *Bronze ({bronze_price:,} RWF/ukwezi)*.\n"
+                            f"Kuzamura gahunda: Injira muri ExBOS -> Settings -> Subscription & Billing."
+                        )
+                    else:
+                        welcome_msg = (
+                            f"*WELCOME TO EXCELLENCE BOS (ExBOS)*\n"
+                            f"Hello *{validated_data.fullName}*,\n\n"
+                            f"Your business *{validated_data.businessName}* has been successfully registered on the *{plan_display}* plan.\n"
+                            f"Sign in to your ExBOS Dashboard here: {frontend_url}/login\n\n"
+                            "--------------------------------\n"
+                            "*WHATSAPP BUSINESS POS ACCESS:*\n"
+                            f"Interactive WhatsApp Business POS (recording sales, stock, expenses & debt reminders via WhatsApp) is unlocked starting on the *Bronze Plan ({bronze_price:,} RWF/month)*.\n"
+                            "To upgrade anytime: Open ExBOS Dashboard -> Settings -> Subscription & Billing."
+                        )
+
                 wa_result = send_whatsapp_message(
                     norm_phone,
                     welcome_msg,
                     db=db,
-                    metadata={"type": "registration_welcome", "userEmail": email_lower},
+                    metadata={
+                        "type": "registration_welcome",
+                        "userEmail": email_lower,
+                        "allowWhatsappAutomation": wa_allowed,
+                    },
                 )
     except Exception as wa_exc:
         logger.warning("Auto WhatsApp welcome skipped: %s", wa_exc)

@@ -1014,6 +1014,92 @@ def handle_incoming_whatsapp_message(
     role_str = str(user_doc.get("role") or "").strip().lower()
     assigned_branch_id = str(user_doc.get("assignedBranchId") or "").strip()
     is_branch_manager = role_str == "branch manager" or (bool(assigned_branch_id) and assigned_branch_id != "main")
+
+    # Live Subscription Entitlement Check for WhatsApp Business POS Chat
+    # (Super Admins always bypass; Branch Managers inherit their Business Owner's active subscription)
+    if not is_sa:
+        from app.utils.entitlements import get_all_plan_limits, get_effective_plan, get_plan_limits
+
+        user_email_lower = str(user_doc.get("email") or "").strip().lower()
+        if scope_key and scope_key != user_email_lower:
+            owner_sub_doc = db.users.find_one({"email": scope_key}, {"_id": 0}) or user_doc
+        else:
+            owner_sub_doc = user_doc
+
+        eff_res = get_effective_plan(owner_sub_doc)
+        if isinstance(eff_res, tuple):
+            eff_plan, is_plan_expired = str(eff_res[0] or "free"), bool(eff_res[1])
+        else:
+            eff_plan, is_plan_expired = str(eff_res or "free"), False
+        plan_limits = get_plan_limits(eff_plan, db=db)
+        if not bool(plan_limits.get("allowWhatsappAutomation", False)):
+            # Still allow language toggle (EN / RW) so users can read the upgrade notice in their preferred language
+            if upper_text in ("EN", "ENGLISH", "RW", "KIN", "KINYARWANDA"):
+                new_lang = "rw" if upper_text in ("RW", "KIN", "KINYARWANDA") else "en"
+                if user_email_lower:
+                    db.users.update_one(
+                        {"email": user_email_lower},
+                        {"$set": {"whatsappLanguage": new_lang, "language": new_lang}},
+                    )
+                lang = new_lang
+
+            db.whatsapp_sessions.delete_one({"phone": normalized_phone})
+            all_plans = get_all_plan_limits(db=db)
+            bronze_p = int((all_plans.get("bronze") or {}).get("priceRWF") or 10000)
+            silver_p = int((all_plans.get("silver") or {}).get("priceRWF") or 20000)
+            gold_p = int((all_plans.get("gold") or {}).get("priceRWF") or 35000)
+            raw_plan_label = str(owner_sub_doc.get("planTier") or owner_sub_doc.get("plan") or "Free").strip()
+            was_paid_expired = is_plan_expired or (raw_plan_label.lower() not in ("", "free", "forever free") and eff_plan == "free")
+            status_en = f"{raw_plan_label} (Expired)" if was_paid_expired else "Forever Free"
+            status_rw = f"{raw_plan_label} (Yarangiye)" if was_paid_expired else "Forever Free (Ubuntu)"
+            import os as _os
+            upgrade_url = _os.getenv("FRONTEND_ORIGIN", "https://exbos.pages.dev").strip().rstrip("/") + "/dashboard"
+
+            if is_branch_manager:
+                action_en = "Please ask your Business Owner to upgrade the company subscription on ExBOS to unlock WhatsApp Business POS."
+                action_rw = "Saba Nyir'ubucuruzi kuzamura gahunda y'ubucuruzi muri ExBOS kugira ngo mukoreshe WhatsApp Business POS."
+            else:
+                action_en = (
+                    f"Upgrade anytime in ExBOS Dashboard -> Settings -> Subscription & Billing:\n{upgrade_url}"
+                )
+                action_rw = (
+                    f"Zamura gahunda muri ExBOS Dashboard -> Settings -> Subscription & Billing:\n{upgrade_url}"
+                )
+
+            return {
+                "reply": _t(
+                    lang,
+                    (
+                        "*WHATSAPP BUSINESS POS — SUBSCRIPTION REQUIRED*\n"
+                        f"Business: *{business_name}*\n"
+                        f"Current Plan: *{status_en}*\n"
+                        "--------------------------------\n"
+                        "Your current subscription plan does not include *WhatsApp Business POS Chat*.\n\n"
+                        "*Available Plans with WhatsApp POS:*\n"
+                        f"- *Bronze:* {bronze_p:,} RWF / month\n"
+                        f"- *Silver:* {silver_p:,} RWF / month\n"
+                        f"- *Gold:* {gold_p:,} RWF / month\n\n"
+                        f"{action_en}\n\n"
+                        "Reply *RW* for Kinyarwanda."
+                    ),
+                    (
+                        "*WHATSAPP BUSINESS POS — BISABA KUZAMURA GAHUNDA*\n"
+                        f"Ubucuruzi: *{business_name}*\n"
+                        f"Gahunda Iriho: *{status_rw}*\n"
+                        "--------------------------------\n"
+                        "Gahunda yawe y'ubu ntabwo yemerera gukoresha *WhatsApp Business POS Chat*.\n\n"
+                        "*Gahunda Zemera WhatsApp POS:*\n"
+                        f"- *Bronze:* {bronze_p:,} RWF / ukwezi\n"
+                        f"- *Silver:* {silver_p:,} RWF / ukwezi\n"
+                        f"- *Gold:* {gold_p:,} RWF / ukwezi\n\n"
+                        f"{action_rw}\n\n"
+                        "Subiza *EN* usome mu Cyongereza."
+                    ),
+                ),
+                "action": "subscription_required",
+                "effectivePlan": eff_plan,
+                "language": lang,
+            }
     effective_branch_id: Optional[str] = assigned_branch_id if is_branch_manager and assigned_branch_id else None
     branch_frozen = False
     branch_perms: dict[str, Any] = {}
