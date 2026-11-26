@@ -1602,16 +1602,61 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
     return success_response(message=f"Record '{record_id}' deleted from '{module_name}'.")
 
 
+def _encode_qr_matrix_to_png(matrix: list[list[bool]], box_size: int = 8, border: int = 2) -> bytes:
+    """Zero-dependency pure-Python PNG encoder for a QR boolean matrix (fallback when PIL is absent)."""
+    import struct
+    import zlib
+
+    box = max(1, int(box_size))
+    pad = max(0, int(border))
+    modules = len(matrix)
+    total_modules = modules + 2 * pad
+    size = total_modules * box
+
+    raw_rows = bytearray()
+    white_row = b"\xff" * size
+    for r in range(total_modules):
+        src_r = r - pad
+        if src_r < 0 or src_r >= modules:
+            row_bytes = white_row
+        else:
+            src_row = matrix[src_r]
+            row_buf = bytearray(size)
+            for c in range(total_modules):
+                src_c = c - pad
+                is_black = 0 <= src_c < modules and bool(src_row[src_c])
+                val = 0 if is_black else 255
+                start = c * box
+                row_buf[start : start + box] = bytes([val]) * box
+            row_bytes = bytes(row_buf)
+        for _ in range(box):
+            raw_rows.append(0)  # PNG filter type 0 (None)
+            raw_rows.extend(row_bytes)
+
+    def _png_chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", crc)
+
+    ihdr = struct.pack("!IIBBBBB", size, size, 8, 0, 0, 0, 0)  # 8-bit grayscale
+    idat = zlib.compress(bytes(raw_rows), level=6)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", ihdr)
+        + _png_chunk(b"IDAT", idat)
+        + _png_chunk(b"IEND", b"")
+    )
+
+
 @workspaces_bp.route("/qrcode", methods=["GET"])
 def get_qrcode_image():
     """Generate a clean, high-resolution scannable QR Code as SVG or PNG for any product or inventory item."""
     raw_text = request.args.get("text", "").strip()
     if not raw_text:
         raw_text = "ExBOS Product Item - Verified Rwanda"
-    
+
     fmt = request.args.get("format", "svg").lower()
-    box_size = int(request.args.get("box_size", 8))
-    border = int(request.args.get("border", 2))
+    box_size = max(1, min(32, int(request.args.get("box_size", 8))))
+    border = max(0, min(12, int(request.args.get("border", 2))))
 
     if fmt == "png":
         qr = qrcode.QRCode(
@@ -1622,14 +1667,20 @@ def get_qrcode_image():
         )
         qr.add_data(raw_text)
         qr.make(fit=True)
-        img = qr.make_image(fill_color="black", back_color="white")
-        buf = BytesIO()
-        img.save(buf, format="PNG")
-        buf.seek(0)
+        try:
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            png_bytes = buf.getvalue()
+        except Exception:
+            png_bytes = _encode_qr_matrix_to_png(qr.get_matrix(), box_size=box_size, border=border)
         return Response(
-            buf.getvalue(),
+            png_bytes,
             mimetype="image/png",
-            headers={"Cache-Control": "public, max-age=86400"},
+            headers={
+                "Cache-Control": "public, max-age=86400",
+                "Content-Disposition": 'inline; filename="exbos-qrcode.png"',
+            },
         )
     else:
         # Default: SVG vector path (crisp, zero quality loss, lightweight)
