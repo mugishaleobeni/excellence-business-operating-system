@@ -6,11 +6,9 @@ def resolve_scope_key(db=None, fallback_user: dict | None = None) -> str:
     """
     Resolve the authoritative tenant/user scopeKey for workspace and ledger data.
     Priority:
-    1. Verified JWT identity email (prevents cross-user or stale ?scopeKey= mismatches)
-    2. Explicit fallback_user email (e.g. during storage snapshot sync)
-    3. Explicit ?scopeKey= query parameter (when unauthenticated)
-    4. 'default'
-    Never falls back to arbitrary latest users in db.users.
+    1. Verified JWT identity email (prevents cross-user or forged ?scopeKey= access)
+    2. Explicit internal fallback_user dict (only when invoked internally without a request)
+    Never trusts unauthenticated ?scopeKey= query parameters.
     """
     try:
         verify_jwt_in_request(optional=True)
@@ -29,10 +27,6 @@ def resolve_scope_key(db=None, fallback_user: dict | None = None) -> str:
         u_scope = (fallback_user.get("ownerScopeKey") or fallback_user.get("email") or "").strip().lower()
         if u_scope:
             return u_scope
-
-    arg_scope = (request.args.get("scopeKey") or "").strip().lower()
-    if arg_scope and arg_scope != "default":
-        return arg_scope
 
     return "default"
 

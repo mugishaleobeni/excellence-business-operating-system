@@ -5,6 +5,7 @@ from flask import Blueprint, request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 
 from app.database import get_db
+from app.routes.super_admin import require_super_admin
 from app.services.whatsapp_client import (
     build_wa_me_link,
     build_welcome_message,
@@ -100,7 +101,26 @@ def verify_meta_webhook():
 
 @whatsapp_bp.route("/webhook", methods=["POST"])
 def receive_meta_webhook():
-    """Meta WhatsApp Cloud API incoming message webhook."""
+    """Meta WhatsApp Cloud API incoming message webhook with HMAC-SHA256 signature verification."""
+    import hashlib
+    import hmac
+
+    app_secret = (
+        os.getenv("META_APP_SECRET")
+        or os.getenv("WHATSAPP_APP_SECRET")
+        or ""
+    ).strip()
+    if app_secret:
+        sig_header = (request.headers.get("X-Hub-Signature-256") or "").strip()
+        raw_body = request.get_data() or b""
+        expected_sig = "sha256=" + hmac.new(
+            app_secret.encode("utf-8"),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not sig_header or not hmac.compare_digest(sig_header, expected_sig):
+            return error_response("Invalid Meta webhook signature.", status_code=403)
+
     db = get_db()
     payload = request.get_json(silent=True) or {}
     processed = []
@@ -250,6 +270,7 @@ def connect_official_whatsapp():
 
 
 @whatsapp_bp.route("/simulate", methods=["POST"])
+@require_super_admin
 def simulate_whatsapp_command():
     """Execute the deterministic WhatsApp engine directly from Dashboard Simulator."""
     db = get_db()
@@ -454,6 +475,7 @@ def get_whatsapp_config_route():
 
 
 @whatsapp_bp.route("/config", methods=["PATCH"])
+@require_super_admin
 def update_whatsapp_config_route():
     """Toggle Sandbox vs Production mode and automated WhatsApp alert switches."""
     db = get_db()
@@ -477,6 +499,7 @@ def update_whatsapp_config_route():
 
 
 @whatsapp_bp.route("/recipients", methods=["POST"])
+@require_super_admin
 def add_registered_recipient_route():
     """Register a Meta-verified test/recipient phone number (up to 5 in Meta Sandbox, unlimited in Production)."""
     db = get_db()
@@ -524,6 +547,7 @@ def add_registered_recipient_route():
 
 
 @whatsapp_bp.route("/recipients/<path:phone>", methods=["DELETE"])
+@require_super_admin
 def remove_registered_recipient_route(phone: str):
     """Remove a phone number from the Registered Recipients list."""
     db = get_db()

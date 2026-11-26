@@ -352,14 +352,15 @@ def register_business(validated_data: RegisterBusinessSchema):
         "location": validated_data.location,
         "currency": validated_data.currency,
         "language": validated_data.language,
-        "plan": validated_data.planTier,
-        "planTier": validated_data.planTier,
-        "billingType": billing_type,
-        "monthlySpendRWF": float(mrr_rwf) if is_paid_plan else 0.0,
-        "subscriptionStatus": "Active",
+        "plan": "Free" if is_paid_plan else validated_data.planTier,
+        "planTier": "Free" if is_paid_plan else validated_data.planTier,
+        "pendingPlanTier": validated_data.planTier if is_paid_plan else "",
+        "billingType": "free" if is_paid_plan else billing_type,
+        "monthlySpendRWF": 0.0,
+        "subscriptionStatus": "PendingApproval" if is_paid_plan else "Active",
         "paidAt": paid_at_iso,
-        "subscriptionStartAt": now_iso if is_paid_plan else "",
-        "subscriptionExpiry": subscription_expiry,
+        "subscriptionStartAt": "",
+        "subscriptionExpiry": "",
         "paymentMethod": payment_method if is_paid_plan else "",
         "paymentReference": payment_ref if is_paid_plan else "",
         "paymentMessageCopy": payment_message_copy if is_paid_plan else "",
@@ -371,14 +372,14 @@ def register_business(validated_data: RegisterBusinessSchema):
     }
     db.users.insert_one(user_doc)
 
-    if is_paid_plan and (payment_message_copy or payment_screenshot or payment_ref):
+    if is_paid_plan:
         db.subscription_requests.insert_one(
             {
                 "id": f"UPG-{now_ms}",
                 "email": email_lower,
                 "fullName": validated_data.fullName,
                 "businessName": validated_data.businessName,
-                "currentPlan": "Registration",
+                "currentPlan": "Free",
                 "requestedPlan": validated_data.planTier,
                 "amountRWF": float(mrr_rwf),
                 "paymentMethod": payment_method,
@@ -388,8 +389,8 @@ def register_business(validated_data: RegisterBusinessSchema):
                 "payerPhone": validated_data.phone,
                 "paidAt": paid_at_iso,
                 "expiryDate": subscription_expiry,
-                "status": "approved",
-                "notes": "Submitted during business registration",
+                "status": "pending",
+                "notes": "Submitted during business registration — awaiting Super Admin payment verification",
                 "createdAt": now_iso,
             }
         )
@@ -873,14 +874,23 @@ def forgot_password(validated_data: ForgotPasswordSchema):
     reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}"
     copy_reset_link = f"{frontend_origin}/forgot-password?email={quote(email_lower)}&code={quote(code)}&copy=1"
 
-    # Resolve user's phone number: prefer user-supplied WhatsApp fallback phone when channel == 'whatsapp'
-    supplied_phone = str(getattr(validated_data, "phone", None) or "").strip()
-    raw_phone = supplied_phone or str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
-    if not raw_phone:
+    # Resolve the account's REGISTERED phone number (NEVER send a reset OTP to an arbitrary unverified phone)
+    stored_raw_phone = str(user_doc.get("phone") or user_doc.get("whatsappPhone") or "").strip()
+    if not stored_raw_phone:
         integ = db.integrations.find_one({"userEmail": email_lower}) or {}
         wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
-        raw_phone = str(wa_cfg.get("phone") or "").strip()
-    user_phone = normalize_phone(raw_phone)
+        stored_raw_phone = str(wa_cfg.get("phone") or wa_cfg.get("linkedBusinessPhone") or "").strip()
+    registered_phone = normalize_phone(stored_raw_phone)
+
+    supplied_phone = normalize_phone(str(getattr(validated_data, "phone", None) or "").strip())
+    if supplied_phone:
+        if not registered_phone or supplied_phone != registered_phone:
+            return error_response(
+                error="The WhatsApp number entered does not match the phone number registered on this account.",
+                status_code=400,
+            )
+
+    user_phone = registered_phone
     masked_phone = (
         f"{user_phone[:7]}***{user_phone[-3:]}"
         if len(user_phone) >= 10
@@ -983,19 +993,61 @@ def forgot_password(validated_data: ForgotPasswordSchema):
 @auth_bp.route("/reset-password", methods=["POST"])
 @validate_json(ResetPasswordSchema)
 def reset_password(validated_data: ResetPasswordSchema):
-    """Verify the 6-digit OTP code and update the user's password hash in MongoDB."""
+    """Verify the 6-digit OTP code (with explicit expiry & 5-attempt lockout) and update the password hash."""
     db = get_db()
     email_lower = validated_data.email.lower()
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
 
-    reset_doc = db.password_resets.find_one(
-        {"email": email_lower, "code": validated_data.code, "used": False}
+    # Load latest active reset code for this email to enforce attempt lockout
+    latest_active = db.password_resets.find_one(
+        {"email": email_lower, "used": False},
+        sort=[("created_at", -1)],
     )
-    if not reset_doc:
+    if not latest_active:
         return error_response(
             error="Invalid or expired password reset verification code.",
             status_code=400,
         )
+
+    # Explicit expiry verification in application code (do not rely solely on MongoDB TTL sweep)
+    exp = latest_active.get("expires_at")
+    if isinstance(exp, datetime):
+        exp_utc = exp if exp.tzinfo is not None else exp.replace(tzinfo=timezone.utc)
+        if exp_utc < now:
+            db.password_resets.update_one(
+                {"_id": latest_active["_id"]},
+                {"$set": {"used": True, "expired_at": now_iso}},
+            )
+            return error_response(
+                error="Password reset verification code has expired. Please request a new code.",
+                status_code=400,
+            )
+
+    failed_attempts = int(latest_active.get("failed_attempts") or 0)
+    if failed_attempts >= 5:
+        db.password_resets.update_one(
+            {"_id": latest_active["_id"]},
+            {"$set": {"used": True, "locked_at": now_iso}},
+        )
+        return error_response(
+            error="Too many invalid code attempts. Please request a new password reset code.",
+            status_code=429,
+        )
+
+    if str(latest_active.get("code") or "").strip() != str(validated_data.code or "").strip():
+        next_attempts = failed_attempts + 1
+        updates = {"failed_attempts": next_attempts}
+        if next_attempts >= 5:
+            updates["used"] = True
+            updates["locked_at"] = now_iso
+        db.password_resets.update_one({"_id": latest_active["_id"]}, {"$set": updates})
+        return error_response(
+            error="Invalid or expired password reset verification code.",
+            status_code=400,
+        )
+
+    reset_doc = latest_active
 
     db.password_resets.update_one(
         {"_id": reset_doc["_id"]},

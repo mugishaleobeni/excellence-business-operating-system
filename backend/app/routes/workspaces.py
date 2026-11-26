@@ -1650,7 +1650,7 @@ def _encode_qr_matrix_to_png(matrix: list[list[bool]], box_size: int = 8, border
 @workspaces_bp.route("/qrcode", methods=["GET"])
 def get_qrcode_image():
     """Generate a clean, high-resolution scannable QR Code as SVG or PNG for any product or inventory item."""
-    raw_text = request.args.get("text", "").strip()
+    raw_text = request.args.get("text", "").strip()[:512]
     if not raw_text:
         raw_text = "ExBOS Product Item - Verified Rwanda"
 

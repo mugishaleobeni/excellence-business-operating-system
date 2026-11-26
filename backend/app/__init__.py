@@ -28,6 +28,18 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
     selected_config = config_class or get_config()
     app.config.from_object(selected_config)
 
+    # Warn or fail-fast if default dev secrets are still active in production
+    _default_secrets = {"exbos-default-secret-key-2026", "exbos-default-jwt-secret-key-2026", ""}
+    _sec = str(app.config.get("SECRET_KEY") or "")
+    _jwt_sec = str(app.config.get("JWT_SECRET_KEY") or "")
+    if _sec in _default_secrets or _jwt_sec in _default_secrets or len(_jwt_sec) < 24:
+        app.logger.warning(
+            "SECURITY WARNING: Weak or default SECRET_KEY/JWT_SECRET_KEY detected. "
+            "Set strong 32+ char random SECRET_KEY and JWT_SECRET_KEY environment variables in production."
+        )
+        if app.config.get("ENFORCE_STRONG_SECRETS"):
+            raise RuntimeError("ENFORCE_STRONG_SECRETS is enabled and SECRET_KEY/JWT_SECRET_KEY is weak or default.")
+
     # 1. Configure CORS from CORS_ORIGINS env var
     CORS(
         app,
@@ -75,19 +87,50 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
     # 4. Register all modular Blueprints
     register_blueprints(app)
 
-    # 4b. Live Enforcement: immediately block any API call from a Suspended or Deleted user
+    # 4b. Global Security Guard: Rate Limiting + Strict JWT Auth on Private Routes + Live Suspension Check
     @app.before_request
-    def enforce_live_account_status():
+    def enforce_global_security_and_account_status():
         if request.method == "OPTIONS":
             return None
         path = request.path or ""
         if not path.startswith("/api/"):
             return None
-        # Allow public/auth/health endpoints to pass without active-session suspension block
-        if (
+
+        # A. Rate-limit sensitive public endpoints against brute-force & spam abuse
+        if not app.config.get("TESTING"):
+            from app.utils.rate_limit import check_rate_limit
+
+            client_ip = (
+                (request.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+                or request.remote_addr
+                or "unknown"
+            )
+            rate_rules = [
+                ("POST", "/api/v1/auth/login", 12, 60),
+                ("POST", "/api/v1/auth/forgot-password", 5, 900),
+                ("POST", "/api/v1/auth/send-verification", 5, 900),
+                ("POST", "/api/v1/auth/reset-password", 8, 900),
+                ("POST", "/api/v1/auth/verify-email", 8, 900),
+                ("POST", "/api/v1/health/report-error", 15, 60),
+            ]
+            for r_method, r_path, r_limit, r_win in rate_rules:
+                if request.method == r_method and path.rstrip("/") == r_path:
+                    allowed, retry_after = check_rate_limit(f"{r_path}:{client_ip}", r_limit, r_win)
+                    if not allowed:
+                        resp = error_response(
+                            error="Too many requests. Please wait a moment and try again.",
+                            status_code=429,
+                        )
+                        resp[0].headers["Retry-After"] = str(retry_after)
+                        return resp
+                    break
+
+        # B. Explicit Public Allowlist (every other /api/v1/* endpoint strictly requires a valid JWT!)
+        is_public_route = (
             path.startswith("/api/v1/health")
             or path.startswith("/api/v1/auth/login")
             or path.startswith("/api/v1/auth/register")
+            or path.startswith("/api/v1/auth/refresh")
             or path.startswith("/api/v1/auth/send-verification")
             or path.startswith("/api/v1/auth/verify-email")
             or path.startswith("/api/v1/auth/verification-status")
@@ -95,20 +138,39 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
             or path.startswith("/api/v1/auth/reset-password")
             or path.startswith("/api/v1/documents/public/")
             or path.startswith("/api/v1/branches/invite/")
-        ):
+            or path.startswith("/api/v1/whatsapp/webhook")
+            or path.startswith("/api/v1/workspaces/public-document/")
+            or path.rstrip("/") == "/api/v1/workspaces/qrcode"
+            or (
+                request.method == "GET"
+                and path.rstrip("/")
+                in (
+                    "/api/v1/super-admin/pricing-plans",
+                    "/api/v1/super-admin/plan-limits",
+                    "/api/v1/super-admin/platinum-program",
+                    "/api/v1/super-admin/broadcast",
+                )
+            )
+        )
+        if is_public_route:
             return None
 
-        email_to_check = ""
+        # C. Require valid JWT on ALL private endpoints (closes unauthenticated ?scopeKey= IDOR)
         try:
-            verify_jwt_in_request(optional=True)
+            verify_jwt_in_request()
             ident = get_jwt_identity()
-            if isinstance(ident, str) and ident.strip():
-                email_to_check = ident.strip().lower()
+            email_to_check = ident.strip().lower() if isinstance(ident, str) else ""
         except Exception:
-            pass
+            return error_response(
+                error="Authentication required. Please sign in to access ExBOS.",
+                status_code=401,
+            )
 
         if not email_to_check:
-            return None
+            return error_response(
+                error="Valid authentication token is required.",
+                status_code=401,
+            )
 
         try:
             db = get_db()
@@ -217,6 +279,14 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
                 response.headers["Access-Control-Allow-Credentials"] = "true"
                 response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
                 response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+
+        # Defense-in-depth HTTP security headers
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
+        if request.is_secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https":
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         return response
 
     return app

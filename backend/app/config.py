@@ -10,6 +10,8 @@ class BaseConfig:
 
     SECRET_KEY: str = os.getenv("SECRET_KEY", "exbos-default-secret-key-2026")
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "exbos-default-jwt-secret-key-2026")
+    MAX_CONTENT_LENGTH: int = int(os.getenv("MAX_CONTENT_LENGTH", str(6 * 1024 * 1024)))
+    ENFORCE_STRONG_SECRETS: bool = os.getenv("ENFORCE_STRONG_SECRETS", "false").lower() in ("1", "true", "yes")
     JWT_TOKEN_LOCATION: list[str] = ["headers"]
     JWT_HEADER_NAME: str = "Authorization"
     JWT_HEADER_TYPE: str = "Bearer"
