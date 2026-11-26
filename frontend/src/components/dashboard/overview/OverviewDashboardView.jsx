@@ -249,6 +249,7 @@ export default function OverviewDashboardView({
         onClose={() => setAddCardModalOpen(false)}
         widgetSearch={widgetSearch}
         setWidgetSearch={setWidgetSearch}
+        AVAILABLE_WIDGETS={availableWidgets}
         filteredWidgets={filteredWidgets}
         isCardVisible={isCardVisible}
         handleToggleWidget={handleToggleWidget}

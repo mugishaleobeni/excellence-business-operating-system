@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import {
   Bell,
   ChevronDown,
@@ -19,7 +19,14 @@ import {
   X,
   Pause,
   Minus,
-  Check
+  Check,
+  Users,
+  Truck,
+  FileText,
+  Settings,
+  AlertCircle,
+  GitBranch,
+  Layers
 } from 'lucide-react'
 import { OPTIMIZED_IMAGES } from '../../../assets/optimized/imageManifest'
 const exbosLogo = OPTIMIZED_IMAGES.exbosLogo.small
@@ -104,49 +111,145 @@ export default function MobileFintechDashboardHeader({
   const prodTarget = resolveProductTarget()
   const saleTarget = resolveSaleTarget()
 
-  const quickLinks = [
-    {
-      id: 'sale',
-      label: saleTarget.label,
-      icon: ShoppingCart,
-      action: () => navigateToModulePage(saleTarget.mod, saleTarget.page, { action: 'create' })
-    },
-    {
-      id: 'product',
-      label: prodTarget.label,
-      icon: Package,
-      action: () => navigateToModulePage(prodTarget.mod, prodTarget.page, { action: 'create' })
-    },
-    {
-      id: 'purchase',
-      label: 'New Purchase',
-      icon: CreditCard,
-      action: () =>
-        navigateToModulePage(
-          'Purchases',
-          archId === 'agriculture' ? 'Feed & Input Orders' : 'All Purchases',
-          { action: 'create' }
-        )
-    },
-    {
-      id: 'expense',
-      label: 'New Expense',
-      icon: Wallet,
-      action: () => navigateToModulePage('Expenses', 'All Expenses', { action: 'create' })
-    },
-    {
-      id: 'where-money',
-      label: 'Where Is Money',
-      icon: Building2,
-      action: () => navigateToModulePage('Overview', 'Where Is My Money')
-    },
-    {
-      id: 'reports',
-      label: 'Profit & Loss',
-      icon: BarChart3,
-      action: () => navigateToModulePage('Reports', 'Profit & Loss')
+  const allQuickLinks = useMemo(
+    () => [
+      {
+        id: 'sale',
+        label: saleTarget.label,
+        icon: ShoppingCart,
+        action: () => navigateToModulePage(saleTarget.mod, saleTarget.page, { action: 'create' })
+      },
+      {
+        id: 'product',
+        label: prodTarget.label,
+        icon: Package,
+        action: () => navigateToModulePage(prodTarget.mod, prodTarget.page, { action: 'create' })
+      },
+      {
+        id: 'purchase',
+        label: 'New Purchase',
+        icon: CreditCard,
+        action: () =>
+          navigateToModulePage(
+            'Purchases',
+            archId === 'agriculture' ? 'Feed & Input Orders' : 'All Purchases',
+            { action: 'create' }
+          )
+      },
+      {
+        id: 'expense',
+        label: 'New Expense',
+        icon: Wallet,
+        action: () => navigateToModulePage('Expenses', 'All Expenses', { action: 'create' })
+      },
+      {
+        id: 'where-money',
+        label: 'Where Is Money',
+        icon: Building2,
+        action: () => navigateToModulePage('Overview', 'Where Is My Money')
+      },
+      {
+        id: 'reports',
+        label: 'Profit & Loss',
+        icon: BarChart3,
+        action: () => navigateToModulePage('Reports', 'Profit & Loss')
+      },
+      {
+        id: 'customers',
+        label: 'Customers',
+        icon: Users,
+        action: () => navigateToModulePage('Customers', 'Customer Directory')
+      },
+      {
+        id: 'unpaid',
+        label: 'Unpaid Debts',
+        icon: AlertCircle,
+        action: () => navigateToModulePage('Customers', 'Unpaid Balances')
+      },
+      {
+        id: 'suppliers',
+        label: 'Suppliers',
+        icon: Truck,
+        action: () => navigateToModulePage('Suppliers', 'All Suppliers')
+      },
+      {
+        id: 'stock',
+        label: 'Live Stock',
+        icon: Layers,
+        action: () => navigateToModulePage(prodTarget.mod, prodTarget.page)
+      },
+      {
+        id: 'documents',
+        label: 'Invoices & Docs',
+        icon: FileText,
+        action: () => navigateToModulePage('Documents', 'Invoices')
+      },
+      {
+        id: 'branches',
+        label: 'Branches',
+        icon: GitBranch,
+        action: () => navigateToModulePage('Settings', 'Branches & Locations')
+      },
+      {
+        id: 'settings',
+        label: 'Settings',
+        icon: Settings,
+        action: () => navigateToModulePage('Settings', 'Business Profile')
+      }
+    ],
+    [archId, prodTarget.label, prodTarget.mod, prodTarget.page, saleTarget.label, saleTarget.mod, saleTarget.page, navigateToModulePage]
+  )
+
+  const DEFAULT_QUICK_LINK_IDS = ['sale', 'product', 'purchase', 'expense', 'where-money', 'reports']
+  const quickLinksStorageKey = `exbos_mobile_quick_links_${archId}`
+
+  const [quickLinkCustomizeOpen, setQuickLinkCustomizeOpen] = useState(false)
+  const [selectedQuickLinkIds, setSelectedQuickLinkIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(quickLinksStorageKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch (e) {}
+    return DEFAULT_QUICK_LINK_IDS
+  })
+
+  // Keep selected quick links synced if architecture switches
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(quickLinksStorageKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSelectedQuickLinkIds(parsed)
+          return
+        }
+      }
+    } catch (e) {}
+    setSelectedQuickLinkIds(DEFAULT_QUICK_LINK_IDS)
+  }, [quickLinksStorageKey])
+
+  const saveQuickLinkIds = (nextIds) => {
+    setSelectedQuickLinkIds(nextIds)
+    try {
+      localStorage.setItem(quickLinksStorageKey, JSON.stringify(nextIds))
+    } catch (e) {}
+  }
+
+  const toggleQuickLink = (id) => {
+    if (selectedQuickLinkIds.includes(id)) {
+      if (selectedQuickLinkIds.length <= 1) return // Keep at least 1 shortcut visible
+      saveQuickLinkIds(selectedQuickLinkIds.filter((item) => item !== id))
+    } else {
+      saveQuickLinkIds([...selectedQuickLinkIds, id])
     }
-  ]
+  }
+
+  const quickLinks = useMemo(() => {
+    const picked = allQuickLinks.filter((item) => selectedQuickLinkIds.includes(item.id))
+    return picked.length > 0 ? picked : allQuickLinks.slice(0, 6)
+  }, [allQuickLinks, selectedQuickLinkIds])
 
   return (
     <div className="lg:hidden flex flex-col gap-4">
@@ -388,7 +491,7 @@ export default function MobileFintechDashboardHeader({
           </span>
           <button
             type="button"
-            onClick={onOpenCustomize}
+            onClick={() => setQuickLinkCustomizeOpen(true)}
             className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 border border-[#218DFF]/40 text-[#9EDCFF] hover:text-white text-xs font-bold cursor-pointer transition-all flex items-center gap-1.5"
           >
             <Sliders className="w-3 h-3 text-[#218DFF]" />
@@ -396,7 +499,7 @@ export default function MobileFintechDashboardHeader({
           </button>
         </div>
 
-        {/* 3x2 Grid of Quick Action Buttons */}
+        {/* Dynamic Grid of Customized Quick Action Buttons */}
         <div className="grid grid-cols-3 gap-2.5">
           {quickLinks.map((item) => {
             const Icon = item.icon
@@ -418,6 +521,105 @@ export default function MobileFintechDashboardHeader({
           })}
         </div>
       </div>
+
+      {/* Mobile Quick Links Customizer Modal */}
+      {quickLinkCustomizeOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-[#020617]/80 backdrop-blur-xl flex items-end sm:items-center justify-center p-3 sm:p-4"
+          onClick={() => setQuickLinkCustomizeOpen(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-3xl bg-gradient-to-b from-[#0B215E] via-[#071644] to-[#040C26] border-2 border-[#218DFF]/40 shadow-2xl p-5 space-y-4 max-h-[82vh] flex flex-col"
+          >
+            <div className="flex items-center justify-between border-b border-white/15 pb-3 shrink-0">
+              <div>
+                <h3 className="font-orbitron text-sm font-extrabold text-white tracking-tight">
+                  Customize Quick Links
+                </h3>
+                <p className="text-[11px] text-[#9EDCFF]/80 mt-0.5">
+                  Tap shortcuts to add or remove from your Quick Links ({selectedQuickLinkIds.length} active)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickLinkCustomizeOpen(false)}
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white cursor-pointer border border-white/15"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => saveQuickLinkIds(allQuickLinks.map((q) => q.id))}
+                className="flex-1 py-1.5 px-3 rounded-xl bg-[#218DFF]/20 hover:bg-[#218DFF]/30 border border-[#218DFF]/40 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
+              >
+                Select All ({allQuickLinks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => saveQuickLinkIds(DEFAULT_QUICK_LINK_IDS)}
+                className="flex-1 py-1.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-[11px] font-bold text-slate-300 cursor-pointer"
+              >
+                Reset Defaults (6)
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 overflow-y-auto pr-1 flex-1">
+              {allQuickLinks.map((item) => {
+                const Icon = item.icon
+                const active = selectedQuickLinkIds.includes(item.id)
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleQuickLink(item.id)}
+                    className={`p-3 rounded-2xl border flex items-center justify-between gap-2 text-left transition-all cursor-pointer active:scale-95 ${
+                      active
+                        ? 'bg-[#218DFF]/25 border-[#218DFF] text-white shadow-[0_4px_14px_rgba(33,141,255,0.2)]'
+                        : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#9EDCFF]' : 'text-slate-400'}`} />
+                      <span className="text-xs font-bold truncate">{item.label}</span>
+                    </div>
+                    <div
+                      className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 border ${
+                        active ? 'bg-[#218DFF] border-[#9EDCFF] text-white' : 'border-white/25'
+                      }`}
+                    >
+                      {active && <Check className="w-2.5 h-2.5" />}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setQuickLinkCustomizeOpen(false)
+                  if (onOpenCustomize) onOpenCustomize()
+                }}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-[11px] font-bold text-[#9EDCFF] cursor-pointer"
+              >
+                Overview Cards...
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickLinkCustomizeOpen(false)}
+                className="px-5 py-2 rounded-xl bg-[#218DFF] hover:bg-[#1a7ae0] text-xs font-bold text-white cursor-pointer shadow-lg"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Workshop Craft Selection Modal for Mobile */}
       {currentArch?.id === 'make-and-sell' && (
