@@ -8,6 +8,7 @@ const DocumentsAndIntegrationsPanel = lazyWithRetry(() => import('../DocumentsAn
 const DocumentsAndSharingPanel = lazyWithRetry(() => import('../documents/DocumentsAndSharingPanel'))
 const UniversalReportPanel = lazyWithRetry(() => import('../UniversalReportPanel'))
 const InteractiveModulePanel = lazyWithRetry(() => import('../InteractiveModulePanel'))
+const TrainingAcademyView = lazyWithRetry(() => import('../training/TrainingAcademyView'))
 
 function PanelFallback() {
   return (
@@ -76,6 +77,14 @@ export default function WorkspaceContentRouter({
           activePage={activePage}
           activeArchId={activeArchId}
         />
+      </Suspense>
+    )
+  }
+
+  if (activeModule === 'Training') {
+    return (
+      <Suspense fallback={<PanelFallback />}>
+        <TrainingAcademyView activeArchId={activeArchId} />
       </Suspense>
     )
   }

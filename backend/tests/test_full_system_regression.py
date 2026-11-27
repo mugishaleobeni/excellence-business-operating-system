@@ -226,6 +226,7 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             patch("app.routes.super_admin.get_db", return_value=self.db),
             patch("app.routes.whatsapp.get_db", return_value=self.db),
             patch("app.routes.storage.get_db", return_value=self.db),
+            patch("app.routes.training.get_db", return_value=self.db),
         ]
         for p in self.db_patchers:
             p.start()
@@ -679,6 +680,115 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertTrue(t2.get_json()["data"].get("idempotent"))
         tx_docs = list(self.db.transactions.find({"scopeKey": email, "id": "TX-OFFLINE-9001"}))
         self.assertEqual(len(tx_docs), 1)
+
+    # ------------------------------------------------------------------
+    # 8. STAFF TRAINING & FREE-TO-PAID MONETIZATION ENGINE
+    # ------------------------------------------------------------------
+    def test_08_staff_training_free_promo_to_paid_monetization_flow(self):
+        admin_email = "mugishaleobeni0@gmail.com"
+        user_email = "trainee@exbos.rw"
+        self.db.users.insert_one(
+            {"email": admin_email, "name": "Super Admin", "isSuperAdmin": True, "accountStatus": "Active"}
+        )
+        self.db.users.insert_one(
+            {
+                "email": user_email,
+                "name": "Shop Owner",
+                "businessName": "Nyabugogo Mart",
+                "phone": "+250788555666",
+                "plan": "Free",
+                "accountStatus": "Active",
+            }
+        )
+        admin_h = self._auth_header(admin_email)
+        user_h = self._auth_header(user_email)
+
+        # 1. Default Launch Promo is ON -> Staff Training books for 0 RWF without payment ref
+        r_cat = self.client.get("/api/v1/training/catalog", headers=user_h)
+        self.assertEqual(r_cat.status_code, 200)
+        self.assertTrue(r_cat.get_json()["data"]["freePromoActive"])
+
+        r_free_bk = self.client.post(
+            "/api/v1/training/bookings",
+            json={
+                "packageId": "staff-cashier-training",
+                "deliveryMode": "online",
+                "staffCount": 3,
+                "preferredDate": "2026-12-05",
+                "preferredTimeSlot": "10:00 AM",
+                "language": "rw",
+            },
+            headers=user_h,
+        )
+        self.assertEqual(r_free_bk.status_code, 201, r_free_bk.get_data(as_text=True))
+        free_bk = r_free_bk.get_json()["data"]["booking"]
+        self.assertEqual(free_bk["finalAmountRWF"], 0.0)
+        self.assertEqual(free_bk["paymentStatus"], "free")
+
+        # 2. Non-admin cannot access /training/admin/*
+        self.assertEqual(self.client.get("/api/v1/training/admin/overview", headers=user_h).status_code, 403)
+
+        # 3. Super Admin turns OFF Free Promo & changes Staff Training online price to 40,000 RWF
+        cfg = self.client.get("/api/v1/training/admin/overview", headers=admin_h).get_json()["data"]["config"]
+        for p in cfg["packages"]:
+            if p["id"] == "staff-cashier-training":
+                p["onlinePriceRWF"] = 40000
+        r_upd = self.client.put(
+            "/api/v1/training/admin/config",
+            json={**cfg, "freePromoActive": False},
+            headers=admin_h,
+        )
+        self.assertEqual(r_upd.status_code, 200)
+
+        # 4. Now paid booking WITHOUT MoMo reference MUST fail (400)
+        r_no_ref = self.client.post(
+            "/api/v1/training/bookings",
+            json={
+                "packageId": "staff-cashier-training",
+                "deliveryMode": "online",
+                "staffCount": 4,
+                "preferredDate": "2026-12-10",
+            },
+            headers=user_h,
+        )
+        self.assertEqual(r_no_ref.status_code, 400)
+
+        # 5. Paid booking WITH MoMo reference succeeds at updated 40,000 RWF
+        r_paid = self.client.post(
+            "/api/v1/training/bookings",
+            json={
+                "packageId": "staff-cashier-training",
+                "deliveryMode": "online",
+                "staffCount": 4,
+                "preferredDate": "2026-12-10",
+                "paymentMethod": "MTN MoMo",
+                "paymentReference": "MOMO-TRN-7788",
+            },
+            headers=user_h,
+        )
+        self.assertEqual(r_paid.status_code, 201, r_paid.get_data(as_text=True))
+        paid_bk = r_paid.get_json()["data"]["booking"]
+        self.assertEqual(paid_bk["finalAmountRWF"], 40000.0)
+        self.assertEqual(paid_bk["paymentStatus"], "pending_verification")
+
+        # 6. Super Admin approves payment & confirms slot -> WhatsApp notification sent
+        with patch("app.services.whatsapp_client.send_whatsapp_message", return_value={"ok": True}) as mock_wa:
+            r_conf = self.client.put(
+                f"/api/v1/training/admin/bookings/{paid_bk['id']}",
+                json={
+                    "paymentStatus": "paid",
+                    "bookingStatus": "confirmed",
+                    "assignedTrainer": "Eric Trainer",
+                    "meetingLink": "https://meet.google.com/exbos-train",
+                },
+                headers=admin_h,
+            )
+            self.assertEqual(r_conf.status_code, 200)
+            self.assertTrue(mock_wa.called)
+
+        # 7. Super Admin overview reflects 40,000 RWF paid training revenue
+        ov = self.client.get("/api/v1/training/admin/overview", headers=admin_h).get_json()["data"]
+        self.assertEqual(ov["kpis"]["totalRevenueRWF"], 40000)
 
 
 if __name__ == "__main__":

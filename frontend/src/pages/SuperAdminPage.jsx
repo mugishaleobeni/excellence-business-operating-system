@@ -8,8 +8,10 @@ import { ListRowsSkeleton, TableRowsSkeleton } from '../components/common/Skelet
 import AnimatedNumber from '../components/common/AnimatedNumber'
 import { apiClient } from '../utils/apiClient'
 import { buildDisplayPlansFromLimits } from '../utils/planEntitlements'
+import SuperAdminTrainingPanel from '../components/super-admin/SuperAdminTrainingPanel'
 import {
   ShieldCheck,
+  GraduationCap,
   Crown,
   Users,
   Gift,
@@ -695,7 +697,8 @@ export default function SuperAdminPage() {
           badge: pendingUpgradesCount,
           badgeTone: 'amber'
         },
-        { id: 'pricing', label: 'Pricing & Platinum', shortLabel: 'Pricing', icon: Crown }
+        { id: 'pricing', label: 'Pricing & Platinum', shortLabel: 'Pricing', icon: Crown },
+        { id: 'training', label: 'Staff Training & Academy', shortLabel: 'Training', icon: GraduationCap }
       ]
     },
     {
@@ -2751,6 +2754,10 @@ export default function SuperAdminPage() {
               </table>
             </div>
           </div>
+        )}
+
+        {activeTab === 'training' && (
+          <SuperAdminTrainingPanel addToast={addToast} />
         )}
         </main>
 

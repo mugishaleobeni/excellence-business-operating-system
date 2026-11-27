@@ -26,6 +26,8 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowAdvancedReports": False,
         "allowRraTaxPack": False,
         "allowTwoFactorSecurity": True,
+        "freeTrainingSessions": 0,
+        "trainingDiscountPercent": 0,
     },
     "bronze": {
         "name": "Bronze Growth",
@@ -48,6 +50,8 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowAdvancedReports": True,
         "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
+        "freeTrainingSessions": 1,
+        "trainingDiscountPercent": 10,
     },
     "silver": {
         "name": "Silver Enterprise",
@@ -70,6 +74,8 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowAdvancedReports": True,
         "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
+        "freeTrainingSessions": 2,
+        "trainingDiscountPercent": 20,
     },
     "gold": {
         "name": "Gold Corporate",
@@ -92,6 +98,8 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowAdvancedReports": True,
         "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
+        "freeTrainingSessions": 4,
+        "trainingDiscountPercent": 30,
     },
     "platinum": {
         "name": "Platinum Partner",
@@ -114,6 +122,8 @@ DEFAULT_PLAN_LIMITS: dict[str, dict] = {
         "allowAdvancedReports": True,
         "allowRraTaxPack": True,
         "allowTwoFactorSecurity": True,
+        "freeTrainingSessions": None,
+        "trainingDiscountPercent": 50,
     },
 }
 

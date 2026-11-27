@@ -149,6 +149,7 @@ def create_app(config_class: type[BaseConfig] | None = None) -> Flask:
                     "/api/v1/super-admin/plan-limits",
                     "/api/v1/super-admin/platinum-program",
                     "/api/v1/super-admin/broadcast",
+                    "/api/v1/training/catalog",
                 )
             )
         )

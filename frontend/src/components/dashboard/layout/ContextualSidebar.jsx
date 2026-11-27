@@ -62,20 +62,23 @@ export default function ContextualSidebar({
   }, [branches, isBranchManager, user?.assignedBranchId, activeBranchId])
   const allModules = useMemo(() => {
     const combined = [...(mainModules || []), ...(pinnedModules || [])]
-    if (combined.length > 0) return combined
-    return [
-      'Overview',
-      'Products',
-      'Sales',
-      'Purchases',
-      'Customers',
-      'Suppliers',
-      'Expenses',
-      'Reports',
-      'Documents',
-      'Integrations',
-      'Settings'
-    ]
+    const base =
+      combined.length > 0
+        ? combined
+        : [
+            'Overview',
+            'Products',
+            'Sales',
+            'Purchases',
+            'Customers',
+            'Suppliers',
+            'Expenses',
+            'Reports',
+            'Documents',
+            'Integrations',
+            'Settings'
+          ]
+    return base.includes('Training') ? base : [...base, 'Training']
   }, [mainModules, pinnedModules])
 
   if (sidebarCollapsed) return null
@@ -334,6 +337,8 @@ export default function ContextualSidebar({
                       ? 'Settings'
                       : mod === 'Integrations'
                       ? 'Integrations'
+                      : mod === 'Training'
+                      ? 'Staff Training'
                       : mod
                   return (
                     <button

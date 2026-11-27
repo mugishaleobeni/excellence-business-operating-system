@@ -459,7 +459,31 @@ export const exbosApi = {
     return { ok: true }
   },
   sendTaxPackToAccountant: (payload = {}) =>
-    apiRequest(withScope('/tax/send-to-accountant'), { method: 'POST', body: payload })
+    apiRequest(withScope('/tax/send-to-accountant'), { method: 'POST', body: payload }),
+
+  // Staff Training & Academy (Free-to-Paid Engine)
+  getTrainingCatalog: () => apiRequest('/training/catalog'),
+  getTrainingCourses: (archId = '') =>
+    apiRequest(`/training/courses${archId ? `?archId=${encodeURIComponent(archId)}` : ''}`),
+  updateTrainingProgress: (payload = {}) =>
+    apiRequest('/training/progress', { method: 'POST', body: payload }),
+  getMyTrainingBookings: () => apiRequest('/training/bookings'),
+  createTrainingBooking: (payload = {}) =>
+    apiRequest('/training/bookings', { method: 'POST', body: payload }),
+  superAdminGetTrainingOverview: () => apiRequest('/training/admin/overview'),
+  superAdminUpdateTrainingConfig: (payload = {}) =>
+    apiRequest('/training/admin/config', { method: 'PUT', body: payload }),
+  superAdminUpdateTrainingBooking: (bookingId, payload = {}) =>
+    apiRequest(`/training/admin/bookings/${encodeURIComponent(bookingId)}`, {
+      method: 'PUT',
+      body: payload
+    }),
+  superAdminUpsertTrainingCourse: (payload = {}) =>
+    apiRequest('/training/admin/courses', { method: 'POST', body: payload }),
+  superAdminDeleteTrainingCourse: (courseId) =>
+    apiRequest(`/training/admin/courses/${encodeURIComponent(courseId)}`, {
+      method: 'DELETE'
+    })
 }
 
 export const apiClient = exbosApi
