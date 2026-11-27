@@ -393,8 +393,7 @@ export default function PricingSection() {
       {/* Staff Training & Onboarding Academy Highlight Strip */}
       <div className="mt-8 rounded-3xl border border-[#218DFF]/30 bg-gradient-to-r from-[#071644]/95 via-[#051033]/95 to-[#081A52]/95 p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-5 shadow-xl">
         <div className="space-y-2 max-w-2xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[11px] font-bold">
-            <Sparkles className="w-3.5 h-3.5" />
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/35 text-emerald-300 text-[11px] font-bold">
             <span>ExBOS Staff Training &amp; Academy · English &amp; Kinyarwanda</span>
           </div>
           <h3 className="font-orbitron text-lg sm:text-xl font-extrabold text-white">
