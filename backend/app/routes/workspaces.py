@@ -1931,7 +1931,59 @@ def bulk_import_inventory_records(arch_id: str):
         {"$set": {"records": records, "updatedAt": now_iso}},
         upsert=True,
     )
-    _sync_bucket_to_module_records(db, scope_key, arch_id, "Inventory", inv_list, now_iso)
+
+    # Fast batch mirror into db.module_records & db.products (1 round-trip via bulk_write on MongoDB Atlas)
+    if imported_records:
+        try:
+            from pymongo import UpdateOne
+
+            if hasattr(db.module_records, "bulk_write") and hasattr(db.products, "bulk_write"):
+                mod_ops = []
+                prod_ops = []
+                for item in imported_records:
+                    rec_id = str(item.get("id") or "")
+                    if not rec_id:
+                        continue
+                    mod_doc = {
+                        **item,
+                        "id": rec_id,
+                        "scopeKey": scope_key,
+                        "architectureId": arch_id,
+                        "bucket": "Inventory",
+                        "updated_at": now_iso,
+                    }
+                    mod_doc.pop("_id", None)
+                    mod_ops.append(
+                        UpdateOne(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "bucket": "Inventory", "id": rec_id},
+                            {"$set": mod_doc},
+                            upsert=True,
+                        )
+                    )
+                    prod_doc = {
+                        **item,
+                        "id": rec_id,
+                        "scopeKey": scope_key,
+                        "architectureId": arch_id,
+                        "updated_at": now_iso,
+                    }
+                    prod_doc.pop("_id", None)
+                    prod_ops.append(
+                        UpdateOne(
+                            {"scopeKey": scope_key, "architectureId": arch_id, "id": rec_id},
+                            {"$set": prod_doc},
+                            upsert=True,
+                        )
+                    )
+                if mod_ops:
+                    db.module_records.bulk_write(mod_ops, ordered=False)
+                if prod_ops:
+                    db.products.bulk_write(prod_ops, ordered=False)
+            else:
+                _sync_bucket_to_module_records(db, scope_key, arch_id, "Inventory", inv_list, now_iso)
+        except Exception:
+            # Workspace document is already saved; never fail the bulk import over secondary mirror
+            pass
 
     return success_response(
         data={

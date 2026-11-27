@@ -69,13 +69,13 @@ export function getAuthHeaders() {
   return headers
 }
 
-export async function apiRequest(endpoint, { method = 'GET', body = null, timeoutMs = 12000 } = {}) {
+export async function apiRequest(endpoint, { method = 'GET', body = null, timeoutMs = 25000 } = {}) {
   const fetchWithTimeout = async (url, options, ms) => {
     if (typeof AbortController === 'undefined' || !ms) {
       return fetch(url, options)
     }
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), ms)
+    const timer = setTimeout(() => controller.abort(new Error('Request timed out')), ms)
     try {
       return await fetch(url, { ...options, signal: controller.signal })
     } finally {
@@ -150,7 +150,12 @@ export async function apiRequest(endpoint, { method = 'GET', body = null, timeou
       error: !response.ok ? data?.error || data?.message || 'Request failed' : null
     }
   } catch (err) {
-    return { ok: false, status: 0, error: err.message }
+    const rawMsg = String(err?.message || err || '')
+    const friendly =
+      err?.name === 'AbortError' || rawMsg.toLowerCase().includes('abort') || rawMsg.toLowerCase().includes('timed out')
+        ? 'Request timed out — server is waking up or network is slow. Please try again.'
+        : rawMsg || 'Network request failed.'
+    return { ok: false, status: 0, error: friendly }
   }
 }
 
@@ -489,7 +494,8 @@ export const exbosApi = {
   bulkImportProducts: (archId, payload = {}) =>
     apiRequest(withScope(`/workspaces/${encodeURIComponent(archId || 'buy-and-sell')}/records/Inventory/bulk`), {
       method: 'POST',
-      body: payload
+      body: payload,
+      timeoutMs: 60000
     }),
   getShifts: (branchId = '') =>
     apiRequest(`/shifts${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`),
