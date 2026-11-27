@@ -354,3 +354,14 @@ for (const meta of SEO_ROUTES) {
 
 console.log(`SEO static pre-generator: built ${generatedCount} crawlable route HTML files in dist/.`)
 
+// Automatically stamp dist/sw.js with a unique build cache version on every deploy
+// so installed mobile & desktop PWAs always purge stale caches and load the latest bundle.
+const distSwPath = path.join(DIST_DIR, 'sw.js')
+if (fs.existsSync(distSwPath)) {
+  const buildStamp = `exbos-pwa-${Date.now()}`
+  const swSrc = fs.readFileSync(distSwPath, 'utf8')
+  const stampedSw = swSrc.replace(/const CACHE_NAME = ['"][^'"]+['"]/, `const CACHE_NAME = '${buildStamp}'`)
+  fs.writeFileSync(distSwPath, stampedSw, 'utf8')
+  console.log(`PWA cache stamper: stamped dist/sw.js with ${buildStamp}.`)
+}
+
