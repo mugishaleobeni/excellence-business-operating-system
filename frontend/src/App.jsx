@@ -13,6 +13,7 @@ import GlobalKinyarwandaTranslator from './components/common/GlobalKinyarwandaTr
 import PwaInstallBanner from './components/common/PwaInstallBanner'
 import UpgradePromptModal from './components/common/UpgradePromptModal'
 import PreloaderScreen from './components/common/PreloaderScreen'
+import ExbosLoader from './components/common/ExbosLoader'
 import {
   FeaturesPage,
   BusinessModelsIndexPage,
@@ -30,13 +31,18 @@ const BranchManagerInvitePage = lazyWithRetry(() => import('./pages/BranchManage
 
 function RouteFallback() {
   return (
-    <div className="min-h-screen bg-[#03091F] flex items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-9 h-9 rounded-full border-2 border-[#218DFF] border-t-transparent animate-spin" />
-        <span className="text-xs font-orbitron uppercase tracking-wider text-[#9EDCFF]">
-          Loading ExBOS...
-        </span>
-      </div>
+    <div
+      className="min-h-screen w-full flex items-center justify-center bg-[#03091F]"
+      style={{
+        backgroundImage:
+          'radial-gradient(circle at 50% 38%, rgba(16, 69, 202, 0.22) 0%, transparent 58%)'
+      }}
+    >
+      <ExbosLoader
+        title="Loading ExBOS..."
+        subtitle="Please wait while we prepare your workspace"
+        size="md"
+      />
     </div>
   )
 }

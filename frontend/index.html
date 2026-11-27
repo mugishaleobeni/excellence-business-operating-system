@@ -171,10 +171,25 @@
   </head>
   <body class="bg-[#edf4ff] dark:bg-[#03091F] text-[#071544] dark:text-[#eaf2ff] antialiased selection:bg-[#218DFF] selection:text-white">
     <div id="root">
-      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#03091F;color:#eaf2ff;">
-        <div style="width:42px;height:42px;border-radius:9999px;border:3px solid rgba(33,141,255,0.22);border-top-color:#218DFF;animation:exbosSpin 0.8s linear infinite;"></div>
+      <div style="min-height:100vh;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:32px;background:#03091F;background-image:radial-gradient(circle at 50% 38%,rgba(16,69,202,0.22) 0%,transparent 58%);color:#EAF2FF;font-family:Manrope,system-ui,sans-serif;box-sizing:border-box;">
+        <div style="position:relative;width:128px;height:128px;animation:exbosRingPulse 4s cubic-bezier(0.4,0,0.6,1) infinite;">
+          <div style="position:absolute;inset:0;border-radius:9999px;background:conic-gradient(from 0deg,transparent 0deg,#9EDCFF 90deg,transparent 180deg);mask:radial-gradient(circle at 50% 50%,transparent 35%,black 37%,black 39%,transparent 41%);-webkit-mask:radial-gradient(circle at 50% 50%,transparent 35%,black 37%,black 39%,transparent 41%);opacity:0.85;animation:exbosRingSpin 3s linear infinite;"></div>
+          <div style="position:absolute;inset:0;border-radius:9999px;background:conic-gradient(from 0deg,transparent 0deg,#218DFF 120deg,rgba(16,69,202,0.55) 240deg,transparent 360deg);mask:radial-gradient(circle at 50% 50%,transparent 42%,black 44%,black 48%,transparent 50%);-webkit-mask:radial-gradient(circle at 50% 50%,transparent 42%,black 44%,black 48%,transparent 50%);opacity:0.95;animation:exbosRingSpin 2.5s cubic-bezier(0.4,0,0.6,1) infinite;"></div>
+          <div style="position:absolute;inset:0;border-radius:9999px;background:conic-gradient(from 180deg,transparent 0deg,rgba(158,220,255,0.65) 45deg,transparent 90deg);mask:radial-gradient(circle at 50% 50%,transparent 52%,black 54%,black 56%,transparent 58%);-webkit-mask:radial-gradient(circle at 50% 50%,transparent 52%,black 54%,black 56%,transparent 58%);opacity:0.45;animation:exbosRingSpinReverse 4s cubic-bezier(0.4,0,0.6,1) infinite;"></div>
+          <div style="position:absolute;inset:0;border-radius:9999px;background:conic-gradient(from 270deg,transparent 0deg,rgba(52,211,153,0.7) 20deg,transparent 40deg);mask:radial-gradient(circle at 50% 50%,transparent 61%,black 62%,black 63%,transparent 64%);-webkit-mask:radial-gradient(circle at 50% 50%,transparent 61%,black 62%,black 63%,transparent 64%);opacity:0.65;animation:exbosRingSpin 3.5s linear infinite;"></div>
+        </div>
+        <div style="text-align:center;max-width:240px;">
+          <div style="font-size:16px;font-weight:500;line-height:1.2;letter-spacing:-0.01em;color:#EAF2FF;animation:exbosTextBreathe 3s cubic-bezier(0.4,0,0.6,1) infinite;">Loading ExBOS...</div>
+          <div style="margin-top:8px;font-size:13px;line-height:1.45;color:rgba(158,220,255,0.7);animation:exbosSubBreathe 4s cubic-bezier(0.4,0,0.6,1) infinite;">Please wait while we prepare everything for you</div>
+        </div>
       </div>
-      <style>@keyframes exbosSpin{to{transform:rotate(360deg)}}</style>
+      <style>
+        @keyframes exbosRingSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes exbosRingSpinReverse{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
+        @keyframes exbosRingPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+        @keyframes exbosTextBreathe{0%,100%{opacity:0.92}50%{opacity:0.65}}
+        @keyframes exbosSubBreathe{0%,100%{opacity:0.68}50%{opacity:0.42}}
+      </style>
     </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
