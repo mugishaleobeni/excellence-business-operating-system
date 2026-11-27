@@ -625,6 +625,7 @@ def create_module_record(
     delta_qty = float(raw_dump.get("quantity") or 0)
 
     if module_name == "Sales" and delta_qty > 0 and (target_prod_id or target_prod_title):
+        oos_notified_ids: set[str] = set()
         for stock_bucket in ("Inventory", "Products"):
             s_list = records_map.get(stock_bucket, [])
             for idx, prod in enumerate(s_list):
@@ -656,6 +657,21 @@ def create_module_record(
                         upsert=True,
                     )
                     _mirror_product(db, scope_key, arch_id, updated_prod, now_iso)
+                    # Trigger Out-of-Stock WhatsApp alert to Business Owner & Branch Manager once per product
+                    dedupe_key = p_id or p_title
+                    if new_stock <= 0 and cur_stock > 0 and dedupe_key not in oos_notified_ids:
+                        oos_notified_ids.add(dedupe_key)
+                        from app.services.owner_audit_notifier import notify_out_of_stock_whatsapp
+                        notify_out_of_stock_whatsapp(
+                            db,
+                            scope_key=scope_key,
+                            branch_id=str(prod.get("branchId") or effective_branch_id or "main"),
+                            product_title=str(prod.get("title") or prod.get("name") or title),
+                            product_id=p_id,
+                            sku=str(prod.get("sku") or ""),
+                            unit=str(prod.get("unit") or "piece"),
+                            remaining_qty=new_stock,
+                        )
 
     elif module_name == "Purchases" and (target_prod_id or target_prod_title):
         # Increase stock ONLY by the quantity actually received (0 for open Purchase Orders)

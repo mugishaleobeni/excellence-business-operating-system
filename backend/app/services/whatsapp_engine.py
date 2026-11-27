@@ -635,7 +635,20 @@ def _adjust_product_stock(
     )
     if not updated:
         return None
-    return float(updated.get("quantity") or 0)
+    new_qty = float(updated.get("quantity") or 0)
+    if float(delta_qty) < 0 and new_qty <= 0:
+        from app.services.owner_audit_notifier import notify_out_of_stock_whatsapp
+        notify_out_of_stock_whatsapp(
+            db,
+            scope_key=scope_key,
+            branch_id=str(updated.get("branchId") or branch_id or "main"),
+            product_title=str(updated.get("title") or updated.get("name") or product_id),
+            product_id=str(product_id),
+            sku=str(updated.get("sku") or ""),
+            unit=str(updated.get("unit") or "piece"),
+            remaining_qty=new_qty,
+        )
+    return new_qty
 
 
 def _update_catalog_product(

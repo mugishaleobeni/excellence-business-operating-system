@@ -1049,6 +1049,86 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         codes = [w["code"] for w in sum_data["readinessWarnings"]]
         self.assertIn("MULTIPLE_TINS_DETECTED", codes)
 
+    # ------------------------------------------------------------------
+    # 12. OUT-OF-STOCK WHATSAPP ALERT TO BUSINESS OWNER & BRANCH MANAGER
+    # ------------------------------------------------------------------
+    def test_12_out_of_stock_whatsapp_alert_sent_to_owner_and_branch_manager(self):
+        owner_email = "oos-owner@exbos.rw"
+        mgr_email = "oos-mgr@exbos.rw"
+        self.db.users.insert_one(
+            {
+                "email": owner_email,
+                "name": "Owner Jean",
+                "businessName": "Kigali Electronics",
+                "phone": "+250788101010",
+                "plan": "Silver",
+                "accountStatus": "Active",
+            }
+        )
+        self.db.users.insert_one(
+            {
+                "email": mgr_email,
+                "name": "Manager Paul",
+                "ownerScopeKey": owner_email,
+                "assignedBranchId": "BR-REMERA",
+                "phone": "+250788202020",
+                "role": "Branch Manager",
+                "accountStatus": "Active",
+            }
+        )
+        self.db.branches.insert_one(
+            {
+                "id": "BR-REMERA",
+                "scopeKey": owner_email,
+                "name": "Remera Branch",
+                "managerPhone": "+250788202020",
+                "isMain": False,
+            }
+        )
+
+        owner_h = self._auth_header(owner_email)
+
+        # Add product with stock = 2 in Remera Branch
+        r_prod = self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Inventory",
+            json={
+                "id": "PRD-OOS-1",
+                "title": "iPhone Charger 20W",
+                "sku": "CHG-20W",
+                "unit": "piece",
+                "purchasePriceRWF": 8000,
+                "sellingPriceRWF": 15000,
+                "quantity": 2,
+                "branchId": "BR-REMERA",
+            },
+            headers=owner_h,
+        )
+        self.assertIn(r_prod.status_code, (200, 201))
+
+        # Sell all 2 units -> stock hits 0 -> BOTH Owner AND Branch Manager receive WhatsApp alert!
+        with patch("app.services.owner_audit_notifier.send_whatsapp_message", return_value={"ok": True}) as mock_wa:
+            r_sale = self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Sales",
+                json={
+                    "id": "SAL-OOS-1",
+                    "productId": "PRD-OOS-1",
+                    "title": "iPhone Charger 20W",
+                    "quantity": 2,
+                    "amountRWF": 30000,
+                    "branchId": "BR-REMERA",
+                    "status": "Paid",
+                },
+                headers=owner_h,
+            )
+            self.assertIn(r_sale.status_code, (200, 201))
+            self.assertEqual(mock_wa.call_count, 2)
+            sent_to = {call.args[0] for call in mock_wa.call_args_list}
+            self.assertEqual(sent_to, {"+250788101010", "+250788202020"})
+            msg_body = mock_wa.call_args_list[0].args[1]
+            self.assertIn("OUT OF STOCK ALERT", msg_body)
+            self.assertIn("iPhone Charger 20W", msg_body)
+            self.assertIn("Remera Branch", msg_body)
+
 
 if __name__ == "__main__":
     unittest.main()

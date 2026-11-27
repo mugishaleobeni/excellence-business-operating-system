@@ -241,3 +241,126 @@ def notify_owner_branch_product_action(
 
     return result
 
+
+def notify_out_of_stock_whatsapp(
+    db: Any,
+    *,
+    scope_key: str,
+    branch_id: str,
+    product_title: str,
+    product_id: str = "",
+    sku: str = "",
+    unit: str = "piece",
+    remaining_qty: float = 0.0,
+) -> dict[str, Any]:
+    """
+    Send a bilingual WhatsApp Out-of-Stock alert to BOTH the Business Owner and
+    the assigned Branch Manager (if the product belongs to a custom branch),
+    plus record an in-app notification. Respects the owner's WhatsApp entitlement.
+    """
+    result = {
+        "ownerWhatsappSent": False,
+        "managerWhatsappSent": False,
+        "inAppNotified": False,
+        "recipients": [],
+    }
+    if db is None or not scope_key or float(remaining_qty or 0) > 0:
+        return result
+
+    try:
+        from app.utils.entitlements import check_entitlement
+
+        owner_email = str(scope_key).strip().lower()
+        owner_doc = db.users.find_one({"email": owner_email}) or {}
+        business_name = str(owner_doc.get("businessName") or "ExBOS Business").strip()
+        clean_product = str(product_title or product_id or "Unnamed Product").strip()
+        clean_branch_id = str(branch_id or "main").strip() or "main"
+        clean_unit = str(unit or "piece").strip()
+
+        # Resolve Branch Name + Branch Manager Phone
+        branch_name = "Main HQ"
+        manager_phone = ""
+        manager_lang = str(owner_doc.get("language") or "en").strip().lower()
+        if clean_branch_id != "main":
+            b_doc = db.branches.find_one({"scopeKey": owner_email, "id": clean_branch_id}) or {}
+            branch_name = str(b_doc.get("name") or clean_branch_id).strip()
+            manager_phone = normalize_phone(str(b_doc.get("managerPhone") or ""))
+            mgr_user = db.users.find_one({"ownerScopeKey": owner_email, "assignedBranchId": clean_branch_id}) or {}
+            if mgr_user:
+                if not manager_phone:
+                    manager_phone = normalize_phone(str(mgr_user.get("phone") or mgr_user.get("whatsappPhone") or ""))
+                if mgr_user.get("language"):
+                    manager_lang = str(mgr_user.get("language")).strip().lower()
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # Always log an in-app Owner Notification regardless of WhatsApp plan
+        try:
+            db.owner_notifications.insert_one(
+                {
+                    "id": f"NOTIF-OOS-{int(time.time() * 1000)}",
+                    "scopeKey": owner_email,
+                    "branchId": clean_branch_id,
+                    "title": f"Out of Stock: {clean_product} ({branch_name})",
+                    "message": f"{clean_product}{f' (SKU: {sku})' if sku else ''} has reached 0 {clean_unit} in {branch_name}. Restock immediately.",
+                    "severity": "warning",
+                    "read": False,
+                    "createdAt": now_iso,
+                }
+            )
+            result["inAppNotified"] = True
+        except Exception:
+            pass
+
+        # Gate outbound WhatsApp alerts by the Business Owner's live subscription plan
+        allowed, _ = check_entitlement(db, owner_email, "allowWhatsappAutomation", owner_doc)
+        if not allowed:
+            return result
+
+        # Resolve Business Owner WhatsApp phone
+        owner_phone = normalize_phone(str(owner_doc.get("phone") or owner_doc.get("whatsappPhone") or ""))
+        if not owner_phone:
+            integ = db.integrations.find_one({"userEmail": owner_email}) or {}
+            wa_cfg = integ.get("whatsapp") if isinstance(integ.get("whatsapp"), dict) else {}
+            owner_phone = normalize_phone(str(wa_cfg.get("phone") or ""))
+
+        def _build_msg(lang_code: str, role_label: str) -> str:
+            sku_line = f"\nSKU: {sku}" if sku else ""
+            if lang_code == "rw":
+                return (
+                    f"*UBUBIKO BUSHIZE — {business_name}*\n"
+                    f"Ishami: *{branch_name}*\n"
+                    f"Igicuruzwa: *{clean_product}*{sku_line}\n"
+                    f"Ibisigaye mu bubiko: *0 {clean_unit}*\n"
+                    f"Igikorwa: Nyamuneka rangura iki gicuruzwa vuba kuri ExBOS cyangwa kuri WhatsApp."
+                )
+            return (
+                f"*OUT OF STOCK ALERT — {business_name}*\n"
+                f"Branch: *{branch_name}*\n"
+                f"Product: *{clean_product}*{sku_line}\n"
+                f"Remaining Stock: *0 {clean_unit}*\n"
+                f"Action: Please restock this item as soon as possible in ExBOS or via WhatsApp."
+            )
+
+        owner_lang = str(owner_doc.get("language") or "en").strip().lower()
+        sent_phones: set[str] = set()
+
+        if owner_phone:
+            res_o = send_whatsapp_message(owner_phone, _build_msg(owner_lang, "Owner"))
+            if isinstance(res_o, dict) and res_o.get("ok"):
+                result["ownerWhatsappSent"] = True
+                result["recipients"].append(owner_phone)
+                sent_phones.add(owner_phone)
+
+        if manager_phone and manager_phone not in sent_phones:
+            res_m = send_whatsapp_message(manager_phone, _build_msg(manager_lang, "Branch Manager"))
+            if isinstance(res_m, dict) and res_m.get("ok"):
+                result["managerWhatsappSent"] = True
+                result["recipients"].append(manager_phone)
+                sent_phones.add(manager_phone)
+
+    except Exception as exc:
+        logger.warning("Out-of-stock WhatsApp notifier failed safely: %s", exc)
+
+    return result
+
+
