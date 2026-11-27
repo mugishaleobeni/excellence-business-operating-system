@@ -1239,6 +1239,183 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertIsNone(br_after.get("manager"))
         self.assertEqual(self.client.get("/api/v1/branches", headers=mgr_h).status_code, 403)
 
+    # ------------------------------------------------------------------
+    # 14. SALES-ONLY BRANCH MANAGER MODE & MULTI-ITEM HQ STOCK DISPATCH
+    # ------------------------------------------------------------------
+    def test_14_branch_manager_sales_only_and_hq_stock_dispatch(self):
+        owner_email = "owner-salesonly@exbos.rw"
+        mgr_email = "cashier-salesonly@exbos.rw"
+        self.db.users.insert_one(
+            {
+                "email": owner_email,
+                "name": "HQ Owner",
+                "businessName": "HQ Retail Group",
+                "phone": "+250788300100",
+                "plan": "Silver",
+                "accountStatus": "Active",
+            }
+        )
+        owner_h = self._auth_header(owner_email)
+
+        # 1. Owner adds 2 products to Main HQ inventory
+        for pid, title, qty, price in [
+            ("HQ-P1", "Sugar 1kg", 50, 1800),
+            ("HQ-P2", "Cooking Oil 1L", 30, 3500),
+        ]:
+            r_add = self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Inventory",
+                json={
+                    "id": pid,
+                    "title": title,
+                    "quantity": qty,
+                    "purchasePriceRWF": int(price * 0.7),
+                    "sellingPriceRWF": price,
+                    "branchId": "main",
+                },
+                headers=owner_h,
+            )
+            self.assertIn(r_add.status_code, (200, 201), r_add.get_data(as_text=True))
+
+        # 2. Create sub-branch configured in strict "Sales-Only Cashier" mode
+        r_br = self.client.post(
+            "/api/v1/branches",
+            json={
+                "name": "Kimironko Kiosk",
+                "location": "Kigali",
+                "permissions": {
+                    "canAddInventory": False,
+                    "canEditProducts": False,
+                    "canDeleteProducts": False,
+                    "canEditPrices": False,
+                    "canDeleteRecords": False,
+                    "canRecordExpenses": False,
+                    "canViewProfitReports": False,
+                },
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_br.status_code, 201, r_br.get_data(as_text=True))
+        branch_id = r_br.get_json()["data"]["branch"]["id"]
+
+        with patch("app.routes.branches.send_gmail_email", return_value=True):
+            r_mgr = self.client.post(
+                f"/api/v1/branches/{branch_id}/assign-manager",
+                json={"name": "Jane Cashier", "email": mgr_email, "phone": "+250788300200", "password": "Password123"},
+                headers=owner_h,
+            )
+        self.assertEqual(r_mgr.status_code, 200, r_mgr.get_data(as_text=True))
+        mgr_h = self._auth_header(mgr_email)
+
+        # 3. Owner dispatches BOTH products to Kimironko Kiosk in one multi-item transfer
+        r_trf = self.client.post(
+            f"/api/v1/branches/{branch_id}/transfer-stock",
+            json={
+                "architectureId": "buy-and-sell",
+                "notes": "Morning stock handover",
+                "items": [
+                    {"productId": "HQ-P1", "quantity": 10},
+                    {"productId": "HQ-P2", "quantity": 5},
+                ],
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_trf.status_code, 200, r_trf.get_data(as_text=True))
+        trf_data = r_trf.get_json()["data"]
+        self.assertEqual(trf_data["transferredQuantity"], 15)
+
+        # Verify transfer history endpoint returns the handover log
+        r_hist = self.client.get(f"/api/v1/branches/{branch_id}/transfers", headers=owner_h)
+        self.assertEqual(r_hist.status_code, 200)
+        self.assertEqual(len(r_hist.get_json()["data"]["transfers"]), 1)
+
+        # Find the transferred branch product ID for Sugar 1kg
+        ws = self.db.workspaces.find_one({"scopeKey": owner_email, "architectureId": "buy-and-sell"})
+        branch_sugar = next(
+            p for p in ws["records"]["Inventory"]
+            if p.get("branchId") == branch_id and (p.get("title") or "").lower() == "sugar 1kg"
+        )
+        self.assertEqual(branch_sugar["quantity"], 10)
+        sugar_branch_id = branch_sugar["id"]
+
+        # 4. Branch Manager is BLOCKED (403) from adding, bulk-importing, editing, or deleting products
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Inventory",
+                json={"id": "MGR-P1", "title": "Unauthorized Item", "quantity": 5, "sellingPriceRWF": 1000, "branchId": branch_id},
+                headers=mgr_h,
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Inventory/bulk",
+                json={"branchId": branch_id, "items": [{"title": "Bulk Hack", "quantity": 2, "sellingPriceRWF": 1000}]},
+                headers=mgr_h,
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.patch(
+                f"/api/v1/workspaces/buy-and-sell/records/Inventory/{sugar_branch_id}",
+                json={"quantity": 999, "branchId": branch_id},
+                headers=mgr_h,
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.delete(
+                f"/api/v1/workspaces/buy-and-sell/records/Inventory/{sugar_branch_id}",
+                headers=mgr_h,
+            ).status_code,
+            403,
+        )
+
+        # 5. Branch Manager is BLOCKED (403) from selling at a modified price (1,200 instead of HQ's 1,800)
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Sales",
+                json={
+                    "id": "SAL-PRICE-HACK",
+                    "productId": sugar_branch_id,
+                    "title": "Sugar 1kg",
+                    "quantity": 2,
+                    "unitPriceRWF": 1200,
+                    "amountRWF": 2400,
+                    "branchId": branch_id,
+                    "status": "Paid",
+                },
+                headers=mgr_h,
+            ).status_code,
+            403,
+        )
+
+        # 6. Branch Manager SUCCEEDS (201) selling 2 units at HQ's exact set price (1,800 RWF)
+        r_sale = self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={
+                "id": "SAL-VALID-1",
+                "productId": sugar_branch_id,
+                "title": "Sugar 1kg",
+                "quantity": 2,
+                "unitPriceRWF": 1800,
+                "amountRWF": 3600,
+                "branchId": branch_id,
+                "status": "Paid",
+            },
+            headers=mgr_h,
+        )
+        self.assertIn(r_sale.status_code, (200, 201), r_sale.get_data(as_text=True))
+
+        # 7. Business Owner can still edit/delete the branch product freely (200)
+        self.assertEqual(
+            self.client.patch(
+                f"/api/v1/workspaces/buy-and-sell/records/Inventory/{sugar_branch_id}",
+                json={"sellingPriceRWF": 1900, "branchId": branch_id},
+                headers=owner_h,
+            ).status_code,
+            200,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

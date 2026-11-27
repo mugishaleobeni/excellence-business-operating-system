@@ -22,7 +22,7 @@ export default function SaleModal({
   activePage = "Sales",
   onSaveSale
 }) {
-  const { addDemoRecord, activeBranchId = "main" } = useExbos();
+  const { addDemoRecord, activeBranchId = "main", isBranchManager, activeBranchPermissions } = useExbos();
   const [saleProductId, setSaleProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [saleUnitPrice, setSaleUnitPrice] = useState("");
@@ -748,22 +748,33 @@ export default function SaleModal({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-slate-200">
-                      Selling price per unit <span className="text-rose-400">*</span>
+                    <label className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-200">
+                      <span>
+                        Selling price per unit <span className="text-rose-400">*</span>
+                      </span>
+                      {isBranchManager && activeBranchPermissions?.canEditPrices === false && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/35 text-amber-200">
+                          Locked by HQ
+                        </span>
+                      )}
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         inputMode="numeric"
                         required
+                        readOnly={Boolean(isBranchManager && activeBranchPermissions?.canEditPrices === false)}
                         value={saleUnitPrice === '' ? '' : formatWithCommas(saleUnitPrice)}
                         onChange={(e) => {
+                          if (isBranchManager && activeBranchPermissions?.canEditPrices === false) return
                           const raw = e.target.value.replace(/[^0-9]/g, '')
                           setSaleUnitPrice(raw === '' ? '' : Number(raw))
                         }}
                         placeholder="0"
                         style={{ backgroundColor: '#071644', color: '#ffffff' }}
-                        className="w-full pl-3.5 pr-14 py-2.5 rounded-xl exbos-modal-input text-xs sm:text-sm text-white font-orbitron font-bold focus:outline-none"
+                        className={`w-full pl-3.5 pr-14 py-2.5 rounded-xl exbos-modal-input text-xs sm:text-sm text-white font-orbitron font-bold focus:outline-none ${
+                          isBranchManager && activeBranchPermissions?.canEditPrices === false ? 'opacity-80 cursor-not-allowed' : ''
+                        }`}
                       />
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
                         RWF

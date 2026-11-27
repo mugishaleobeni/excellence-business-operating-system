@@ -19,6 +19,7 @@ import {
   Package
 } from 'lucide-react'
 import { useExbos } from '../../../context/ExbosContext'
+import { exbosApi } from '../../../utils/apiClient'
 import CustomSelect from '../../common/CustomSelect'
 
 export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', currentArch = {} }) {
@@ -80,6 +81,9 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     canDeleteRecords: false,
     canEditPrices: false,
     canViewProfitReports: false,
+    canAddInventory: true,
+    canEditProducts: false,
+    canDeleteProducts: false,
     canRecordExpenses: true,
     maxExpenseLimitRWF: 0
   })
@@ -89,6 +93,10 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   const [transferBranch, setTransferBranch] = useState(null)
   const [transferProductId, setTransferProductId] = useState('')
   const [transferQty, setTransferQty] = useState('1')
+  const [transferCart, setTransferCart] = useState([])
+  const [transferNotes, setTransferNotes] = useState('')
+  const [transferHistory, setTransferHistory] = useState([])
+  const [loadingTransfers, setLoadingTransfers] = useState(false)
   const [transferring, setTransferring] = useState(false)
 
   const mainHqProducts = useMemo(() => {
@@ -118,9 +126,49 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
       canDeleteRecords: Boolean(b.permissions?.canDeleteRecords),
       canEditPrices: Boolean(b.permissions?.canEditPrices),
       canViewProfitReports: Boolean(b.permissions?.canViewProfitReports),
+      canAddInventory: b.permissions?.canAddInventory !== false,
+      canEditProducts: Boolean(b.permissions?.canEditProducts),
+      canDeleteProducts: Boolean(b.permissions?.canDeleteProducts),
       canRecordExpenses: b.permissions?.canRecordExpenses !== false,
       maxExpenseLimitRWF: Number(b.permissions?.maxExpenseLimitRWF || 0)
     })
+  }
+
+  const applyPermissionPreset = (presetKey) => {
+    if (presetKey === 'sales-only') {
+      setSecPerms((p) => ({
+        ...p,
+        canAddInventory: false,
+        canEditProducts: false,
+        canDeleteProducts: false,
+        canEditPrices: false,
+        canDeleteRecords: false,
+        canViewProfitReports: false,
+        canRecordExpenses: false
+      }))
+    } else if (presetKey === 'standard') {
+      setSecPerms((p) => ({
+        ...p,
+        canAddInventory: true,
+        canEditProducts: false,
+        canDeleteProducts: false,
+        canEditPrices: false,
+        canDeleteRecords: false,
+        canViewProfitReports: false,
+        canRecordExpenses: true
+      }))
+    } else if (presetKey === 'supervisor') {
+      setSecPerms((p) => ({
+        ...p,
+        canAddInventory: true,
+        canEditProducts: true,
+        canDeleteProducts: true,
+        canEditPrices: true,
+        canDeleteRecords: true,
+        canViewProfitReports: true,
+        canRecordExpenses: true
+      }))
+    }
   }
 
   const handleSaveSecurity = async (e) => {
@@ -158,28 +206,78 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     }
   }
 
-  const openTransferPanel = (b) => {
+  const openTransferPanel = async (b) => {
     setTransferBranch(b)
     setTransferProductId(mainHqProducts[0]?.id || '')
+    setTransferQty('1')
+    setTransferCart([])
+    setTransferNotes('')
+    setTransferHistory([])
+    setLoadingTransfers(true)
+    try {
+      const res = await exbosApi.getBranchTransfers(b.id)
+      const list = res?.data?.data?.transfers || res?.data?.transfers || []
+      setTransferHistory(Array.isArray(list) ? list : [])
+    } catch {
+      setTransferHistory([])
+    } finally {
+      setLoadingTransfers(false)
+    }
+  }
+
+  const handleAddTransferItem = () => {
+    if (!transferProductId) return
+    const qtyNum = Number(transferQty) || 0
+    if (qtyNum <= 0) return
+    const prod = mainHqProducts.find((p) => p.id === transferProductId)
+    if (!prod) return
+    const maxAvail = Number(prod.quantity ?? prod.stock ?? prod.currentStock ?? 0)
+    setTransferCart((prev) => {
+      const existing = prev.find((it) => it.productId === transferProductId)
+      if (existing) {
+        const nextQ = Math.min(maxAvail, existing.quantity + qtyNum)
+        return prev.map((it) => (it.productId === transferProductId ? { ...it, quantity: nextQ } : it))
+      }
+      return [
+        ...prev,
+        {
+          productId: transferProductId,
+          title: prod.title || prod.name || 'Product',
+          quantity: Math.min(maxAvail, qtyNum),
+          maxAvail
+        }
+      ]
+    })
     setTransferQty('1')
   }
 
   const handleTransferStock = async (e) => {
     e.preventDefault()
-    if (!transferBranch || !transferProductId) return
+    if (!transferBranch) return
+    const payloadItems =
+      transferCart.length > 0
+        ? transferCart.map((it) => ({ productId: it.productId, quantity: it.quantity }))
+        : transferProductId
+        ? [{ productId: transferProductId, quantity: Number(transferQty) || 1 }]
+        : []
+    if (payloadItems.length === 0) return
     setTransferring(true)
     try {
       const res = await transferBranchStock(transferBranch.id, {
-        productId: transferProductId,
-        quantity: Number(transferQty) || 1,
+        items: payloadItems,
+        productId: payloadItems[0].productId,
+        quantity: payloadItems[0].quantity,
+        notes: transferNotes.trim(),
         architectureId: activeArchId
       })
       if (res?.ok) {
+        setTransferCart([])
+        setTransferNotes('')
         setTransferBranch(null)
         addToast &&
           addToast({
             type: 'success',
-            title: 'Stock Transferred from Main HQ',
+            title: 'Stock Dispatched from Main HQ',
             message: res.message || `Stock transferred to ${transferBranch.name}.`
           })
       } else {
@@ -595,6 +693,14 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                           <span>HQ Locked</span>
                         </span>
                       )}
+                      {!b.isMain &&
+                        b.permissions?.canAddInventory === false &&
+                        b.permissions?.canEditProducts === false &&
+                        b.permissions?.canDeleteProducts === false && (
+                          <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/35">
+                            Sales-Only
+                          </span>
+                        )}
                       {!b.isMain && b.permissions?.canDeleteRecords === false && (
                         <span className="text-[9px] font-orbitron uppercase px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-400/30">
                           No Delete
@@ -799,6 +905,39 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
           </div>
 
           <form onSubmit={handleSaveSecurity} className="space-y-4">
+            {/* One-Click Manager Action Presets */}
+            <div className="p-3 rounded-xl bg-white/[0.04] border border-white/10 space-y-2">
+              <div className="text-[11px] font-bold text-[#9EDCFF] uppercase tracking-wider">
+                Quick Manager Action Presets
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => applyPermissionPreset('sales-only')}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-200 text-xs font-bold cursor-pointer"
+                >
+                  Sales-Only Cashier (HQ Issues Stock)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPermissionPreset('standard')}
+                  className="px-3 py-1.5 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/30 border border-[#218DFF]/40 text-[#9EDCFF] text-xs font-bold cursor-pointer"
+                >
+                  Standard Branch Manager
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPermissionPreset('supervisor')}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/35 text-emerald-200 text-xs font-bold cursor-pointer"
+                >
+                  Full Branch Supervisor
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Choose <strong>Sales-Only Cashier</strong> when Main HQ dispatches stock to this branch and the manager should only record sales without adding, editing, or deleting products.
+              </p>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -845,23 +984,34 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
                 <input
                   type="checkbox"
-                  checked={secRequirePin}
-                  onChange={(e) => setSecRequirePin(e.target.checked)}
+                  checked={secPerms.canAddInventory}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canAddInventory: e.target.checked }))}
                   className="accent-[#218DFF]"
                 />
                 <span>
-                  <strong>Block Direct Entry to Main HQ</strong> (Require Owner Password / PIN to switch to HQ)
+                  <strong>Allow Adding / Importing Products</strong> (Uncheck if Main HQ issues all stock)
                 </span>
               </label>
               <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
                 <input
                   type="checkbox"
-                  checked={secPerms.canDeleteRecords}
-                  onChange={(e) => setSecPerms((p) => ({ ...p, canDeleteRecords: e.target.checked }))}
+                  checked={secPerms.canEditProducts}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canEditProducts: e.target.checked }))}
                   className="accent-[#218DFF]"
                 />
                 <span>
-                  <strong>Allow Record Deletions</strong> (Sales, Purchases &amp; Inventory items)
+                  <strong>Allow Editing Products &amp; Stock Counts</strong>
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canDeleteProducts}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canDeleteProducts: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Deleting Products</strong> from Branch Catalog
                 </span>
               </label>
               <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
@@ -872,7 +1022,18 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                   className="accent-[#218DFF]"
                 />
                 <span>
-                  <strong>Allow Selling Price Edits</strong> in this branch
+                  <strong>Allow Changing Selling Prices</strong> (Uncheck to lock HQ prices at checkout)
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canDeleteRecords}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canDeleteRecords: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Deleting Sales, Purchases &amp; Expenses</strong>
                 </span>
               </label>
               <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
@@ -884,6 +1045,28 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                 />
                 <span>
                   <strong>Allow Recording Branch Expenses</strong>
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secPerms.canViewProfitReports}
+                  onChange={(e) => setSecPerms((p) => ({ ...p, canViewProfitReports: e.target.checked }))}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Allow Viewing Cost &amp; Profit Margins</strong>
+                </span>
+              </label>
+              <label className="flex items-center gap-2.5 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={secRequirePin}
+                  onChange={(e) => setSecRequirePin(e.target.checked)}
+                  className="accent-[#218DFF]"
+                />
+                <span>
+                  <strong>Block Direct Entry to Main HQ</strong> (Require Owner Password / PIN)
                 </span>
               </label>
             </div>
@@ -932,48 +1115,129 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               No in-stock products found in Main HQ inventory. Add stock in Main HQ first to transfer units to {transferBranch.name}.
             </p>
           ) : (
-            <form onSubmit={handleTransferStock} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Main HQ Product *
-                </label>
-                <CustomSelect
-                  searchable={true}
-                  placeholder="Select Main HQ product..."
-                  searchPlaceholder="Search product by name..."
-                  value={transferProductId}
-                  onChange={(val) => setTransferProductId(val)}
-                  options={mainHqProducts.map((p) => {
-                    const q = Number(p.quantity ?? p.stock ?? p.currentStock ?? 0)
-                    return {
-                      value: p.id,
-                      label: `${p.title || p.name} (HQ Stock: ${q})`,
-                      searchText: `${p.title || ''} ${p.name || ''} ${p.sku || ''} ${p.category || ''}`
-                    }
-                  })}
-                />
+            <form onSubmit={handleTransferStock} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Main HQ Product *
+                  </label>
+                  <CustomSelect
+                    searchable={true}
+                    placeholder="Select Main HQ product..."
+                    searchPlaceholder="Search product by name..."
+                    value={transferProductId}
+                    onChange={(val) => setTransferProductId(val)}
+                    options={mainHqProducts.map((p) => {
+                      const q = Number(p.quantity ?? p.stock ?? p.currentStock ?? 0)
+                      return {
+                        value: p.id,
+                        label: `${p.title || p.name} (HQ Stock: ${q})`,
+                        searchText: `${p.title || ''} ${p.name || ''} ${p.sku || ''} ${p.category || ''}`
+                      }
+                    })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={transferQty}
+                    onChange={(e) => setTransferQty(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddTransferItem}
+                  disabled={!transferProductId}
+                  className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-indigo-400/40 text-indigo-200 text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  + Add to Dispatch
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Quantity to Transfer *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  value={transferQty}
-                  onChange={(e) => setTransferQty(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-white/10 border border-white/20 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-400"
-                />
+
+              {transferCart.length > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-400/30 space-y-1.5">
+                  <div className="text-[11px] font-bold text-indigo-200">
+                    Dispatch Batch ({transferCart.length} product{transferCart.length === 1 ? '' : 's'}):
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {transferCart.map((it) => (
+                      <span
+                        key={it.productId}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#040D29] border border-white/15 text-xs text-white"
+                      >
+                        <span>
+                          {it.title} × <strong>{it.quantity}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setTransferCart((prev) => prev.filter((x) => x.productId !== it.productId))}
+                          className="text-rose-300 hover:text-rose-200 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Handover Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={transferNotes}
+                    onChange={(e) => setTransferNotes(e.target.value)}
+                    placeholder="e.g. Morning stock issue for Nyamirambo branch"
+                    className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-indigo-400"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={transferring || (transferCart.length === 0 && !transferProductId)}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
+                >
+                  {transferring
+                    ? 'Dispatching...'
+                    : transferCart.length > 0
+                    ? `Dispatch ${transferCart.length} Products`
+                    : 'Transfer Stock to Branch'}
+                </button>
               </div>
-              <button
-                type="submit"
-                disabled={transferring || !transferProductId}
-                className="px-4 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-xs font-bold text-white cursor-pointer disabled:opacity-50"
-              >
-                {transferring ? 'Transferring...' : 'Transfer Stock to Branch'}
-              </button>
             </form>
+          )}
+
+          {/* Recent HQ-to-Branch Stock Dispatch Log */}
+          {!loadingTransfers && transferHistory.length > 0 && (
+            <div className="pt-3 border-t border-white/10 space-y-2">
+              <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                Recent HQ Stock Handovers to {transferBranch.name}
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                {transferHistory.slice(0, 6).map((tr) => (
+                  <div
+                    key={tr.id}
+                    className="p-2.5 rounded-xl bg-white/[0.04] border border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                  >
+                    <div className="text-slate-200">
+                      <strong>{tr.totalUnits} units</strong> —{' '}
+                      {(tr.items || []).map((i) => `${i.productTitle} (${i.quantity})`).join(', ')}
+                      {tr.notes ? <span className="text-slate-400"> · {tr.notes}</span> : null}
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {String(tr.createdAt || '').slice(0, 16).replace('T', ' ')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       )}

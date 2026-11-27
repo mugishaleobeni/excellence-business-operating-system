@@ -117,8 +117,16 @@ export default function InteractiveModulePanel({
     addToast,
     makeSellTrade,
     applyMakeSellTrade,
+    isBranchManager,
+    activeBranchPermissions,
     logout
   } = useExbos()
+
+  const isProductCatalogModule = ['Products', 'Inventory', 'Catalog'].includes(activeModule)
+  const blockAddProduct = Boolean(isBranchManager && isProductCatalogModule && activeBranchPermissions?.canAddInventory === false)
+  const blockEditProduct = Boolean(isBranchManager && isProductCatalogModule && activeBranchPermissions?.canEditProducts === false)
+  const blockDeleteProduct = Boolean(isBranchManager && isProductCatalogModule && activeBranchPermissions?.canDeleteProducts === false)
+  const blockDeleteNonProduct = Boolean(isBranchManager && !isProductCatalogModule && activeBranchPermissions?.canDeleteRecords === false)
 
   const navigate = useNavigate()
   const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false)
@@ -2130,18 +2138,26 @@ export default function InteractiveModulePanel({
             setModalOpen(true)
           }}
           onViewStockLine={(item) => setDetailRow(item)}
-          onEditStockLine={(item) => {
-            setEditRow(item)
-            setModalOpen(true)
-          }}
-          onDeleteStockLine={(item) => {
-            deleteDemoRecord(activeArchId, 'Inventory', item.id)
-            addToast && addToast({
-              type: 'info',
-              title: 'Stock Line Removed',
-              message: `Deleted "${item.title || item.id}".`
-            })
-          }}
+          onEditStockLine={
+            blockEditProduct
+              ? undefined
+              : (item) => {
+                  setEditRow(item)
+                  setModalOpen(true)
+                }
+          }
+          onDeleteStockLine={
+            blockDeleteProduct
+              ? undefined
+              : (item) => {
+                  deleteDemoRecord(activeArchId, 'Inventory', item.id)
+                  addToast && addToast({
+                    type: 'info',
+                    title: 'Stock Line Removed',
+                    message: `Deleted "${item.title || item.id}".`
+                  })
+                }
+          }
         />
       ) : activeModule === 'Livestock' ? (
         <AnimalRegistryWorkspace
@@ -2196,6 +2212,8 @@ export default function InteractiveModulePanel({
             onAddNew={
               isCategoriesPage
                 ? handleOpenCreateCategory
+                : blockAddProduct
+                ? undefined
                 : () => {
                     setEditRow(null)
                     setModalOpen(true)
@@ -2210,6 +2228,8 @@ export default function InteractiveModulePanel({
             onEditRow={
               isCategoriesPage
                 ? (row) => handleOpenEditCategory(row.rawCategory || row)
+                : blockEditProduct
+                ? undefined
                 : (row) => {
                     setEditRow(row)
                     setTitle(row.title || '')
@@ -2220,14 +2240,20 @@ export default function InteractiveModulePanel({
                     setModalOpen(true)
                   }
             }
-            onDeleteRow={isCategoriesPage ? (row) => handleDeleteCategory(row.rawCategory || row) : (row) => {
-              deleteDemoRecord(activeArchId, bucketKey, row.id)
-              addToast && addToast({
-                type: 'info',
-                title: 'Record Deleted',
-                message: `Deleted "${row.title || row.id}".`
-              })
-            }}
+            onDeleteRow={
+              isCategoriesPage
+                ? (row) => handleDeleteCategory(row.rawCategory || row)
+                : blockDeleteProduct || blockDeleteNonProduct
+                ? undefined
+                : (row) => {
+                    deleteDemoRecord(activeArchId, bucketKey, row.id)
+                    addToast && addToast({
+                      type: 'info',
+                      title: 'Record Deleted',
+                      message: `Deleted "${row.title || row.id}".`
+                    })
+                  }
+            }
             onReorderRow={activePage === 'Low Stock' ? (row) => handleOpenReorder(row) : undefined}
             hideFinancials={hideFinancials}
             emptyMessage={
@@ -2646,13 +2672,19 @@ export default function InteractiveModulePanel({
       {(activeModule === 'Products' || activeModule === 'Inventory' || activeModule === 'Sales') && (
         <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
           {(activeModule === 'Products' || activeModule === 'Inventory') && (
-            <button
-              type="button"
-              onClick={() => setBulkImportOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-[#218DFF]/35 text-[#9EDCFF] hover:text-white text-xs font-bold cursor-pointer transition"
-            >
-              Import Products from Excel / CSV
-            </button>
+            blockAddProduct ? (
+              <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-400/35 text-amber-200 text-xs font-semibold">
+                Stock is managed &amp; issued by Main HQ (Sales-Only Mode)
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setBulkImportOpen(true)}
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-[#218DFF]/35 text-[#9EDCFF] hover:text-white text-xs font-bold cursor-pointer transition"
+              >
+                Import Products from Excel / CSV
+              </button>
+            )
           )}
           {activeModule === 'Sales' && (
             <button

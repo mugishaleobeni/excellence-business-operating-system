@@ -501,6 +501,46 @@ def create_module_record(
                 status_code=403,
             )
         b_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
+        if is_manager and module_name in PRODUCT_BUCKETS:
+            if b_perms.get("canAddInventory", True) is False:
+                return error_response(
+                    "Adding new products or inventory is disabled for this branch. Stock is issued by Main HQ.",
+                    status_code=403,
+                )
+        if is_manager and module_name == "Sales" and b_perms.get("canEditPrices", False) is False:
+            # Verify branch manager is not overriding the HQ-set selling price on a catalog product
+            sale_pid = str(raw_dump.get("productId") or "").strip()
+            sale_ptitle = str(raw_dump.get("productTitle") or raw_dump.get("title") or "").strip().lower()
+            sale_qty = float(raw_dump.get("quantity") or 1) or 1.0
+            incoming_unit = float(
+                raw_dump.get("unitPriceRWF")
+                or (float(raw_dump.get("amountRWF") or 0) / sale_qty if sale_qty > 0 else 0)
+            )
+            if incoming_unit > 0 and (sale_pid or sale_ptitle):
+                cat_match = None
+                for cb in ("Inventory", "Products"):
+                    for p in (ws.get("records") or {}).get(cb) or []:
+                        if not isinstance(p, dict):
+                            continue
+                        if str(p.get("branchId") or "main").strip() != effective_branch_id:
+                            continue
+                        if (sale_pid and str(p.get("id") or "").strip() == sale_pid) or (
+                            sale_ptitle and str(p.get("title") or p.get("name") or "").strip().lower() == sale_ptitle
+                        ):
+                            cat_match = p
+                            break
+                    if cat_match:
+                        break
+                if cat_match:
+                    cat_sell = float(cat_match.get("sellingPriceRWF") or cat_match.get("unitPriceRWF") or 0)
+                    cat_whole = float(cat_match.get("wholesalePriceRWF") or 0)
+                    whole_min = float(cat_match.get("wholesaleMinQty") or 0)
+                    expected_unit = cat_whole if (cat_whole > 0 and whole_min > 0 and sale_qty >= whole_min) else cat_sell
+                    if expected_unit > 0 and abs(incoming_unit - expected_unit) > 1.0:
+                        return error_response(
+                            f"Changing selling prices is disabled for this branch by Main HQ. Set price is {expected_unit:,.0f} RWF.",
+                            status_code=403,
+                        )
         if module_name == "Expenses":
             if b_perms.get("canRecordExpenses") is False:
                 return error_response(
@@ -1045,6 +1085,42 @@ def update_module_record(
     bucket_list = records_map.get(module_name, [])
 
     patch_fields = validated_data.model_dump(exclude_none=True)
+
+    # Enforce Branch Manager edit & price permissions before mutating records
+    existing_target = next((it for it in bucket_list if str(it.get("id")) == str(record_id)), None)
+    target_branch_id = str(
+        (existing_target or {}).get("branchId") or patch_fields.get("branchId") or "main"
+    ).strip()
+    _, upd_is_manager, upd_eff_branch_id, upd_branch_doc = _resolve_actor_and_branch(db, scope_key, target_branch_id)
+    if upd_is_manager and target_branch_id != upd_eff_branch_id:
+        return error_response(
+            "Access Denied: You cannot edit records belonging to Main HQ or another branch.",
+            status_code=403,
+        )
+    if upd_is_manager and upd_branch_doc and upd_eff_branch_id != "main":
+        if str(upd_branch_doc.get("status") or "Active") == "Frozen":
+            return error_response(
+                f"Branch '{upd_branch_doc.get('name', upd_eff_branch_id)}' is Frozen (Read-Only) by Main HQ.",
+                status_code=403,
+            )
+        b_perms = upd_branch_doc.get("permissions") if isinstance(upd_branch_doc.get("permissions"), dict) else {}
+        if module_name in PRODUCT_BUCKETS:
+            if b_perms.get("canEditProducts", False) is False:
+                return error_response(
+                    "Editing products or stock quantities is disabled for this branch by Main HQ.",
+                    status_code=403,
+                )
+            if b_perms.get("canEditPrices", False) is False and isinstance(existing_target, dict):
+                for price_key in ("sellingPriceRWF", "unitPriceRWF", "price"):
+                    if price_key in patch_fields:
+                        old_p = float(existing_target.get(price_key) or 0)
+                        new_p = float(patch_fields.get(price_key) or 0)
+                        if abs(new_p - old_p) > 0.01:
+                            return error_response(
+                                "Editing selling prices is disabled for this branch by Main HQ.",
+                                status_code=403,
+                            )
+
     updated_item = None
     previous_item = None
     for idx, item in enumerate(bucket_list):
@@ -1327,7 +1403,13 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
                     status_code=403,
                 )
             b_perms = del_branch_doc.get("permissions") if isinstance(del_branch_doc.get("permissions"), dict) else {}
-            if module_name not in PRODUCT_BUCKETS and b_perms.get("canDeleteRecords", False) is False:
+            if module_name in PRODUCT_BUCKETS:
+                if b_perms.get("canDeleteProducts", False) is False:
+                    return error_response(
+                        "Deleting products is disabled for this branch by Main HQ.",
+                        status_code=403,
+                    )
+            elif b_perms.get("canDeleteRecords", False) is False:
                 return error_response(
                     "Record deletion is disabled for this branch by Main HQ.",
                     status_code=403,
@@ -1825,11 +1907,18 @@ def bulk_import_inventory_records(arch_id: str):
 
     req_branch_id = str(payload.get("branchId") or "main").strip()
     _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, req_branch_id)
-    if branch_doc and effective_branch_id != "main" and str(branch_doc.get("status") or "Active") == "Frozen":
-        return error_response(
-            f"Branch '{branch_doc.get('name', effective_branch_id)}' is Frozen (Read-Only) by Main HQ.",
-            status_code=403,
-        )
+    if branch_doc and effective_branch_id != "main":
+        if str(branch_doc.get("status") or "Active") == "Frozen":
+            return error_response(
+                f"Branch '{branch_doc.get('name', effective_branch_id)}' is Frozen (Read-Only) by Main HQ.",
+                status_code=403,
+            )
+        b_perms = branch_doc.get("permissions") if isinstance(branch_doc.get("permissions"), dict) else {}
+        if is_manager and b_perms.get("canAddInventory", True) is False:
+            return error_response(
+                "Bulk importing products is disabled for this branch. Stock is issued by Main HQ.",
+                status_code=403,
+            )
 
     from app.utils.entitlements import check_entitlement
     allowed, limit_err = check_entitlement(db, scope_key, "maxProducts")

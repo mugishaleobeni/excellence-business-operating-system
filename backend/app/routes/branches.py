@@ -24,6 +24,8 @@ def _default_branch_permissions(is_main: bool = False) -> dict:
             "canEditPrices": True,
             "canViewProfitReports": True,
             "canAddInventory": True,
+            "canEditProducts": True,
+            "canDeleteProducts": True,
             "canRecordExpenses": True,
             "maxExpenseLimitRWF": 0,
         }
@@ -32,6 +34,8 @@ def _default_branch_permissions(is_main: bool = False) -> dict:
         "canEditPrices": False,
         "canViewProfitReports": False,
         "canAddInventory": True,
+        "canEditProducts": False,
+        "canDeleteProducts": False,
         "canRecordExpenses": True,
         "maxExpenseLimitRWF": 0,
     }
@@ -54,6 +58,9 @@ def _normalize_branch_doc(b: dict) -> dict:
         merged_perms["canDeleteRecords"] = True
         merged_perms["canEditPrices"] = True
         merged_perms["canViewProfitReports"] = True
+        merged_perms["canAddInventory"] = True
+        merged_perms["canEditProducts"] = True
+        merged_perms["canDeleteProducts"] = True
     out["permissions"] = merged_perms
     return out
 
@@ -329,7 +336,15 @@ def update_branch(branch_id: str):
     if "permissions" in payload and isinstance(payload.get("permissions"), dict):
         is_main = bool(existing.get("isMain") or branch_id == "main")
         cur_perms = {**_default_branch_permissions(is_main), **(existing.get("permissions") or {})}
-        for k in ("canDeleteRecords", "canEditPrices", "canViewProfitReports", "canAddInventory", "canRecordExpenses"):
+        for k in (
+            "canDeleteRecords",
+            "canEditPrices",
+            "canViewProfitReports",
+            "canAddInventory",
+            "canEditProducts",
+            "canDeleteProducts",
+            "canRecordExpenses",
+        ):
             if k in payload["permissions"]:
                 cur_perms[k] = bool(payload["permissions"][k])
         if "maxExpenseLimitRWF" in payload["permissions"]:
@@ -341,6 +356,9 @@ def update_branch(branch_id: str):
             cur_perms["canDeleteRecords"] = True
             cur_perms["canEditPrices"] = True
             cur_perms["canViewProfitReports"] = True
+            cur_perms["canAddInventory"] = True
+            cur_perms["canEditProducts"] = True
+            cur_perms["canDeleteProducts"] = True
         updates["permissions"] = cur_perms
 
     db.branches.update_one({"scopeKey": scope_key, "id": branch_id}, {"$set": updates})
@@ -1250,7 +1268,8 @@ def verify_owner_switch():
 @branches_bp.route("/<branch_id>/transfer-stock", methods=["POST"])
 def transfer_branch_stock(branch_id: str):
     """
-    Transfer stock quantity of a product from Main HQ ('main') to a sub-branch atomically.
+    Transfer stock quantity of one or multiple products from Main HQ ('main') to a sub-branch atomically.
+    Logs every handover in db.branch_stock_transfers for full auditability.
     Only the Business Owner can initiate inter-branch stock transfers.
     """
     db = get_db()
@@ -1274,15 +1293,32 @@ def transfer_branch_stock(branch_id: str):
         return error_response("Destination branch not found.", status_code=404)
 
     payload = request.get_json(silent=True) or {}
-    product_id = str(payload.get("productId") or "").strip()
     arch_id = str(payload.get("architectureId") or target_branch.get("architectureId") or "buy-and-sell").strip()
-    try:
-        qty = float(payload.get("quantity") or 0)
-    except Exception:
-        qty = 0.0
+    dispatch_notes = str(payload.get("notes") or "").strip()
 
-    if not product_id or qty <= 0:
-        return error_response("Valid product and positive transfer quantity are required.", status_code=400)
+    raw_items = payload.get("items")
+    if isinstance(raw_items, list) and len(raw_items) > 0:
+        transfer_requests = []
+        for entry in raw_items:
+            if not isinstance(entry, dict):
+                continue
+            pid = str(entry.get("productId") or "").strip()
+            try:
+                q = float(entry.get("quantity") or 0)
+            except Exception:
+                q = 0.0
+            if pid and q > 0:
+                transfer_requests.append((pid, q))
+    else:
+        product_id = str(payload.get("productId") or "").strip()
+        try:
+            qty = float(payload.get("quantity") or 0)
+        except Exception:
+            qty = 0.0
+        transfer_requests = [(product_id, qty)] if (product_id and qty > 0) else []
+
+    if not transfer_requests:
+        return error_response("Valid product(s) and positive transfer quantities are required.", status_code=400)
 
     ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id})
     if not ws:
@@ -1292,124 +1328,194 @@ def transfer_branch_stock(branch_id: str):
     now_iso = datetime.now(timezone.utc).isoformat()
     today_str = now_iso[:10]
 
-    # Locate source product in Main HQ across Products and Inventory buckets
-    source_prod = None
-    source_bucket = None
-    for b_name in ("Products", "Inventory"):
-        arr = records.get(b_name)
-        if not isinstance(arr, list):
-            continue
-        for item in arr:
-            if (item.get("id") == product_id) and (item.get("branchId") or "main") == "main":
-                source_prod = item
-                source_bucket = b_name
+    # Validate all requested items before mutating so multi-item dispatch is atomic
+    validated_plan = []
+    for req_pid, req_qty in transfer_requests:
+        source_prod = None
+        source_bucket = None
+        for b_name in ("Products", "Inventory"):
+            arr = records.get(b_name)
+            if not isinstance(arr, list):
+                continue
+            for item in arr:
+                if (item.get("id") == req_pid) and (item.get("branchId") or "main") == "main":
+                    source_prod = item
+                    source_bucket = b_name
+                    break
+            if source_prod:
                 break
-        if source_prod:
-            break
 
-    if not source_prod:
-        return error_response("Source product not found in Main HQ inventory.", status_code=404)
+        if not source_prod:
+            return error_response(f"Source product '{req_pid}' not found in Main HQ inventory.", status_code=404)
 
-    avail_qty = float(source_prod.get("quantity") if source_prod.get("quantity") is not None else (source_prod.get("stock") or 0))
-    if qty > avail_qty:
-        return error_response(
-            f"Insufficient Main HQ stock for '{source_prod.get('title') or source_prod.get('name')}'. Available: {avail_qty:g}.",
-            status_code=400,
-        )
+        avail_qty = float(source_prod.get("quantity") if source_prod.get("quantity") is not None else (source_prod.get("stock") or 0))
+        if req_qty > avail_qty:
+            return error_response(
+                f"Insufficient Main HQ stock for '{source_prod.get('title') or source_prod.get('name')}'. Available: {avail_qty:g}.",
+                status_code=400,
+            )
+        validated_plan.append((req_pid, req_qty, source_prod, source_bucket))
 
-    new_hq_qty = max(0.0, avail_qty - qty)
-    prod_title = (source_prod.get("title") or source_prod.get("name") or "Product").strip()
+    transferred_items_summary = []
+    total_units_dispatched = 0.0
+    base_ms = int(time.time() * 1000)
 
-    # Deduct from matching Main HQ items in Products & Inventory
-    for b_name in ("Products", "Inventory"):
-        arr = records.get(b_name)
-        if not isinstance(arr, list):
-            continue
-        for item in arr:
+    for idx_item, (req_pid, req_qty, source_prod, source_bucket) in enumerate(validated_plan):
+        avail_qty = float(source_prod.get("quantity") if source_prod.get("quantity") is not None else (source_prod.get("stock") or 0))
+        new_hq_qty = max(0.0, avail_qty - req_qty)
+        prod_title = (source_prod.get("title") or source_prod.get("name") or "Product").strip()
+
+        # Deduct from matching Main HQ items in Products & Inventory
+        for b_name in ("Products", "Inventory"):
+            arr = records.get(b_name)
+            if not isinstance(arr, list):
+                continue
+            for item in arr:
+                item_title = (item.get("title") or item.get("name") or "").strip().lower()
+                if (item.get("branchId") or "main") == "main" and (
+                    item.get("id") == req_pid or (prod_title and item_title == prod_title.lower())
+                ):
+                    item["quantity"] = new_hq_qty
+                    item["stock"] = new_hq_qty
+                    u_cost = float(item.get("unitCostRWF") or item.get("buyingPriceRWF") or item.get("costPrice") or 0)
+                    if u_cost > 0:
+                        item["amountRWF"] = round(new_hq_qty * u_cost)
+                    item["status"] = "Out of Stock" if new_hq_qty <= 0 else ("Low Stock" if new_hq_qty <= 5 else "In Stock")
+                    item["updatedAt"] = now_iso
+
+        # Add or increment in destination branch across Products & Inventory
+        target_bucket = source_bucket or "Products"
+        dest_arr = list(records.get(target_bucket) or [])
+        dest_match = None
+        for item in dest_arr:
             item_title = (item.get("title") or item.get("name") or "").strip().lower()
-            if (item.get("branchId") or "main") == "main" and (
-                item.get("id") == product_id or (prod_title and item_title == prod_title.lower())
-            ):
-                item["quantity"] = new_hq_qty
-                item["stock"] = new_hq_qty
-                u_cost = float(item.get("unitCostRWF") or item.get("buyingPriceRWF") or item.get("costPrice") or 0)
-                if u_cost > 0:
-                    item["amountRWF"] = round(new_hq_qty * u_cost)
-                item["status"] = "Out of Stock" if new_hq_qty <= 0 else ("Low Stock" if new_hq_qty <= 5 else "In Stock")
-                item["updatedAt"] = now_iso
+            if item.get("branchId") == branch_id and item_title == prod_title.lower():
+                dest_match = item
+                break
 
-    # Add or increment in destination branch across Products & Inventory
-    target_bucket = source_bucket or "Products"
-    dest_arr = list(records.get(target_bucket) or [])
-    dest_match = None
-    for item in dest_arr:
-        item_title = (item.get("title") or item.get("name") or "").strip().lower()
-        if item.get("branchId") == branch_id and item_title == prod_title.lower():
-            dest_match = item
-            break
+        unit_cost = float(source_prod.get("unitCostRWF") or source_prod.get("buyingPriceRWF") or source_prod.get("costPrice") or 0)
+        sell_price = float(source_prod.get("sellingPriceRWF") or source_prod.get("unitPriceRWF") or source_prod.get("price") or 0)
 
-    unit_cost = float(source_prod.get("unitCostRWF") or source_prod.get("buyingPriceRWF") or source_prod.get("costPrice") or 0)
-    sell_price = float(source_prod.get("sellingPriceRWF") or source_prod.get("unitPriceRWF") or source_prod.get("price") or 0)
+        if dest_match:
+            prev_dest_qty = float(dest_match.get("quantity") if dest_match.get("quantity") is not None else (dest_match.get("stock") or 0))
+            next_dest_qty = prev_dest_qty + req_qty
+            dest_match["quantity"] = next_dest_qty
+            dest_match["stock"] = next_dest_qty
+            if sell_price > 0:
+                dest_match["sellingPriceRWF"] = sell_price
+            if unit_cost > 0:
+                dest_match["unitCostRWF"] = unit_cost
+                dest_match["amountRWF"] = round(next_dest_qty * unit_cost)
+            dest_match["status"] = "Low Stock" if next_dest_qty <= 5 else "In Stock"
+            dest_match["updatedAt"] = now_iso
+            dest_ref = dest_match
+        else:
+            cloned = {
+                **source_prod,
+                "id": f"PROD-{base_ms + idx_item}-{branch_id[-4:]}",
+                "branchId": branch_id,
+                "quantity": req_qty,
+                "stock": req_qty,
+                "unitCostRWF": unit_cost,
+                "sellingPriceRWF": sell_price,
+                "amountRWF": round(req_qty * (unit_cost or sell_price)),
+                "status": "Low Stock" if req_qty <= 5 else "In Stock",
+                "transferredFrom": "Main HQ",
+                "date": today_str,
+                "createdAt": now_iso,
+                "updatedAt": now_iso,
+            }
+            dest_arr.insert(0, cloned)
+            dest_ref = cloned
+        records[target_bucket] = dest_arr
 
-    if dest_match:
-        prev_dest_qty = float(dest_match.get("quantity") if dest_match.get("quantity") is not None else (dest_match.get("stock") or 0))
-        next_dest_qty = prev_dest_qty + qty
-        dest_match["quantity"] = next_dest_qty
-        dest_match["stock"] = next_dest_qty
-        if unit_cost > 0:
-            dest_match["amountRWF"] = round(next_dest_qty * unit_cost)
-        dest_match["status"] = "Low Stock" if next_dest_qty <= 5 else "In Stock"
-        dest_match["updatedAt"] = now_iso
-    else:
-        cloned = {
-            **source_prod,
-            "id": f"PROD-{int(time.time() * 1000)}-{branch_id[-4:]}",
-            "branchId": branch_id,
-            "quantity": qty,
-            "stock": qty,
-            "unitCostRWF": unit_cost,
-            "sellingPriceRWF": sell_price,
-            "amountRWF": round(qty * (unit_cost or sell_price)),
-            "status": "Low Stock" if qty <= 5 else "In Stock",
-            "transferredFrom": "Main HQ",
-            "date": today_str,
-            "createdAt": now_iso,
-            "updatedAt": now_iso,
-        }
-        dest_arr.insert(0, cloned)
-    records[target_bucket] = dest_arr
-
-    # Mirror into Inventory bucket if source was Products so both views stay in sync
-    if target_bucket == "Products":
-        inv_arr = list(records.get("Inventory") or [])
-        inv_match = next(
-            (x for x in inv_arr if x.get("branchId") == branch_id and (x.get("title") or x.get("name") or "").strip().lower() == prod_title.lower()),
+        # Mirror into the sibling catalog bucket (Inventory <-> Products) so both views stay in sync
+        sibling_bucket = "Inventory" if target_bucket == "Products" else "Products"
+        sib_arr = list(records.get(sibling_bucket) or [])
+        sib_match = next(
+            (x for x in sib_arr if x.get("branchId") == branch_id and (x.get("title") or x.get("name") or "").strip().lower() == prod_title.lower()),
             None,
         )
-        if inv_match:
-            next_q = float(inv_match.get("quantity") or inv_match.get("stock") or 0) + qty
-            inv_match["quantity"] = next_q
-            inv_match["stock"] = next_q
-            inv_match["status"] = "Low Stock" if next_q <= 5 else "In Stock"
+        if sib_match:
+            next_q = float(sib_match.get("quantity") if sib_match.get("quantity") is not None else (sib_match.get("stock") or 0)) + req_qty
+            sib_match["quantity"] = next_q
+            sib_match["stock"] = next_q
+            if sell_price > 0:
+                sib_match["sellingPriceRWF"] = sell_price
+            sib_match["status"] = "Low Stock" if next_q <= 5 else "In Stock"
+            sib_match["updatedAt"] = now_iso
         else:
-            inv_arr.insert(0, {**dest_arr[0], "id": f"INV-{int(time.time() * 1000)}-{branch_id[-4:]}"})
-        records["Inventory"] = inv_arr
+            sib_prefix = "INV" if sibling_bucket == "Inventory" else "PROD"
+            sib_arr.insert(0, {**dest_ref, "id": f"{sib_prefix}-{base_ms + idx_item}-{branch_id[-4:]}"})
+        records[sibling_bucket] = sib_arr
+
+        total_units_dispatched += req_qty
+        transferred_items_summary.append(
+            {
+                "productId": req_pid,
+                "productTitle": prod_title,
+                "quantity": req_qty,
+                "sellingPriceRWF": sell_price,
+            }
+        )
 
     db.workspaces.update_one(
         {"scopeKey": scope_key, "architectureId": arch_id},
         {"$set": {"records": records, "updated_at": now_iso}},
     )
 
+    transfer_record = {
+        "id": f"TRF-{base_ms}",
+        "scopeKey": scope_key,
+        "branchId": branch_id,
+        "branchName": target_branch.get("name", branch_id),
+        "architectureId": arch_id,
+        "items": transferred_items_summary,
+        "itemCount": len(transferred_items_summary),
+        "totalUnits": total_units_dispatched,
+        "notes": dispatch_notes,
+        "dispatchedBy": str((user_doc or {}).get("name") or (user_doc or {}).get("email") or "Business Owner"),
+        "createdAt": now_iso,
+    }
+    db.branch_stock_transfers.insert_one(dict(transfer_record))
+
+    first_item = transferred_items_summary[0]
     clean_ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0})
+    msg = (
+        f"Transferred {first_item['quantity']:g} units of '{first_item['productTitle']}' from Main HQ to {target_branch.get('name')}."
+        if len(transferred_items_summary) == 1
+        else f"Dispatched {len(transferred_items_summary)} products ({total_units_dispatched:g} total units) from Main HQ to {target_branch.get('name')}."
+    )
     return success_response(
         data={
             "workspace": clean_ws,
-            "transferredQuantity": qty,
-            "productTitle": prod_title,
+            "transfer": transfer_record,
+            "items": transferred_items_summary,
+            "transferredQuantity": total_units_dispatched,
+            "productTitle": first_item["productTitle"],
             "targetBranchId": branch_id,
             "targetBranchName": target_branch.get("name"),
         },
-        message=f"Transferred {qty:g} units of '{prod_title}' from Main HQ to {target_branch.get('name')}.",
+        message=msg,
+    )
+
+
+@branches_bp.route("/<branch_id>/transfers", methods=["GET"])
+def list_branch_stock_transfers(branch_id: str):
+    """Return recent HQ-to-Branch stock dispatch records for a branch."""
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        assigned = str((user_doc or {}).get("assignedBranchId") or "").strip()
+        if assigned and assigned != branch_id:
+            return error_response("Access denied to another branch's transfer history.", status_code=403)
+
+    rows = list(db.branch_stock_transfers.find({"scopeKey": scope_key, "branchId": branch_id}, {"_id": 0}))
+    rows.sort(key=lambda r: str(r.get("createdAt") or ""), reverse=True)
+    return success_response(
+        data={"transfers": rows[:30]},
+        extra={"transfers": rows[:30]},
+        message="Stock transfer history loaded.",
     )
 
 

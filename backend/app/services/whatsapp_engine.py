@@ -2203,6 +2203,16 @@ def handle_incoming_whatsapp_message(
             "quantity": float(chosen.get("quantity") if chosen.get("quantity") is not None else chosen.get("currentStock") or 0),
         }
         if step_data.get("intent") == "delete":
+            if is_branch_manager and branch_perms.get("canDeleteProducts") is False:
+                set_session(None)
+                return {
+                    "reply": _t(
+                        lang,
+                        "Deleting products is disabled for your branch by Main HQ. Only the Business Owner can delete catalog items.",
+                        "Gusiba ibicuruzwa byahagaritswe ku ishami ryawe n'Umuyobozi Mukuru (Main HQ). Nyiri ubucuruzi gusa ni we ushobora kubisiba.",
+                    ),
+                    "action": "permission_denied_delete_product",
+                }
             set_session("confirm_product_delete", pdata)
             return {
                 "reply": _format_verification_card(
@@ -2222,6 +2232,36 @@ def handle_incoming_whatsapp_message(
         return {"reply": _product_manage_menu(pdata), "action": "catalog_product_action"}
 
     if current_step == "catalog_product_action":
+        if clean_text in ("1", "3", "4") and is_branch_manager and branch_perms.get("canEditProducts") is False:
+            set_session(None)
+            return {
+                "reply": _t(
+                    lang,
+                    "Editing products or stock quantities is disabled for your branch. Stock is managed and issued by Main HQ.",
+                    "Guhindura ibicuruzwa cyangwa umubare w'ububiko byahagaritswe ku ishami ryawe. Ububiko bucungwa na Main HQ.",
+                ),
+                "action": "permission_denied_edit_product",
+            }
+        if clean_text == "2" and is_branch_manager and branch_perms.get("canEditPrices") is False:
+            set_session(None)
+            return {
+                "reply": _t(
+                    lang,
+                    "Editing selling prices is disabled for your branch by Main HQ.",
+                    "Guhindura ibiciro byo kugurisha byahagaritswe ku ishami ryawe na Main HQ.",
+                ),
+                "action": "permission_denied_edit_price",
+            }
+        if clean_text == "5" and is_branch_manager and branch_perms.get("canDeleteProducts") is False:
+            set_session(None)
+            return {
+                "reply": _t(
+                    lang,
+                    "Deleting products is disabled for your branch by Main HQ.",
+                    "Gusiba ibicuruzwa byahagaritswe ku ishami ryawe na Main HQ.",
+                ),
+                "action": "permission_denied_delete_product",
+            }
         if clean_text == "1":
             set_session("catalog_edit_name", step_data)
             return {

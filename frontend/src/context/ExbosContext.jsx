@@ -348,6 +348,8 @@ export function ExbosProvider({ children }) {
           canEditPrices: true,
           canViewProfitReports: true,
           canAddInventory: true,
+          canEditProducts: true,
+          canDeleteProducts: true,
           canRecordExpenses: true,
           maxExpenseLimitRWF: 0
         }
@@ -363,6 +365,8 @@ export function ExbosProvider({ children }) {
           canEditPrices: true,
           canViewProfitReports: true,
           canAddInventory: true,
+          canEditProducts: true,
+          canDeleteProducts: true,
           canRecordExpenses: true,
           maxExpenseLimitRWF: 0
         }
@@ -371,6 +375,8 @@ export function ExbosProvider({ children }) {
           canEditPrices: false,
           canViewProfitReports: false,
           canAddInventory: true,
+          canEditProducts: false,
+          canDeleteProducts: false,
           canRecordExpenses: true,
           maxExpenseLimitRWF: 0
         }
@@ -1862,6 +1868,19 @@ export function ExbosProvider({ children }) {
       moduleName === 'Products' || moduleName === 'FinishedGoods' || moduleName === 'Stock'
         ? 'Inventory'
         : moduleName
+    if (
+      isBranchManager &&
+      activeBranchId !== 'main' &&
+      normalizedModule === 'Inventory' &&
+      activeBranchPermissions?.canAddInventory === false
+    ) {
+      addToast({
+        type: 'error',
+        title: 'Product Addition Restricted',
+        message: 'Stock for this branch is managed and issued by Main HQ.'
+      })
+      return null
+    }
     isHydratedRef.current = true
     lastMutationTsRef.current = Date.now()
     const recordId =
@@ -2093,7 +2112,15 @@ export function ExbosProvider({ children }) {
       return
     }
     const isProductCatalogBucket = ['Products', 'Inventory', 'Menu Items', 'Crops & Inputs', 'Services', 'Catalog'].includes(moduleName)
-    if (activeBranchId !== 'main' && !isProductCatalogBucket && activeBranchPermissions?.canDeleteRecords === false) {
+    if (isBranchManager && activeBranchId !== 'main' && isProductCatalogBucket && activeBranchPermissions?.canDeleteProducts === false) {
+      addToast({
+        type: 'error',
+        title: 'Product Deletion Restricted by Main HQ',
+        message: 'Deleting products is disabled for this branch. Only the Business Owner at Main HQ can remove products.'
+      })
+      return
+    }
+    if (isBranchManager && activeBranchId !== 'main' && !isProductCatalogBucket && activeBranchPermissions?.canDeleteRecords === false) {
       addToast({
         type: 'error',
         title: 'Deletion Restricted by Main HQ',

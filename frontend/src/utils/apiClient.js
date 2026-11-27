@@ -342,6 +342,8 @@ export const exbosApi = {
       method: 'POST',
       body: payload
     }),
+  getBranchTransfers: (branchId) =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/transfers`)),
   getBranchAnalytics: (archId) =>
     apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`)),
   superAdminGetAnalytics: () => apiRequest('/super-admin/analytics'),
