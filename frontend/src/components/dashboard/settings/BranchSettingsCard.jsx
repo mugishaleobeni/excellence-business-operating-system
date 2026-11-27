@@ -7,6 +7,9 @@ import {
   MapPin,
   Pencil,
   UserPlus,
+  UserCog,
+  UserX,
+  UserCheck,
   Copy,
   Check,
   X,
@@ -28,6 +31,9 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     createBranch,
     updateBranch,
     assignBranchManager,
+    updateBranchManager,
+    setBranchManagerStatus,
+    deleteBranchManager,
     createBranchManagerInvite,
     transferBranchStock,
     deleteBranch,
@@ -54,6 +60,16 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   const [assigning, setAssigning] = useState(false)
   const [generatedLink, setGeneratedLink] = useState('')
   const [copiedLink, setCopiedLink] = useState(false)
+
+  // Edit / Manage existing branch manager state
+  const [editManagerBranch, setEditManagerBranch] = useState(null)
+  const [editMgrName, setEditMgrName] = useState('')
+  const [editMgrEmail, setEditMgrEmail] = useState('')
+  const [editMgrPhone, setEditMgrPhone] = useState('')
+  const [editMgrPassword, setEditMgrPassword] = useState('')
+  const [savingManagerEdit, setSavingManagerEdit] = useState(false)
+  const [managerActionBusyId, setManagerActionBusyId] = useState(null)
+  const [confirmRemoveMgrBranchId, setConfirmRemoveMgrBranchId] = useState(null)
 
   // Branch Security & Permissions state
   const [securityBranch, setSecurityBranch] = useState(null)
@@ -267,6 +283,7 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   }
 
   const openAssignManager = (b) => {
+    setEditManagerBranch(null)
     setManagerBranch(b)
     setManagerName(b.manager?.name && b.manager.name !== 'Pending Branch Manager' ? b.manager.name : '')
     setManagerEmail(b.manager?.email || '')
@@ -274,6 +291,116 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
     setManagerPassword('')
     setGeneratedLink(b.manager?.status === 'Pending Setup' ? b.manager?.inviteLink || '' : '')
     setCopiedLink(false)
+  }
+
+  const openEditManager = (b) => {
+    setManagerBranch(null)
+    setConfirmRemoveMgrBranchId(null)
+    setEditManagerBranch(b)
+    setEditMgrName(b.manager?.name && b.manager.name !== 'Pending Branch Manager' ? b.manager.name : '')
+    setEditMgrEmail(b.manager?.email || '')
+    setEditMgrPhone(b.manager?.phone || '')
+    setEditMgrPassword('')
+  }
+
+  const handleSaveManagerEdit = async (e) => {
+    e.preventDefault()
+    if (!editManagerBranch || !editMgrName.trim()) return
+    setSavingManagerEdit(true)
+    try {
+      const payload = {
+        name: editMgrName.trim(),
+        email: editMgrEmail.trim(),
+        phone: editMgrPhone.trim()
+      }
+      if (editMgrPassword.trim()) {
+        payload.password = editMgrPassword.trim()
+      }
+      const res = await updateBranchManager(editManagerBranch.id, payload)
+      if (res?.ok) {
+        setEditManagerBranch(null)
+        setEditMgrPassword('')
+        addToast &&
+          addToast({
+            type: 'success',
+            title: 'Branch Manager Updated',
+            message: res.message || `Updated manager details for ${editManagerBranch.name}.`
+          })
+      } else {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Update Failed',
+            message: res?.error || 'Could not update branch manager details.'
+          })
+      }
+    } finally {
+      setSavingManagerEdit(false)
+    }
+  }
+
+  const handleToggleManagerStatus = async (b) => {
+    const isCurrentlyDeactivated =
+      String(b.manager?.status || '').toLowerCase() === 'deactivated' ||
+      String(b.manager?.accountStatus || '').toLowerCase() === 'suspended'
+    const nextStatus = isCurrentlyDeactivated ? 'Active' : 'Deactivated'
+    setManagerActionBusyId(b.id)
+    try {
+      const res = await setBranchManagerStatus(
+        b.id,
+        nextStatus,
+        nextStatus === 'Deactivated' ? 'Access cut off by Business Owner from Branch Management.' : ''
+      )
+      if (res?.ok) {
+        addToast &&
+          addToast({
+            type: 'success',
+            title: nextStatus === 'Active' ? 'Branch Manager Activated' : 'Branch Manager Deactivated',
+            message:
+              res.message ||
+              (nextStatus === 'Active'
+                ? `${b.manager?.name || 'Branch Manager'} can now log in and use ExBOS again.`
+                : `${b.manager?.name || 'Branch Manager'} has been cut off from Web and WhatsApp POS immediately.`)
+          })
+      } else {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Action Failed',
+            message: res?.error || 'Could not change branch manager status.'
+          })
+      }
+    } finally {
+      setManagerActionBusyId(null)
+    }
+  }
+
+  const handleRemoveManager = async (b) => {
+    setManagerActionBusyId(b.id)
+    try {
+      const res = await deleteBranchManager(b.id)
+      if (res?.ok) {
+        setConfirmRemoveMgrBranchId(null)
+        if (editManagerBranch?.id === b.id) setEditManagerBranch(null)
+        addToast &&
+          addToast({
+            type: 'success',
+            title: 'Branch Manager Removed',
+            message:
+              res.message ||
+              `${b.manager?.name || 'Branch Manager'} was removed from ${b.name}. You can now assign a new manager.`
+          })
+      } else {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Remove Failed',
+            message: res?.error || 'Could not remove branch manager.'
+          })
+      }
+    } finally {
+      setManagerActionBusyId(null)
+    }
   }
 
   const handleAssignManager = async (e) => {
@@ -478,23 +605,108 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                       <MapPin className="w-3 h-3 text-[#218DFF]" />
                       <span>{b.location || 'Rwanda'}</span>
                     </div>
-                    {(b.manager?.email || b.manager?.status === 'Pending Setup') && (
-                      <div className="text-[11px] text-[#9EDCFF] mt-1 flex flex-wrap items-center gap-1.5">
-                        {b.manager?.status === 'Pending Setup' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/35 text-amber-200 text-[10px] font-bold">
-                            Pending Manager Setup
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/35 text-emerald-200 text-[10px] font-bold">
-                            Active Manager
-                          </span>
-                        )}
-                        <span className="truncate">
-                          <strong>{b.manager.name || 'Invited Manager'}</strong>
-                          {b.manager.email ? ` (${b.manager.email})` : ''}
-                        </span>
-                      </div>
-                    )}
+                    {(b.manager?.email || b.manager?.name || b.manager?.status === 'Pending Setup') && (() => {
+                      const isDeactivated =
+                        String(b.manager?.status || '').toLowerCase() === 'deactivated' ||
+                        String(b.manager?.accountStatus || '').toLowerCase() === 'suspended'
+                      const isPending = b.manager?.status === 'Pending Setup'
+                      const isBusy = managerActionBusyId === b.id
+                      return (
+                        <div className="mt-2 pt-2 border-t border-white/10 space-y-2">
+                          <div className="text-[11px] text-[#9EDCFF] flex flex-wrap items-center gap-1.5">
+                            {isDeactivated ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/40 text-rose-200 text-[10px] font-bold">
+                                Deactivated / Cut Off
+                              </span>
+                            ) : isPending ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/35 text-amber-200 text-[10px] font-bold">
+                                Pending Manager Setup
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/35 text-emerald-200 text-[10px] font-bold">
+                                Active Manager
+                              </span>
+                            )}
+                            <span className="truncate">
+                              <strong>{b.manager.name || 'Invited Manager'}</strong>
+                              {b.manager.email ? ` (${b.manager.email})` : ''}
+                            </span>
+                            {b.manager.phone && (
+                              <span className="text-[10px] text-slate-400 font-mono">{b.manager.phone}</span>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => openEditManager(b)}
+                              className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-[10px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <UserCog className="w-3 h-3 text-[#9EDCFF]" />
+                              <span>Edit Manager</span>
+                            </button>
+
+                            {!isPending && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => handleToggleManagerStatus(b)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                                  isDeactivated
+                                    ? 'bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/30'
+                                    : 'bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 border border-amber-400/30'
+                                }`}
+                              >
+                                {isDeactivated ? (
+                                  <>
+                                    <UserCheck className="w-3 h-3" />
+                                    <span>{isBusy ? 'Activating...' : 'Activate'}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserX className="w-3 h-3" />
+                                    <span>{isBusy ? 'Deactivating...' : 'Deactivate'}</span>
+                                  </>
+                                )}
+                              </button>
+                            )}
+
+                            {confirmRemoveMgrBranchId === b.id ? (
+                              <div className="flex items-center gap-1 bg-rose-500/15 border border-rose-400/40 rounded-lg px-2 py-0.5">
+                                <span className="text-[10px] text-rose-200 font-semibold">Remove permanently?</span>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => handleRemoveManager(b)}
+                                  className="px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                >
+                                  {isBusy ? '...' : 'Yes'}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() => setConfirmRemoveMgrBranchId(null)}
+                                  className="px-1.5 py-0.5 rounded bg-white/10 hover:bg-white/20 text-slate-200 text-[10px] cursor-pointer"
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => setConfirmRemoveMgrBranchId(b.id)}
+                                className="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-200 border border-rose-400/25 text-[10px] font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete Manager</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -763,6 +975,101 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
               </button>
             </form>
           )}
+        </div>
+      )}
+
+      {/* Edit Existing Branch Manager Panel */}
+      {editManagerBranch && (
+        <div className="rounded-2xl border border-[#218DFF]/40 bg-[#040D29]/95 p-5 space-y-4">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <UserCog className="w-4 h-4 text-[#9EDCFF]" />
+              <h4 className="font-orbitron text-xs sm:text-sm font-bold text-white">
+                Edit Branch Manager — {editManagerBranch.name}
+              </h4>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditManagerBranch(null)}
+              className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-slate-300 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Update the existing manager&apos;s profile details or reset their login password. Leave the new password blank to keep their current password unchanged.
+          </p>
+
+          <form onSubmit={handleSaveManagerEdit} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Manager Full Name *
+              </label>
+              <input
+                type="text"
+                required
+                value={editMgrName}
+                onChange={(e) => setEditMgrName(e.target.value)}
+                placeholder="e.g. Jean Paul Mugabo"
+                className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#218DFF]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Login Email *
+              </label>
+              <input
+                type="email"
+                required={editManagerBranch.manager?.status !== 'Pending Setup'}
+                value={editMgrEmail}
+                onChange={(e) => setEditMgrEmail(e.target.value)}
+                placeholder="manager@business.rw"
+                className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#218DFF]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Phone / WhatsApp
+              </label>
+              <input
+                type="tel"
+                value={editMgrPhone}
+                onChange={(e) => setEditMgrPhone(e.target.value)}
+                placeholder="+25078..."
+                className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#218DFF]"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                New Password (Optional, min 6 chars)
+              </label>
+              <input
+                type="password"
+                minLength={6}
+                value={editMgrPassword}
+                onChange={(e) => setEditMgrPassword(e.target.value)}
+                placeholder="Leave blank to keep existing password"
+                className="w-full px-3 py-2 rounded-xl bg-white/10 border border-white/15 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none focus:border-[#218DFF]"
+              />
+            </div>
+            <div className="sm:col-span-2 flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditManagerBranch(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-slate-300 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={savingManagerEdit || !editMgrName.trim()}
+                className="btn-sapphire-clean px-4 py-2 text-xs font-bold cursor-pointer disabled:opacity-50"
+              >
+                {savingManagerEdit ? 'Saving Changes...' : 'Save Manager Changes'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

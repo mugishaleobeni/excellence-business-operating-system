@@ -135,6 +135,75 @@ def _ensure_main_branch(db, scope_key: str, user_doc: dict | None):
     return _normalize_branch_doc(existing)
 
 
+def _safe_update_many(collection, filt: dict, update_doc: dict):
+    """Update matching docs on MongoDB or _InMemoryCollection fallback."""
+    if hasattr(collection, "update_many"):
+        return collection.update_many(filt, update_doc)
+    for doc in list(collection.find(filt)):
+        if "_id" in doc:
+            collection.update_one({"_id": doc["_id"]}, update_doc)
+        else:
+            collection.update_one(filt, update_doc)
+
+
+def _safe_delete_many(collection, filt: dict):
+    """Delete matching docs on MongoDB or _InMemoryCollection fallback."""
+    if hasattr(collection, "delete_many"):
+        return collection.delete_many(filt)
+    for doc in list(collection.find(filt)):
+        if "_id" in doc:
+            collection.delete_one({"_id": doc["_id"]})
+        else:
+            collection.delete_one(filt)
+
+
+def _find_branch_manager_user(db, scope_key: str, branch_id: str, branch_doc: dict | None = None):
+    """Locate the db.users record for a branch's assigned Branch Manager (never returning the owner)."""
+    scope_lower = str(scope_key or "").strip().lower()
+    user_doc = db.users.find_one(
+        {
+            "ownerScopeKey": scope_lower,
+            "assignedBranchId": branch_id,
+            "email": {"$ne": scope_lower},
+        }
+    )
+    if user_doc:
+        return user_doc
+    mgr_meta = (branch_doc or {}).get("manager")
+    if isinstance(mgr_meta, dict):
+        mgr_email = str(mgr_meta.get("email") or "").strip().lower()
+        if mgr_email and mgr_email != scope_lower:
+            return db.users.find_one({"email": mgr_email, "ownerScopeKey": scope_lower})
+    return None
+
+
+def _sync_branch_manager_status(db, scope_key: str, branch_doc: dict) -> dict:
+    """Enrich a normalized branch dict with the manager's live accountStatus from db.users."""
+    mgr = branch_doc.get("manager")
+    if not isinstance(mgr, dict):
+        return branch_doc
+    mgr_user = _find_branch_manager_user(db, scope_key, branch_doc.get("id", ""), branch_doc)
+    enriched = dict(mgr)
+    if mgr_user:
+        acct_status = str(mgr_user.get("accountStatus") or "Active").strip()
+        enriched["accountStatus"] = acct_status
+        enriched["hasAccount"] = True
+        if acct_status.lower() == "suspended":
+            enriched["status"] = "Deactivated"
+        elif enriched.get("status") != "Pending Setup":
+            enriched["status"] = "Active"
+        if mgr_user.get("name") and not enriched.get("name"):
+            enriched["name"] = mgr_user["name"]
+        if mgr_user.get("email") and not enriched.get("email"):
+            enriched["email"] = mgr_user["email"]
+        if mgr_user.get("phone") and not enriched.get("phone"):
+            enriched["phone"] = mgr_user["phone"]
+    else:
+        enriched["hasAccount"] = False
+    branch_doc["manager"] = enriched
+    return branch_doc
+
+
 @branches_bp.route("", methods=["GET"])
 @branches_bp.route("/", methods=["GET"])
 def list_branches():
@@ -144,7 +213,7 @@ def list_branches():
     _ensure_main_branch(db, scope_key, user_doc)
 
     raw_items = list(db.branches.find({"scopeKey": scope_key}, {"_id": 0}).sort("createdAt", 1))
-    items = [_normalize_branch_doc(b) for b in raw_items]
+    items = [_sync_branch_manager_status(db, scope_key, _normalize_branch_doc(b)) for b in raw_items]
     # Always keep Main HQ first
     items.sort(key=lambda b: (0 if b.get("isMain") or b.get("id") == "main" else 1, b.get("createdAt", "")))
 
@@ -415,7 +484,7 @@ def assign_branch_manager(branch_id: str):
             logger.debug("Optional WhatsApp invite skipped: %s", exc)
 
     result_payload = {
-        "branch": _normalize_branch_doc(updated_branch) if updated_branch else None,
+        "branch": _sync_branch_manager_status(db, scope_key, _normalize_branch_doc(updated_branch)) if updated_branch else None,
         "manager": manager_meta,
         "loginLink": login_link,
         "emailSent": email_sent,
@@ -426,6 +495,285 @@ def assign_branch_manager(branch_id: str):
         extra=result_payload,
         message=f"Branch Manager '{manager_name}' assigned to '{branch_name}'.",
         status_code=200,
+    )
+
+
+@branches_bp.route("/<branch_id>/manager", methods=["PUT"])
+def update_branch_manager(branch_id: str):
+    """
+    Business Owner only: Edit an existing Branch Manager's name, email, phone,
+    and optional new password. Updates both db.users and db.branches.manager.
+    """
+    db = get_db()
+    scope_key, owner_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(owner_doc):
+        return error_response("Only the Business Owner can edit branch managers.", status_code=403)
+    _ensure_main_branch(db, scope_key, owner_doc)
+
+    branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    if not branch_doc:
+        return error_response("Branch not found.", status_code=404)
+
+    existing_meta = branch_doc.get("manager") if isinstance(branch_doc.get("manager"), dict) else None
+    mgr_user = _find_branch_manager_user(db, scope_key, branch_id, branch_doc)
+    if not existing_meta and not mgr_user:
+        return error_response("No branch manager is currently assigned to this branch.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    new_name = str(payload.get("name") if "name" in payload else (existing_meta or {}).get("name") or (mgr_user or {}).get("name") or "").strip()
+    new_email = str(payload.get("email") if "email" in payload else (existing_meta or {}).get("email") or (mgr_user or {}).get("email") or "").strip().lower()
+    new_phone = str(payload.get("phone") if "phone" in payload else (existing_meta or {}).get("phone") or (mgr_user or {}).get("phone") or "").strip()
+    new_password = str(payload.get("password") or "")
+
+    if not new_name:
+        return error_response("Manager full name cannot be empty.", status_code=400)
+    if mgr_user and (not new_email or "@" not in new_email):
+        return error_response("A valid manager email address is required.", status_code=400)
+    if new_email and new_email == scope_key:
+        return error_response("Branch manager email cannot be the same as the Business Owner email.", status_code=400)
+    if new_password and len(new_password) < 6:
+        return error_response("New password must be at least 6 characters.", status_code=400)
+
+    # Check email uniqueness if email is changing
+    if new_email:
+        current_email = str((mgr_user or {}).get("email") or (existing_meta or {}).get("email") or "").strip().lower()
+        if new_email != current_email:
+            collision = db.users.find_one({"email": new_email})
+            if collision and (not mgr_user or collision.get("_id") != mgr_user.get("_id")):
+                return error_response("This email address is already used by another ExBOS account.", status_code=409)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if mgr_user:
+        user_updates = {
+            "name": new_name,
+            "email": new_email,
+            "phone": new_phone,
+            "assignedBranchName": branch_doc.get("name", ""),
+            "updated_at": now_iso,
+        }
+        if new_password:
+            user_updates["password_hash"] = hash_password(new_password)
+        db.users.update_one({"_id": mgr_user["_id"]}, {"$set": user_updates})
+
+    updated_meta = dict(existing_meta or {})
+    updated_meta.update(
+        {
+            "name": new_name,
+            "email": new_email,
+            "phone": new_phone,
+            "updatedAt": now_iso,
+        }
+    )
+    if "status" not in updated_meta:
+        updated_meta["status"] = (
+            "Deactivated"
+            if mgr_user and str(mgr_user.get("accountStatus") or "Active").lower() == "suspended"
+            else "Active"
+        )
+
+    db.branches.update_one(
+        {"scopeKey": scope_key, "id": branch_id},
+        {"$set": {"manager": updated_meta, "updatedAt": now_iso}},
+    )
+
+    if updated_meta.get("status") == "Pending Setup":
+        _safe_update_many(
+            db.branch_invites,
+            {"scopeKey": scope_key, "branchId": branch_id, "status": "pending"},
+            {"$set": {"suggestedName": new_name, "suggestedEmail": new_email, "suggestedPhone": new_phone, "updatedAt": now_iso}},
+        )
+
+    db.branch_audit_logs.insert_one(
+        {
+            "scopeKey": scope_key,
+            "branchId": branch_id,
+            "branchName": branch_doc.get("name", ""),
+            "action": "manager_updated",
+            "actorEmail": str((owner_doc or {}).get("email") or scope_key),
+            "targetEmail": new_email,
+            "targetName": new_name,
+            "passwordChanged": bool(new_password),
+            "timestamp": now_iso,
+        }
+    )
+
+    updated_branch = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    clean_branch = _sync_branch_manager_status(db, scope_key, _normalize_branch_doc(updated_branch)) if updated_branch else None
+    result_payload = {"branch": clean_branch, "manager": (clean_branch or {}).get("manager") or updated_meta}
+    return success_response(
+        data=result_payload,
+        extra=result_payload,
+        message=f"Branch Manager '{new_name}' updated.",
+    )
+
+
+@branches_bp.route("/<branch_id>/manager/status", methods=["PUT"])
+def set_branch_manager_status(branch_id: str):
+    """
+    Business Owner only: Deactivate (cut off / suspend) or Activate (restore) an existing Branch Manager.
+    Immediately blocks or restores both Web JWT sessions and WhatsApp POS access.
+    """
+    db = get_db()
+    scope_key, owner_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(owner_doc):
+        return error_response("Only the Business Owner can deactivate or activate branch managers.", status_code=403)
+    _ensure_main_branch(db, scope_key, owner_doc)
+
+    branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    if not branch_doc:
+        return error_response("Branch not found.", status_code=404)
+
+    payload = request.get_json(silent=True) or {}
+    raw_status = str(payload.get("status") or "").strip().lower()
+    if raw_status not in ("active", "deactivated", "suspended"):
+        return error_response("Status must be 'Active' or 'Deactivated'.", status_code=400)
+
+    is_activating = raw_status == "active"
+    reason = str(payload.get("reason") or "Access deactivated by Business Owner.").strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    existing_meta = branch_doc.get("manager") if isinstance(branch_doc.get("manager"), dict) else None
+    mgr_user = _find_branch_manager_user(db, scope_key, branch_id, branch_doc)
+    if not mgr_user and not existing_meta:
+        return error_response("No branch manager is currently assigned to this branch.", status_code=404)
+
+    if mgr_user:
+        if is_activating:
+            db.users.update_one(
+                {"_id": mgr_user["_id"]},
+                {"$set": {"accountStatus": "Active", "updated_at": now_iso}, "$unset": {"suspensionReason": ""}},
+            )
+        else:
+            db.users.update_one(
+                {"_id": mgr_user["_id"]},
+                {"$set": {"accountStatus": "Suspended", "suspensionReason": reason, "updated_at": now_iso}},
+            )
+            # Clear active WhatsApp POS session immediately when cutting off a manager
+            mgr_phone = str(mgr_user.get("phone") or (existing_meta or {}).get("phone") or "").strip()
+            if mgr_phone:
+                digits = "".join(ch for ch in mgr_phone if ch.isdigit())
+                _safe_delete_many(db.whatsapp_sessions, {"phone": {"$in": [mgr_phone, digits, f"+{digits}"]}})
+
+    if not is_activating:
+        _safe_update_many(
+            db.branch_invites,
+            {"scopeKey": scope_key, "branchId": branch_id, "status": "pending"},
+            {"$set": {"status": "revoked", "updatedAt": now_iso}},
+        )
+
+    new_manager_status = "Active" if is_activating else "Deactivated"
+    updated_meta = dict(existing_meta or {})
+    if mgr_user:
+        updated_meta.setdefault("name", mgr_user.get("name") or "Branch Manager")
+        updated_meta.setdefault("email", mgr_user.get("email") or "")
+        updated_meta.setdefault("phone", mgr_user.get("phone") or "")
+    updated_meta["status"] = new_manager_status
+    updated_meta["updatedAt"] = now_iso
+    if not is_activating:
+        updated_meta["deactivatedAt"] = now_iso
+        updated_meta["deactivationReason"] = reason
+    else:
+        updated_meta.pop("deactivatedAt", None)
+        updated_meta.pop("deactivationReason", None)
+
+    db.branches.update_one(
+        {"scopeKey": scope_key, "id": branch_id},
+        {"$set": {"manager": updated_meta, "updatedAt": now_iso}},
+    )
+
+    db.branch_audit_logs.insert_one(
+        {
+            "scopeKey": scope_key,
+            "branchId": branch_id,
+            "branchName": branch_doc.get("name", ""),
+            "action": "manager_activated" if is_activating else "manager_deactivated",
+            "actorEmail": str((owner_doc or {}).get("email") or scope_key),
+            "targetEmail": updated_meta.get("email", ""),
+            "targetName": updated_meta.get("name", ""),
+            "reason": "" if is_activating else reason,
+            "timestamp": now_iso,
+        }
+    )
+
+    updated_branch = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    clean_branch = _sync_branch_manager_status(db, scope_key, _normalize_branch_doc(updated_branch)) if updated_branch else None
+    result_payload = {
+        "branch": clean_branch,
+        "manager": (clean_branch or {}).get("manager") or updated_meta,
+        "status": new_manager_status,
+    }
+    action_label = "activated and access restored" if is_activating else "deactivated and access cut off"
+    return success_response(
+        data=result_payload,
+        extra=result_payload,
+        message=f"Branch Manager '{updated_meta.get('name', 'Manager')}' has been {action_label}.",
+    )
+
+
+@branches_bp.route("/<branch_id>/manager", methods=["DELETE"])
+def delete_branch_manager(branch_id: str):
+    """
+    Business Owner only: Permanently remove/revoke a Branch Manager from the branch
+    (e.g., manager left or was dismissed). Deletes their manager login account,
+    revokes pending invites, clears branch.manager, and preserves historical branch sales/records.
+    """
+    db = get_db()
+    scope_key, owner_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(owner_doc):
+        return error_response("Only the Business Owner can remove branch managers.", status_code=403)
+    _ensure_main_branch(db, scope_key, owner_doc)
+
+    branch_doc = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    if not branch_doc:
+        return error_response("Branch not found.", status_code=404)
+
+    existing_meta = branch_doc.get("manager") if isinstance(branch_doc.get("manager"), dict) else None
+    mgr_user = _find_branch_manager_user(db, scope_key, branch_id, branch_doc)
+    if not existing_meta and not mgr_user:
+        return error_response("No branch manager is currently assigned to this branch.", status_code=404)
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    removed_name = (existing_meta or {}).get("name") or (mgr_user or {}).get("name") or "Branch Manager"
+    removed_email = (existing_meta or {}).get("email") or (mgr_user or {}).get("email") or ""
+
+    # Never delete the Business Owner's own account
+    if mgr_user and str(mgr_user.get("email") or "").strip().lower() != scope_key:
+        mgr_phone = str(mgr_user.get("phone") or (existing_meta or {}).get("phone") or "").strip()
+        if mgr_phone:
+            digits = "".join(ch for ch in mgr_phone if ch.isdigit())
+            _safe_delete_many(db.whatsapp_sessions, {"phone": {"$in": [mgr_phone, digits, f"+{digits}"]}})
+        db.users.delete_one({"_id": mgr_user["_id"]})
+
+    _safe_update_many(
+        db.branch_invites,
+        {"scopeKey": scope_key, "branchId": branch_id, "status": "pending"},
+        {"$set": {"status": "revoked", "updatedAt": now_iso}},
+    )
+    db.branches.update_one(
+        {"scopeKey": scope_key, "id": branch_id},
+        {"$set": {"manager": None, "updatedAt": now_iso}},
+    )
+
+    db.branch_audit_logs.insert_one(
+        {
+            "scopeKey": scope_key,
+            "branchId": branch_id,
+            "branchName": branch_doc.get("name", ""),
+            "action": "manager_removed",
+            "actorEmail": str((owner_doc or {}).get("email") or scope_key),
+            "targetEmail": removed_email,
+            "targetName": removed_name,
+            "timestamp": now_iso,
+        }
+    )
+
+    updated_branch = db.branches.find_one({"scopeKey": scope_key, "id": branch_id}, {"_id": 0})
+    clean_branch = _normalize_branch_doc(updated_branch) if updated_branch else None
+    result_payload = {"branch": clean_branch, "removed": True}
+    return success_response(
+        data=result_payload,
+        extra=result_payload,
+        message=f"Branch Manager '{removed_name}' was permanently removed from '{branch_doc.get('name', 'Branch')}'.",
     )
 
 

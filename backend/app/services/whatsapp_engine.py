@@ -1028,6 +1028,20 @@ def handle_incoming_whatsapp_message(
     assigned_branch_id = str(user_doc.get("assignedBranchId") or "").strip()
     is_branch_manager = role_str == "branch manager" or (bool(assigned_branch_id) and assigned_branch_id != "main")
 
+    # Immediately block deactivated / suspended users (including cut-off Branch Managers) from WhatsApp POS
+    acct_status = str(user_doc.get("accountStatus") or "Active").strip().lower()
+    if not is_sa and acct_status in ("suspended", "deactivated", "deleted"):
+        db.whatsapp_sessions.delete_one({"phone": normalized_phone})
+        if lang == "rw":
+            return (
+                "Konti yawe ya ExBOS yahagaritswe n'umuyobozi w'ubucuruzi. "
+                "Ntushobora gukoresha WhatsApp POS. Vugana na nyiri ubucuruzi kugira ngo yongere gufungurwa."
+            )
+        return (
+            "Your ExBOS access has been deactivated by the Business Owner. "
+            "WhatsApp POS operations are disabled for this account. Please contact your Business Owner."
+        )
+
     # Live Subscription Entitlement Check for WhatsApp Business POS Chat
     # (Super Admins always bypass; Branch Managers inherit their Business Owner's active subscription)
     if not is_sa:

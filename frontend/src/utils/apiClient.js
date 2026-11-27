@@ -304,6 +304,20 @@ export const exbosApi = {
     apiRequest(withScope(`/branches/${branchId}`), { method: 'DELETE' }),
   assignBranchManager: (branchId, payload = {}) =>
     apiRequest(withScope(`/branches/${branchId}/assign-manager`), { method: 'POST', body: payload }),
+  updateBranchManager: (branchId, payload = {}) =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/manager`), {
+      method: 'PUT',
+      body: payload
+    }),
+  setBranchManagerStatus: (branchId, status, reason = '') =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/manager/status`), {
+      method: 'PUT',
+      body: { status, reason }
+    }),
+  deleteBranchManager: (branchId) =>
+    apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/manager`), {
+      method: 'DELETE'
+    }),
   createBranchManagerInvite: (branchId, payload = {}) =>
     apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/manager-invite`), {
       method: 'POST',

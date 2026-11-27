@@ -626,6 +626,66 @@ export function ExbosProvider({ children }) {
     }
   }
 
+  const updateBranchManager = async (branchId, payload) => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
+    try {
+      const res = await exbosApi.updateBranchManager(branchId, payload)
+      const resultData = res?.data?.data || res?.data
+      if (res?.ok && resultData) {
+        if (resultData.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...resultData.branch } : b)))
+        }
+        return { ok: true, ...resultData, message: res?.data?.message }
+      }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to update branch manager.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to update branch manager.' }
+    }
+  }
+
+  const setBranchManagerStatus = async (branchId, status, reason = '') => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
+    try {
+      const res = await exbosApi.setBranchManagerStatus(branchId, status, reason)
+      const resultData = res?.data?.data || res?.data
+      if (res?.ok && resultData) {
+        if (resultData.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...b, ...resultData.branch } : b)))
+        }
+        return { ok: true, ...resultData, message: res?.data?.message }
+      }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to update branch manager status.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to update branch manager status.' }
+    }
+  }
+
+  const deleteBranchManager = async (branchId) => {
+    if (!branchId) return { ok: false, error: 'Branch ID is required.' }
+    try {
+      const res = await exbosApi.deleteBranchManager(branchId)
+      const resultData = res?.data?.data || res?.data
+      if (res?.ok) {
+        if (resultData?.branch) {
+          setBranches((prev) => prev.map((b) => (b.id === branchId ? { ...resultData.branch } : b)))
+        } else {
+          setBranches((prev) =>
+            prev.map((b) => {
+              if (b.id !== branchId) return b
+              const copy = { ...b }
+              delete copy.manager
+              return copy
+            })
+          )
+        }
+        return { ok: true, ...(resultData || {}), message: res?.data?.message }
+      }
+      return { ok: false, error: res?.error || res?.data?.error || 'Failed to remove branch manager.' }
+    } catch (err) {
+      return { ok: false, error: err?.message || 'Failed to remove branch manager.' }
+    }
+  }
+
   const deleteBranch = async (branchId) => {
     if (!branchId || branchId === 'main') return { ok: false, error: 'Main HQ cannot be deleted.' }
     try {
@@ -2978,6 +3038,9 @@ export function ExbosProvider({ children }) {
         createBranch,
         updateBranch,
         assignBranchManager,
+        updateBranchManager,
+        setBranchManagerStatus,
+        deleteBranchManager,
         createBranchManagerInvite,
         ownerNotifications,
         refreshOwnerNotifications,

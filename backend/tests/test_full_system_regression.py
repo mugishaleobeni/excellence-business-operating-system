@@ -1129,6 +1129,116 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             self.assertIn("iPhone Charger 20W", msg_body)
             self.assertIn("Remera Branch", msg_body)
 
+    # ------------------------------------------------------------------
+    # 13. BRANCH MANAGER LIFECYCLE: EDIT, DEACTIVATE, ACTIVATE & DELETE
+    # ------------------------------------------------------------------
+    def test_13_branch_manager_edit_deactivate_activate_and_delete(self):
+        owner_email = "owner-mgrlife@exbos.rw"
+        mgr_email = "mgr-kigali@exbos.rw"
+        self.db.users.insert_one(
+            {
+                "email": owner_email,
+                "name": "Lifecycle Owner",
+                "businessName": "Lifecycle Traders",
+                "phone": "+250788000111",
+                "plan": "Silver",
+                "accountStatus": "Active",
+            }
+        )
+        owner_h = self._auth_header(owner_email)
+
+        # 1. Create a branch and assign a Branch Manager
+        r_br = self.client.post(
+            "/api/v1/branches",
+            json={"name": "Nyamirambo Branch", "location": "Kigali"},
+            headers=owner_h,
+        )
+        self.assertEqual(r_br.status_code, 201, r_br.get_data(as_text=True))
+        branch_id = r_br.get_json()["data"]["branch"]["id"]
+
+        with patch("app.routes.branches.send_gmail_email", return_value=True):
+            r_assign = self.client.post(
+                f"/api/v1/branches/{branch_id}/assign-manager",
+                json={
+                    "name": "Eric Manager",
+                    "email": mgr_email,
+                    "phone": "+250788222333",
+                    "password": "OldPassword123",
+                },
+                headers=owner_h,
+            )
+        self.assertEqual(r_assign.status_code, 200, r_assign.get_data(as_text=True))
+        mgr_h = self._auth_header(mgr_email)
+
+        # Branch Manager cannot edit, deactivate, or delete themselves (403)
+        self.assertEqual(
+            self.client.put(f"/api/v1/branches/{branch_id}/manager", json={"name": "Hacked"}, headers=mgr_h).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.put(f"/api/v1/branches/{branch_id}/manager/status", json={"status": "Deactivated"}, headers=mgr_h).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.delete(f"/api/v1/branches/{branch_id}/manager", headers=mgr_h).status_code,
+            403,
+        )
+
+        # 2. Owner edits existing Branch Manager (name, phone, new password)
+        r_edit = self.client.put(
+            f"/api/v1/branches/{branch_id}/manager",
+            json={
+                "name": "Eric Updated",
+                "email": mgr_email,
+                "phone": "+250788999888",
+                "password": "NewPassword456",
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_edit.status_code, 200, r_edit.get_data(as_text=True))
+        mgr_user = self.db.users.find_one({"email": mgr_email})
+        self.assertEqual(mgr_user["name"], "Eric Updated")
+        self.assertEqual(mgr_user["phone"], "+250788999888")
+
+        # 3. Owner deactivates (cuts off) Branch Manager -> JWT immediately blocked (403) & list shows Deactivated
+        r_deact = self.client.put(
+            f"/api/v1/branches/{branch_id}/manager/status",
+            json={"status": "Deactivated", "reason": "Left the company"},
+            headers=owner_h,
+        )
+        self.assertEqual(r_deact.status_code, 200, r_deact.get_data(as_text=True))
+        self.assertEqual(r_deact.get_json()["data"]["status"], "Deactivated")
+
+        # Active manager JWT is now blocked with 403 ACCOUNT_SUSPENDED
+        r_blocked = self.client.get("/api/v1/branches", headers=mgr_h)
+        self.assertEqual(r_blocked.status_code, 403)
+
+        # Owner's branch list shows live Deactivated status
+        r_list = self.client.get("/api/v1/branches", headers=owner_h)
+        self.assertEqual(r_list.status_code, 200)
+        br_item = next(b for b in r_list.get_json()["data"]["branches"] if b["id"] == branch_id)
+        self.assertEqual(br_item["manager"]["status"], "Deactivated")
+
+        # 4. Owner re-activates Branch Manager -> JWT works again (200)
+        r_act = self.client.put(
+            f"/api/v1/branches/{branch_id}/manager/status",
+            json={"status": "Active"},
+            headers=owner_h,
+        )
+        self.assertEqual(r_act.status_code, 200, r_act.get_data(as_text=True))
+        self.assertEqual(r_act.get_json()["data"]["status"], "Active")
+        r_restored = self.client.get("/api/v1/branches", headers=mgr_h)
+        self.assertEqual(r_restored.status_code, 200)
+
+        # 5. Owner permanently deletes Branch Manager -> user deleted, branch.manager cleared, JWT blocked (403)
+        r_del = self.client.delete(f"/api/v1/branches/{branch_id}/manager", headers=owner_h)
+        self.assertEqual(r_del.status_code, 200, r_del.get_data(as_text=True))
+        self.assertIsNone(self.db.users.find_one({"email": mgr_email}))
+        self.assertIsNotNone(self.db.users.find_one({"email": owner_email}))
+        br_after = self.db.branches.find_one({"scopeKey": owner_email, "id": branch_id})
+        self.assertIsNone(br_after.get("manager"))
+        self.assertEqual(self.client.get("/api/v1/branches", headers=mgr_h).status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()
