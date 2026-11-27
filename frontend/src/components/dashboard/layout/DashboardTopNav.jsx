@@ -64,12 +64,19 @@ export default function DashboardTopNav({
     dbConnected,
     syncStatus,
     offlineQueueCount,
+    pendingOfflineActions = [],
+    failedOfflineActions = [],
+    lastSyncedAt,
+    retryFailedOfflineAction,
+    dismissFailedOfflineAction,
     checkConnectionHealth
   } = useExbos()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isSyncOpen, setIsSyncOpen] = useState(false)
   const searchContainerRef = useRef(null)
+  const syncContainerRef = useRef(null)
 
-  // Auto-close live search dropdown when clicking outside
+  // Auto-close live search & sync dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
@@ -77,6 +84,12 @@ export default function DashboardTopNav({
         !searchContainerRef.current.contains(e.target)
       ) {
         setIsSearchOpen(false)
+      }
+      if (
+        syncContainerRef.current &&
+        !syncContainerRef.current.contains(e.target)
+      ) {
+        setIsSyncOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -295,56 +308,209 @@ export default function DashboardTopNav({
 
         {/* Right: Sync Detector + Craft Badge + Notifications + Sign Out */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 ml-auto">
-          {/* Online / Offline & Database Sync Detector */}
-          <button
-            type="button"
-            onClick={() => checkConnectionHealth && checkConnectionHealth()}
-            title={
-              !isOnline
-                ? 'Device is offline. Changes are saved locally and will auto-sync when online.'
-                : !dbConnected
-                ? 'Database unreachable. Changes are queued locally and will auto-sync once MongoDB reconnects.'
-                : syncStatus === 'syncing'
-                ? 'Synchronizing local changes to MongoDB...'
-                : offlineQueueCount > 0
-                ? `${offlineQueueCount} pending local changes. Click to sync now.`
-                : 'Online and synchronized with MongoDB'
-            }
-            className={`${
-              !isOnline || !dbConnected || syncStatus === 'syncing' || offlineQueueCount > 0
-                ? 'inline-flex'
-                : 'hidden sm:inline-flex'
-            } items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl text-[10px] font-semibold border transition-all cursor-pointer ${
-              !isOnline
-                ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-                : !dbConnected || syncStatus === 'db_error'
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-                : syncStatus === 'syncing'
-                ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
-                : offlineQueueCount > 0
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
-                : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-            }`}
-          >
-            {!isOnline ? (
-              <WifiOff className="w-3 h-3 shrink-0" />
-            ) : syncStatus === 'syncing' ? (
-              <RefreshCw className="w-3 h-3 shrink-0 animate-spin" />
-            ) : (
-              <Wifi className="w-3 h-3 shrink-0" />
+          {/* Online / Offline & Database Sync Detector + Clickable Sync Status Popover */}
+          <div ref={syncContainerRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsSyncOpen((prev) => !prev)}
+              title={
+                !isOnline
+                  ? 'Device is offline. Click to inspect local queue.'
+                  : syncStatus === 'auth_required'
+                  ? 'Session expired while offline. Sign in to sync pending changes.'
+                  : !dbConnected
+                  ? 'Database unreachable. Changes are queued locally.'
+                  : syncStatus === 'syncing'
+                  ? 'Synchronizing local changes to MongoDB...'
+                  : failedOfflineActions.length > 0
+                  ? `${failedOfflineActions.length} offline change(s) need attention.`
+                  : offlineQueueCount > 0
+                  ? `${offlineQueueCount} pending local changes. Click to inspect or sync.`
+                  : 'Online and synchronized with MongoDB'
+              }
+              className={`${
+                !isOnline ||
+                !dbConnected ||
+                syncStatus === 'syncing' ||
+                syncStatus === 'auth_required' ||
+                offlineQueueCount > 0 ||
+                failedOfflineActions.length > 0
+                  ? 'inline-flex'
+                  : 'hidden sm:inline-flex'
+              } items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl text-[10px] font-semibold border transition-all cursor-pointer ${
+                !isOnline
+                  ? 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+                  : syncStatus === 'auth_required' || failedOfflineActions.length > 0
+                  ? 'bg-amber-500/20 border-amber-400/50 text-amber-200'
+                  : !dbConnected || syncStatus === 'db_error'
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                  : syncStatus === 'syncing'
+                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-300'
+                  : offlineQueueCount > 0
+                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
+                  : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              }`}
+            >
+              {!isOnline ? (
+                <WifiOff className="w-3 h-3 shrink-0" />
+              ) : syncStatus === 'syncing' ? (
+                <RefreshCw className="w-3 h-3 shrink-0 animate-spin" />
+              ) : (
+                <Wifi className="w-3 h-3 shrink-0" />
+              )}
+              <span>
+                {!isOnline
+                  ? `Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} local)` : ' · Local'}`
+                  : syncStatus === 'auth_required'
+                  ? `Sign In (${offlineQueueCount})`
+                  : !dbConnected || syncStatus === 'db_error'
+                  ? `DB Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} queued)` : ''}`
+                  : syncStatus === 'syncing'
+                  ? 'Syncing...'
+                  : failedOfflineActions.length > 0
+                  ? `Sync Alert (${failedOfflineActions.length})`
+                  : offlineQueueCount > 0
+                  ? `Pending (${offlineQueueCount})`
+                  : 'Online · Synced'}
+              </span>
+            </button>
+
+            {isSyncOpen && (
+              <div className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-2xl bg-[#051033]/98 border border-[#218DFF]/35 shadow-2xl backdrop-blur-xl p-3.5 z-[9999] space-y-3 text-left">
+                <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+                  <div>
+                    <p className="font-orbitron text-[11px] font-bold text-white uppercase tracking-wider">
+                      Sync &amp; Offline Queue
+                    </p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {!isOnline
+                        ? 'Working offline — auto-syncs on reconnect'
+                        : lastSyncedAt
+                        ? `Last synced ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        : 'Connected to ExBOS Cloud'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!isOnline || syncStatus === 'syncing'}
+                    onClick={() => checkConnectionHealth && checkConnectionHealth()}
+                    className="px-2.5 py-1 rounded-lg bg-[#218DFF] hover:bg-[#197be6] disabled:opacity-40 text-white text-[10px] font-bold inline-flex items-center gap-1 cursor-pointer transition"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                    <span>Sync Now</span>
+                  </button>
+                </div>
+
+                {syncStatus === 'auth_required' && (
+                  <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/40 space-y-2">
+                    <p className="text-[11px] text-amber-200 leading-snug">
+                      Your session expired while offline. Your {offlineQueueCount} queued change
+                      {offlineQueueCount === 1 ? ' is' : 's are'} safe — sign in again to finish syncing.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsSyncOpen(false)
+                        window.location.href = '/login'
+                      }}
+                      className="w-full py-1.5 rounded-lg bg-amber-400 text-slate-950 text-[11px] font-extrabold cursor-pointer"
+                    >
+                      Sign In to Sync
+                    </button>
+                  </div>
+                )}
+
+                {pendingOfflineActions.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9EDCFF]">
+                      Pending Upload ({pendingOfflineActions.length})
+                    </p>
+                    <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                      {pendingOfflineActions.slice(0, 10).map((item, idx) => {
+                        const label =
+                          item.type === 'add'
+                            ? `Add ${item.moduleName || 'Record'}`
+                            : item.type === 'update'
+                            ? `Edit ${item.moduleName || 'Record'}`
+                            : item.type === 'delete'
+                            ? `Delete ${item.moduleName || 'Record'}`
+                            : item.type === 'add_tx'
+                            ? 'Add Transaction'
+                            : item.type === 'delete_tx'
+                            ? 'Delete Transaction'
+                            : 'Workspace Update'
+                        const title =
+                          item.entry?.title ||
+                          item.entry?.name ||
+                          item.entry?.item ||
+                          item.payload?.title ||
+                          item.recordId ||
+                          ''
+                        return (
+                          <div
+                            key={item.queueId || idx}
+                            className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[11px]"
+                          >
+                            <span className="text-slate-200 truncate">
+                              <strong className="text-white">{label}</strong>
+                              {title ? ` · ${title}` : ''}
+                            </span>
+                            <span className="text-[9px] text-amber-300 shrink-0">Queued</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {failedOfflineActions.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                      Needs Attention ({failedOfflineActions.length})
+                    </p>
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                      {failedOfflineActions.map((item) => (
+                        <div
+                          key={item.queueId}
+                          className="p-2 rounded-xl bg-rose-500/10 border border-rose-400/30 space-y-1.5 text-[11px]"
+                        >
+                          <div className="text-white font-semibold truncate">
+                            {item.moduleName || item.type} —{' '}
+                            {item.entry?.title || item.entry?.name || item.recordId || 'Action'}
+                          </div>
+                          <p className="text-[10px] text-rose-200/90 leading-snug">
+                            {item.failureReason || 'Server rejected this offline change.'}
+                          </p>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => retryFailedOfflineAction && retryFailedOfflineAction(item.queueId)}
+                              className="px-2 py-1 rounded-md bg-[#218DFF] text-white text-[10px] font-bold cursor-pointer"
+                            >
+                              Retry
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => dismissFailedOfflineAction && dismissFailedOfflineAction(item.queueId)}
+                              className="px-2 py-1 rounded-md bg-white/10 text-slate-300 hover:text-white text-[10px] font-semibold cursor-pointer"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pendingOfflineActions.length === 0 && failedOfflineActions.length === 0 && syncStatus !== 'auth_required' && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/25 text-[11px] text-emerald-200">
+                    All local changes are synchronized with MongoDB.
+                  </div>
+                )}
+              </div>
             )}
-            <span>
-              {!isOnline
-                ? `Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} local)` : ' · Local'}`
-                : !dbConnected || syncStatus === 'db_error'
-                ? `DB Offline${offlineQueueCount > 0 ? ` (${offlineQueueCount} queued)` : ''}`
-                : syncStatus === 'syncing'
-                ? 'Syncing...'
-                : offlineQueueCount > 0
-                ? `Pending (${offlineQueueCount})`
-                : 'Online · Synced'}
-            </span>
-          </button>
+          </div>
           {/* Active Trade Badges */}
           {currentArch?.id === 'make-and-sell' && (
             <div className="hidden sm:block">

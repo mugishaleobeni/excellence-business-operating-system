@@ -11,6 +11,13 @@ import { AGRICULTURE_PRESETS } from '../components/dashboard/agriculture/data/ag
 import { FOOD_HOSPITALITY_PRESETS } from '../components/dashboard/food-hospitality/data/foodHospitalityPresets'
 import { HYBRID_PRESETS } from '../components/dashboard/hybrid/data/hybridPresets'
 import { exbosApi, getAuthHeaders, resolveApiBase, resolveStorageUrl, isTokenValid } from '../utils/apiClient'
+import {
+  idbGet,
+  idbSet,
+  generateQueueId,
+  readFailedOfflineActions,
+  writeFailedOfflineActions
+} from '../utils/offlineStorage'
 
 const ExbosContext = createContext(null)
 
@@ -936,16 +943,19 @@ export function ExbosProvider({ children }) {
   const writeScopedOfflineCache = (scope, wsData, txData) => {
     const key = getScopedCacheKey(scope)
     if (!key) return
+    const payload = {
+      workspaces: wsData,
+      transactions: txData,
+      cachedAt: new Date().toISOString()
+    }
+    // Primary large-capacity store: IndexedDB (hundreds of MB, non-blocking)
+    idbSet(key, payload).catch(() => {})
+    // Fast synchronous boot mirror: localStorage (gracefully handles 5MB quota)
     try {
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          workspaces: wsData,
-          transactions: txData,
-          cachedAt: new Date().toISOString()
-        })
-      )
-    } catch {}
+      localStorage.setItem(key, JSON.stringify(payload))
+    } catch {
+      // IndexedDB already holds the full snapshot if localStorage exceeds 5MB quota
+    }
   }
 
   const mergeServerWorkspacesWithLocal = (serverWsMap, localWsMap) => {
@@ -1037,14 +1047,34 @@ export function ExbosProvider({ children }) {
         setTransactions(sanitizeUserTransactions(cachedSnapshot.transactions))
       }
     } else {
-      // Brand-new or switched user scope with no local cache: start clean
+      // Brand-new or switched user scope with no localStorage cache:
+      // attempt async IndexedDB hydration (handles >5MB accounts cleanly)
       isHydratedRef.current = false
       setWorkspaces(createCleanWorkspaces())
       setTransactions([])
       setSavedAnalyses([])
       setExportHistory([])
+      if (effectiveScope) {
+        idbGet(getScopedCacheKey(effectiveScope)).then((idbSnap) => {
+          if (!isMounted || !idbSnap) return
+          const stillNeedsOffline =
+            !isHydratedRef.current ||
+            getOfflineQueue(effectiveScope).length > 0 ||
+            (typeof navigator !== 'undefined' && !navigator.onLine)
+          if (stillNeedsOffline && idbSnap.workspaces) {
+            isHydratedRef.current = true
+            setWorkspaces(sanitizeUserWorkspaces(idbSnap.workspaces))
+            if (Array.isArray(idbSnap.transactions)) {
+              setTransactions(sanitizeUserTransactions(idbSnap.transactions))
+            }
+          }
+        })
+      }
     }
-    setOfflineQueueCount(getOfflineQueue(effectiveScope).length)
+    const scopedQ = getOfflineQueue(effectiveScope)
+    setOfflineQueueCount(scopedQ.length)
+    setPendingOfflineActions(scopedQ)
+    setFailedOfflineActions(readFailedOfflineActions(effectiveScope))
 
     const fetchAndSyncCloud = (isInitial = false) => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -1302,13 +1332,30 @@ export function ExbosProvider({ children }) {
     typeof navigator !== 'undefined' ? navigator.onLine : true
   )
   const [dbConnected, setDbConnected] = useState(true)
-  const [syncStatus, setSyncStatus] = useState('synced') // 'synced' | 'syncing' | 'offline' | 'pending' | 'db_error'
-  const [offlineQueueCount, setOfflineQueueCount] = useState(() => {
+  const [syncStatus, setSyncStatus] = useState('synced') // 'synced' | 'syncing' | 'offline' | 'pending' | 'auth_required' | 'db_error'
+  const [lastSyncedAt, setLastSyncedAt] = useState(null)
+  const [pendingOfflineActions, setPendingOfflineActions] = useState(() => {
     try {
-      const q = localStorage.getItem('exbos_offline_queue')
-      return q ? JSON.parse(q).length : 0
+      const savedUser = localStorage.getItem('exbos_user')
+      const parsedUser = savedUser ? JSON.parse(savedUser) : null
+      const initScope = String(parsedUser?.ownerScopeKey || parsedUser?.email || '').trim().toLowerCase()
+      const scopedKey = initScope ? `exbos_offline_queue_${initScope}` : 'exbos_offline_queue'
+      const raw = localStorage.getItem(scopedKey) || localStorage.getItem('exbos_offline_queue')
+      const parsed = raw ? JSON.parse(raw) : []
+      return Array.isArray(parsed) ? parsed : []
     } catch {
-      return 0
+      return []
+    }
+  })
+  const [offlineQueueCount, setOfflineQueueCount] = useState(() => pendingOfflineActions.length)
+  const [failedOfflineActions, setFailedOfflineActions] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('exbos_user')
+      const parsedUser = savedUser ? JSON.parse(savedUser) : null
+      const initScope = String(parsedUser?.ownerScopeKey || parsedUser?.email || '').trim().toLowerCase()
+      return readFailedOfflineActions(initScope)
+    } catch {
+      return []
     }
   })
 
@@ -1345,9 +1392,18 @@ export function ExbosProvider({ children }) {
 
   const saveOfflineQueue = (q, scopeOverride) => {
     const safeList = Array.isArray(q) ? q : []
+    const key = getOfflineQueueKey(scopeOverride)
+    idbSet(key, safeList).catch(() => {})
     try {
-      localStorage.setItem(getOfflineQueueKey(scopeOverride), JSON.stringify(safeList))
-    } catch {}
+      localStorage.setItem(key, JSON.stringify(safeList))
+    } catch {
+      addToast({
+        type: 'warning',
+        title: 'Local Storage Nearly Full',
+        message: 'Your offline queue was backed up to IndexedDB. Please connect to sync soon.'
+      })
+    }
+    setPendingOfflineActions(safeList)
     setOfflineQueueCount(safeList.length)
   }
 
@@ -1356,11 +1412,34 @@ export function ExbosProvider({ children }) {
     const queue = getOfflineQueue(scope)
     queue.push({
       ...action,
+      queueId: action.queueId || generateQueueId(),
       scopeKey: scope,
-      queuedAt: Date.now()
+      queuedAt: action.queuedAt || Date.now()
     })
     saveOfflineQueue(queue, scope)
     setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'pending')
+  }
+
+  const retryFailedOfflineAction = (queueId) => {
+    const scope = activeScopeRef.current
+    const currentFailed = readFailedOfflineActions(scope)
+    const target = currentFailed.find((item) => item.queueId === queueId)
+    if (!target) return
+    const nextFailed = currentFailed.filter((item) => item.queueId !== queueId)
+    writeFailedOfflineActions(scope, nextFailed)
+    setFailedOfflineActions(nextFailed)
+    const { failedAt, failureReason, failureStatus, ...cleanAction } = target
+    enqueueOfflineAction({ ...cleanAction, queueId: generateQueueId() })
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      setTimeout(() => flushOfflineQueue(scope), 150)
+    }
+  }
+
+  const dismissFailedOfflineAction = (queueId) => {
+    const scope = activeScopeRef.current
+    const nextFailed = readFailedOfflineActions(scope).filter((item) => item.queueId !== queueId)
+    writeFailedOfflineActions(scope, nextFailed)
+    setFailedOfflineActions(nextFailed)
   }
 
   const flushOfflineQueue = async (scopeOverride) => {
@@ -1368,23 +1447,29 @@ export function ExbosProvider({ children }) {
     // heartbeat timer, and manual sync click overlap.
     if (isFlushingRef.current) return
     const scope = String(scopeOverride ?? activeScopeRef.current ?? '').trim().toLowerCase()
-    const queue = getOfflineQueue(scope)
-    if (!queue || queue.length === 0) {
+    const rawQueue = getOfflineQueue(scope)
+    if (!rawQueue || rawQueue.length === 0) {
       setSyncStatus((prev) => (prev === 'offline' || prev === 'db_error' ? prev : 'synced'))
       return
     }
 
+    // Ensure every legacy queued item has a stable queueId for safe merge reconciliation
+    const queue = rawQueue.map((item, idx) =>
+      item.queueId ? item : { ...item, queueId: `legacy_${idx}_${item.queuedAt || Date.now()}` }
+    )
+
     isFlushingRef.current = true
     setSyncStatus('syncing')
-    const remaining = []
+    const processedQueueIds = new Set()
     const failedRecordIds = new Set()
+    const newlyFailed = []
     let processedCount = 0
+    let authRequired = false
 
     try {
       for (const item of queue) {
         // Safety guard: never replay another user's queued mutation into the active account
         if (item.scopeKey && scope && item.scopeKey !== scope) {
-          remaining.push(item)
           continue
         }
 
@@ -1392,7 +1477,6 @@ export function ExbosProvider({ children }) {
         // Preserve strict FIFO dependency order per record: if an earlier action on this record failed,
         // hold subsequent updates/deletes for the same record in the queue.
         if (itemRecordId && failedRecordIds.has(itemRecordId)) {
-          remaining.push(item)
           continue
         }
 
@@ -1418,32 +1502,72 @@ export function ExbosProvider({ children }) {
 
           if (res?.ok || isIdempotentDelete) {
             processedCount++
+            processedQueueIds.add(item.queueId)
+          } else if (res?.status === 401) {
+            // Critical data-safety guard: JWT expired while offline.
+            // Stop flushing immediately and KEEP all remaining items safely in the queue!
+            authRequired = true
+            break
           } else if (
             res?.status === 0 ||
             res?.status >= 500 ||
             (typeof navigator !== 'undefined' && !navigator.onLine)
           ) {
             if (itemRecordId) failedRecordIds.add(itemRecordId)
-            remaining.push(item)
+          } else {
+            // 400 / 402 / 403 / 422 — never silently drop; move to Failed Sync list with reason
+            processedQueueIds.add(item.queueId)
+            newlyFailed.push({
+              ...item,
+              failedAt: Date.now(),
+              failureStatus: res?.status || 400,
+              failureReason:
+                res?.data?.error ||
+                res?.data?.message ||
+                res?.error ||
+                `Rejected by server (HTTP ${res?.status || 400})`
+            })
           }
         } catch {
           if (itemRecordId) failedRecordIds.add(itemRecordId)
-          remaining.push(item)
         }
       }
     } finally {
       isFlushingRef.current = false
     }
 
-    // Re-read any new offline actions enqueued while flushing so we never drop them
-    const latestQueue = getOfflineQueue(scope)
-    const newlyAdded = latestQueue.slice(queue.length)
-    const finalQueue = [...remaining, ...newlyAdded]
+    if (newlyFailed.length > 0) {
+      const mergedFailed = [...readFailedOfflineActions(scope), ...newlyFailed]
+      writeFailedOfflineActions(scope, mergedFailed)
+      setFailedOfflineActions(mergedFailed)
+      addToast({
+        type: 'warning',
+        title: 'Some Offline Changes Need Attention',
+        message: `${newlyFailed.length} change${newlyFailed.length === 1 ? '' : 's'} could not sync automatically. Open Sync Status to review or retry.`
+      })
+    }
+
+    // Re-read latest queue and remove ONLY items confirmed processed or moved to failed list
+    const latestQueue = getOfflineQueue(scope).map((item, idx) =>
+      item.queueId ? item : { ...item, queueId: `legacy_${idx}_${item.queuedAt || Date.now()}` }
+    )
+    const finalQueue = latestQueue.filter((item) => !processedQueueIds.has(item.queueId))
     saveOfflineQueue(finalQueue, scope)
+
+    if (authRequired) {
+      setSyncStatus('auth_required')
+      addToast({
+        type: 'warning',
+        title: 'Sign In Required to Finish Sync',
+        message: `Your session expired while offline. ${finalQueue.length} local change${finalQueue.length === 1 ? ' is' : 's are'} safely saved and will sync as soon as you sign in.`
+      })
+      return
+    }
 
     if (finalQueue.length === 0) {
       setDbConnected(true)
       setSyncStatus('synced')
+      setLastSyncedAt(new Date().toISOString())
       if (processedCount > 0) {
         addToast({
           type: 'success',
@@ -1484,6 +1608,7 @@ export function ExbosProvider({ children }) {
         await flushOfflineQueue()
       } else {
         setSyncStatus('synced')
+        setLastSyncedAt(new Date().toISOString())
       }
       return true
     } catch {
@@ -1494,14 +1619,27 @@ export function ExbosProvider({ children }) {
   }
 
   useEffect(() => {
+    let settleTimer = null
+
     const handleOnline = () => {
       setIsOnline(true)
+      const pendingCnt = getOfflineQueue().length
       addToast({
         type: 'info',
         title: 'Network Restored',
-        message: 'Internet connection re-established. Synchronizing pending updates...'
+        message:
+          pendingCnt > 0
+            ? `Internet reconnected. Automatically syncing ${pendingCnt} offline update${pendingCnt === 1 ? '' : 's'} to MongoDB...`
+            : 'Internet connection re-established. Synchronizing with ExBOS Cloud...'
       })
       checkConnectionHealth()
+      // Settle retry after 2.5s in case mobile Wi-Fi/4G DNS takes a moment to warm up
+      if (settleTimer) clearTimeout(settleTimer)
+      settleTimer = setTimeout(() => {
+        if (navigator.onLine && getOfflineQueue().length > 0 && !isFlushingRef.current) {
+          checkConnectionHealth()
+        }
+      }, 2500)
     }
 
     const handleOffline = () => {
@@ -1514,8 +1652,32 @@ export function ExbosProvider({ children }) {
       })
     }
 
+    const handleResumeSync = () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine && getOfflineQueue().length > 0 && !isFlushingRef.current) {
+        checkConnectionHealth()
+      }
+    }
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        handleResumeSync()
+      }
+    }
+
+    const handleStorageSync = (e) => {
+      const qKey = getOfflineQueueKey()
+      if (e.key === qKey) {
+        const latest = getOfflineQueue()
+        setPendingOfflineActions(latest)
+        setOfflineQueueCount(latest.length)
+      }
+    }
+
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+    window.addEventListener('focus', handleResumeSync)
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('storage', handleStorageSync)
 
     checkConnectionHealth()
 
@@ -1524,11 +1686,15 @@ export function ExbosProvider({ children }) {
       if (!navigator.onLine || hasPending || !dbConnected) {
         checkConnectionHealth()
       }
-    }, 20000)
+    }, 15000)
 
     return () => {
+      if (settleTimer) clearTimeout(settleTimer)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('focus', handleResumeSync)
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('storage', handleStorageSync)
       clearInterval(heartbeat)
     }
   }, [])
@@ -2497,6 +2663,13 @@ export function ExbosProvider({ children }) {
     setTransactions([])
 
     setUser(backendUser)
+    // Automatically flush any pending offline changes for this account right after sign-in
+    const loginScope = String(backendUser?.ownerScopeKey || backendUser?.email || '').trim().toLowerCase()
+    if (loginScope && getOfflineQueue(loginScope).length > 0) {
+      setTimeout(() => {
+        flushOfflineQueue(loginScope)
+      }, 300)
+    }
     return backendUser
   }
 
@@ -2590,7 +2763,14 @@ export function ExbosProvider({ children }) {
     return createdUser
   }
 
-  const logout = () => {
+  const logout = ({ force = false } = {}) => {
+    const pendingNow = getOfflineQueue().length
+    if (!force && pendingNow > 0 && typeof window !== 'undefined') {
+      const proceed = window.confirm(
+        `You have ${pendingNow} unsynced offline change${pendingNow === 1 ? '' : 's'} waiting to upload to MongoDB.\n\nThey will remain saved on this device and sync when you sign back in. Sign out anyway?`
+      )
+      if (!proceed) return
+    }
     isHydratedRef.current = false
     setUser(null)
     setWorkspaces(createCleanWorkspaces())
@@ -2773,7 +2953,12 @@ export function ExbosProvider({ children }) {
         dbConnected,
         syncStatus,
         offlineQueueCount,
+        pendingOfflineActions,
+        failedOfflineActions,
+        lastSyncedAt,
         flushOfflineQueue,
+        retryFailedOfflineAction,
+        dismissFailedOfflineAction,
         checkConnectionHealth,
         user,
         setUser,

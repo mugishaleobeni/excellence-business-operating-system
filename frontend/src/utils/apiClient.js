@@ -69,7 +69,20 @@ export function getAuthHeaders() {
   return headers
 }
 
-export async function apiRequest(endpoint, { method = 'GET', body = null } = {}) {
+export async function apiRequest(endpoint, { method = 'GET', body = null, timeoutMs = 12000 } = {}) {
+  const fetchWithTimeout = async (url, options, ms) => {
+    if (typeof AbortController === 'undefined' || !ms) {
+      return fetch(url, options)
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), ms)
+    try {
+      return await fetch(url, { ...options, signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   try {
     const options = {
       method,
@@ -81,15 +94,18 @@ export async function apiRequest(endpoint, { method = 'GET', body = null } = {})
     const apiBase = resolveApiBase()
     let response
     try {
-      response = await fetch(`${apiBase}${endpoint}`, options)
+      response = await fetchWithTimeout(`${apiBase}${endpoint}`, options, timeoutMs)
     } catch (firstErr) {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw firstErr
+      }
       if (typeof window !== 'undefined' && isLocalHost(window.location?.hostname || '')) {
         // Fallback to Vite proxy on localhost if direct port 5000 is unreachable
-        response = await fetch(`/api/v1${endpoint}`, options)
+        response = await fetchWithTimeout(`/api/v1${endpoint}`, options, timeoutMs)
       } else {
         // Retry once against production backend in case of transient connection reset
-        await new Promise((r) => setTimeout(r, 600))
-        response = await fetch(`${apiBase}${endpoint}`, options)
+        await new Promise((r) => setTimeout(r, 500))
+        response = await fetchWithTimeout(`${apiBase}${endpoint}`, options, timeoutMs)
       }
     }
     const data = await response.json().catch(() => null)
@@ -161,7 +177,7 @@ function withScope(path) {
 }
 
 export const exbosApi = {
-  health: () => apiRequest('/health'),
+  health: () => apiRequest('/health', { timeoutMs: 6000 }),
   sendVerification: (payload) =>
     apiRequest('/auth/send-verification', { method: 'POST', body: payload }),
   verifyEmail: (payload) =>

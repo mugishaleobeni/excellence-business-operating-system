@@ -24,6 +24,14 @@ export function lazyWithRetry(importFn) {
       return await importFn()
     } catch (err) {
       if (typeof window !== 'undefined' && isChunkLoadError(err)) {
+        // Never wipe PWA caches or force-reload while offline — that destroys the cached app shell
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          const offlineErr = new Error(
+            'This screen is not cached for offline use yet. Please reconnect to load it or return to the Dashboard.'
+          )
+          offlineErr.isOfflineChunkError = true
+          throw offlineErr
+        }
         try {
           const lastReload = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY) || 0)
           const now = Date.now()
@@ -47,3 +55,4 @@ export function lazyWithRetry(importFn) {
     }
   })
 }
+

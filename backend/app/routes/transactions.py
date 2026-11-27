@@ -110,6 +110,16 @@ def create_transaction(validated_data: TransactionCreateSchema):
 
     raw_dump = validated_data.model_dump(exclude_none=True)
     tx_id = str(raw_dump.get("id") or f"TX-{now_ms}")
+    # Idempotency guard for offline sync retries: if this exact transaction ID already exists
+    # for this tenant, return it immediately without duplicating or double-counting KPI metrics.
+    existing_tx = db.transactions.find_one({"scopeKey": scope_key, "id": tx_id})
+    if existing_tx:
+        return success_response(
+            data={"transaction": serialize_doc(existing_tx), "idempotent": True},
+            message="Transaction already synchronized.",
+            status_code=200,
+        )
+
     arch_id = raw_dump.get("architectureId", "make-and-sell")
     amount = float(raw_dump.get("amountRWF", 0))
     tx_type = _normalize_tx_type(raw_dump.get("type"))

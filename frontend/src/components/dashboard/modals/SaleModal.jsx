@@ -9,6 +9,7 @@ import { useExbos } from "../../../context/ExbosContext";
 import BarcodeScannerModal from "../../common/BarcodeScannerModal";
 import { exbosApi } from "../../../utils/apiClient";
 import { computeVatSplit, DEFAULT_RRA_TAX_PROFILE } from "../../../utils/rraTaxUtils";
+import { readCachedTaxProfile, writeCachedTaxProfile } from "../../../utils/offlineStorage";
 
 export default function SaleModal({
   isOpen,
@@ -33,26 +34,51 @@ export default function SaleModal({
   const [saleUpdateCatalogPrice, setSaleUpdateCatalogPrice] = useState(false);
   const [savedSaleDoc, setSavedSaleDoc] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
-  const [taxProfile, setTaxProfile] = useState(DEFAULT_RRA_TAX_PROFILE);
+  const [taxProfile, setTaxProfile] = useState(() => {
+    try {
+      const raw = localStorage.getItem("exbos_user");
+      const u = raw ? JSON.parse(raw) : null;
+      const scope = String(u?.ownerScopeKey || u?.email || "").trim().toLowerCase();
+      const cached = readCachedTaxProfile(scope);
+      return cached ? { ...DEFAULT_RRA_TAX_PROFILE, ...cached } : DEFAULT_RRA_TAX_PROFILE;
+    } catch {
+      return DEFAULT_RRA_TAX_PROFILE;
+    }
+  });
   const [saleCustomerTin, setSaleCustomerTin] = useState("");
   const [saleEbmNumber, setSaleEbmNumber] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let mounted = true;
+    const getScope = () => {
+      try {
+        const raw = localStorage.getItem("exbos_user");
+        const u = raw ? JSON.parse(raw) : null;
+        return String(u?.ownerScopeKey || u?.email || "").trim().toLowerCase();
+      } catch {
+        return "";
+      }
+    };
     if (isOpen) {
       exbosApi
         .getTaxProfile()
         .then((res) => {
           const fetchedProfile = res?.data?.data || (res?.data && "rraEnabled" in res.data ? res.data : null);
           if (mounted && res?.ok && fetchedProfile) {
-            setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile });
+            const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile };
+            setTaxProfile(merged);
+            writeCachedTaxProfile(getScope(), merged);
           }
         })
         .catch(() => {});
     }
     const onUpdated = (e) => {
-      if (e?.detail) setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...e.detail });
+      if (e?.detail) {
+        const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...e.detail };
+        setTaxProfile(merged);
+        writeCachedTaxProfile(getScope(), merged);
+      }
     };
     window.addEventListener("exbos:tax-profile-updated", onUpdated);
     return () => {

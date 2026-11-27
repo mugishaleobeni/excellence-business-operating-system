@@ -515,6 +515,27 @@ def create_module_record(
                 )
 
     rec_id = str(raw_dump.get("id") or f"REC-{now_ms}")
+    # Idempotency guard for offline sync retries: if this exact record ID already exists
+    # in the tenant workspace bucket, return it immediately without duplicating or re-deducting stock.
+    existing_bucket = (ws.get("records") or {}).get(module_name) or []
+    existing_rec = next(
+        (r for r in existing_bucket if isinstance(r, dict) and str(r.get("id") or "") == rec_id),
+        None,
+    )
+    if existing_rec is not None:
+        clean_ws = serialize_doc(ws)
+        clean_ws.pop("_id", None)
+        clean_ws.pop("scopeKey", None)
+        return success_response(
+            data={
+                "record": existing_rec,
+                "workspace": clean_ws,
+                "idempotent": True,
+            },
+            message=f"{module_name} record already synchronized.",
+            status_code=200,
+        )
+
     title = _extract_record_title(raw_dump, module_name)
     amount = _extract_record_amount(raw_dump)
     status = str(raw_dump.get("status") or "Completed")

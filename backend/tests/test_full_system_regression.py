@@ -634,6 +634,52 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertTrue(check_rate_limit("reg:ip", 2, 60)[0])
         self.assertFalse(check_rate_limit("reg:ip", 2, 60)[0])
 
+    # ------------------------------------------------------------------
+    # 7. OFFLINE SYNC IDEMPOTENCY (NO DUPLICATES OR DOUBLE-COUNTING)
+    # ------------------------------------------------------------------
+    def test_07_offline_sync_retry_idempotency_prevents_duplicates(self):
+        email = "offline@exbos.rw"
+        self.db.users.insert_one(
+            {"email": email, "name": "Offline Shop", "plan": "Silver", "accountStatus": "Active"}
+        )
+        headers = self._auth_header(email)
+
+        # Replay identical Sale record twice (simulating network drop right before HTTP 200)
+        sale_payload = {
+            "id": "SAL-OFFLINE-9001",
+            "title": "Cement Bag",
+            "amountRWF": 12000,
+            "quantity": 1,
+            "status": "Paid",
+            "paymentMethod": "Cash",
+            "date": "2026-11-27",
+        }
+        r1 = self.client.post("/api/v1/workspaces/buy-and-sell/records/Sales", json=sale_payload, headers=headers)
+        r2 = self.client.post("/api/v1/workspaces/buy-and-sell/records/Sales", json=sale_payload, headers=headers)
+        self.assertIn(r1.status_code, (200, 201))
+        self.assertEqual(r2.status_code, 200)
+        self.assertTrue(r2.get_json()["data"].get("idempotent"))
+        ws = self.db.workspaces.find_one({"scopeKey": email, "architectureId": "buy-and-sell"})
+        sales = [s for s in (ws.get("records") or {}).get("Sales", []) if s.get("id") == "SAL-OFFLINE-9001"]
+        self.assertEqual(len(sales), 1)
+
+        # Replay identical Transaction twice
+        tx_payload = {
+            "id": "TX-OFFLINE-9001",
+            "architectureId": "buy-and-sell",
+            "type": "INFLOW",
+            "title": "Cement Sale",
+            "amountRWF": 12000,
+            "paymentMethod": "Cash",
+        }
+        t1 = self.client.post("/api/v1/transactions", json=tx_payload, headers=headers)
+        t2 = self.client.post("/api/v1/transactions", json=tx_payload, headers=headers)
+        self.assertIn(t1.status_code, (200, 201))
+        self.assertEqual(t2.status_code, 200)
+        self.assertTrue(t2.get_json()["data"].get("idempotent"))
+        tx_docs = list(self.db.transactions.find({"scopeKey": email, "id": "TX-OFFLINE-9001"}))
+        self.assertEqual(len(tx_docs), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

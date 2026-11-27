@@ -51,8 +51,11 @@ function ProtectedRoute({ children }) {
   const { user } = useExbos()
   const location = useLocation()
   const token = typeof window !== 'undefined' ? localStorage.getItem('exbos_access_token') : null
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine
 
-  if (!user || !token || !isTokenValid(token)) {
+  // Offline Grace Mode: if device is offline and cached user + token exist, keep dashboard accessible
+  // so shopkeepers are never locked out of local POS/stock when JWT expires offline.
+  if (!user || !token || (!isOffline && !isTokenValid(token))) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
@@ -83,6 +86,17 @@ export default function App() {
 
   useEffect(() => {
     installGlobalErrorReporter()
+    // Warm-cache core DashboardPage chunk while online so offline reload works seamlessly
+    if (typeof navigator === 'undefined' || navigator.onLine) {
+      const warm = () => {
+        import('./pages/DashboardPage').catch(() => {})
+      }
+      if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+        window.requestIdleCallback(warm, { timeout: 4000 })
+      } else {
+        setTimeout(warm, 2000)
+      }
+    }
   }, [])
 
   return (

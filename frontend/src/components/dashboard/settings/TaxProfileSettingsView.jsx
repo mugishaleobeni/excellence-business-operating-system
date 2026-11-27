@@ -2,20 +2,37 @@ import React, { useEffect, useState } from 'react'
 import { ShieldCheck, FileText, Save, CheckCircle2, Info, Power, Mail, Receipt, Calculator } from 'lucide-react'
 import { exbosApi } from '../../../utils/apiClient'
 import { DEFAULT_RRA_TAX_PROFILE } from '../../../utils/rraTaxUtils'
+import { readCachedTaxProfile, writeCachedTaxProfile } from '../../../utils/offlineStorage'
+
+function getActiveTaxScope() {
+  try {
+    const raw = localStorage.getItem('exbos_user')
+    const u = raw ? JSON.parse(raw) : null
+    return String(u?.ownerScopeKey || u?.email || '').trim().toLowerCase()
+  } catch {
+    return ''
+  }
+}
 
 export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
-  const [profile, setProfile] = useState(DEFAULT_RRA_TAX_PROFILE)
+  const [profile, setProfile] = useState(() => {
+    const cached = readCachedTaxProfile(getActiveTaxScope())
+    return cached ? { ...DEFAULT_RRA_TAX_PROFILE, ...cached } : DEFAULT_RRA_TAX_PROFILE
+  })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     let mounted = true
+    const scope = getActiveTaxScope()
     exbosApi
       .getTaxProfile()
       .then((res) => {
         const fetchedProfile = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
         if (mounted && res?.ok && fetchedProfile) {
-          setProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile })
+          const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile }
+          setProfile(merged)
+          writeCachedTaxProfile(scope, merged)
         }
       })
       .catch(() => {})
@@ -50,6 +67,7 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
       const savedData = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
       const saved = savedData ? { ...DEFAULT_RRA_TAX_PROFILE, ...savedData } : payload
       setProfile(saved)
+      writeCachedTaxProfile(getActiveTaxScope(), saved)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('exbos:tax-profile-updated', { detail: saved }))
       }
