@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "lint:undef": "node scripts/check-undef.mjs",
     "build": "vite build && node scripts/generate-seo-pages.mjs",
     "preview": "vite preview"
   },

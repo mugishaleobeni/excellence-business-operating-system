@@ -100,6 +100,7 @@ export default function InteractiveModulePanel({
 }) {
   const {
     user,
+    activeBranchId = 'main',
     theme,
     toggleTheme,
     hideFinancials,

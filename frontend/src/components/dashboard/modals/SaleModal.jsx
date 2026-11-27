@@ -94,7 +94,7 @@ export default function SaleModal({
   const handleBarcodeDetectedForSale = (code) => {
     const q = String(code || "").trim().toLowerCase();
     if (!q) return;
-    const match = (allProducts || []).find(
+    const match = (recordedProducts || []).find(
       (p) =>
         String(p.sku || "").trim().toLowerCase() === q ||
         String(p.barcode || "").trim().toLowerCase() === q ||
@@ -102,7 +102,7 @@ export default function SaleModal({
         String(p.name || p.title || "").trim().toLowerCase().includes(q)
     );
     if (match) {
-      setSelectedSaleProduct(match);
+      setSaleProductId(match.id);
       setSaleProductSearch(match.name || match.title || code);
       const price = Number(match.sellingPriceRWF || match.sellingPrice || match.priceRWF || match.price || 0);
       if (price > 0) setSaleUnitPrice(String(price));
