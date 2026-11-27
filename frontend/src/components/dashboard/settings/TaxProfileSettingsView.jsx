@@ -13,8 +13,9 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
     exbosApi
       .getTaxProfile()
       .then((res) => {
-        if (mounted && res?.data) {
-          setProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...res.data })
+        const fetchedProfile = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
+        if (mounted && res?.ok && fetchedProfile) {
+          setProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile })
         }
       })
       .catch(() => {})
@@ -32,10 +33,22 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
 
   const handleSave = async (overrideProfile = null) => {
     const payload = overrideProfile || profile
+    const previousProfile = profile
     setSaving(true)
     try {
       const res = await exbosApi.updateTaxProfile(payload)
-      const saved = res?.data ? { ...DEFAULT_RRA_TAX_PROFILE, ...res.data } : payload
+      if (!res?.ok) {
+        setProfile(previousProfile)
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Could Not Save Tax Profile',
+            message: res?.data?.error || res?.data?.message || 'Please try again.'
+          })
+        return
+      }
+      const savedData = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
+      const saved = savedData ? { ...DEFAULT_RRA_TAX_PROFILE, ...savedData } : payload
       setProfile(saved)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('exbos:tax-profile-updated', { detail: saved }))
@@ -50,6 +63,7 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
             : 'RRA fields are now hidden so your daily POS and receipts stay uncluttered.'
         })
     } catch (err) {
+      setProfile(previousProfile)
       addToast &&
         addToast({
           type: 'error',

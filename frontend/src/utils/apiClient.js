@@ -400,10 +400,11 @@ export const exbosApi = {
     if (params.branchId && params.branchId !== 'all') qs.set('branchId', params.branchId)
     const suffix = qs.toString() ? `?${qs.toString()}` : ''
     const path = withScope(`/tax/export/${encodeURIComponent(exportType)}${suffix}`)
-    const token = getAuthToken()
-    const res = await fetch(`${API_BASE_URL}${path}`, {
+    const authHeaders = getAuthHeaders()
+    const headers = authHeaders.Authorization ? { Authorization: authHeaders.Authorization } : {}
+    const res = await fetch(`${resolveApiBase()}${path}`, {
       method: 'GET',
-      headers: token ? { Authorization: `Bearer ${token}` } : {}
+      headers
     })
     if (!res.ok) {
       let data = {}

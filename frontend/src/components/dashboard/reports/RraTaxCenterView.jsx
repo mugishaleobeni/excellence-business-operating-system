@@ -58,11 +58,19 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
     setLoading(true)
     try {
       const res = await exbosApi.getTaxSummary({ startDate: sDate, endDate: eDate })
-      if (res?.data) {
-        setSummary(res.data)
-        if (res.data.profile?.accountantEmail) {
-          setAccountantEmailInput(res.data.profile.accountantEmail)
+      const summaryData = res?.data?.data || (res?.data && 'profile' in res.data ? res.data : null)
+      if (res?.ok && summaryData) {
+        setSummary(summaryData)
+        if (summaryData.profile?.accountantEmail) {
+          setAccountantEmailInput(summaryData.profile.accountantEmail)
         }
+      } else if (!res?.ok) {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Failed to Load Tax Summary',
+            message: res?.data?.error || res?.data?.message || 'Could not compute RRA tax ledger.'
+          })
       }
     } catch (err) {
       addToast &&
@@ -92,7 +100,17 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
     const nextEnabled = !currentProfile.rraEnabled
     try {
       const res = await exbosApi.updateTaxProfile({ ...currentProfile, rraEnabled: nextEnabled })
-      const saved = res?.data || { ...currentProfile, rraEnabled: nextEnabled }
+      if (!res?.ok) {
+        addToast &&
+          addToast({
+            type: 'error',
+            title: 'Update Failed',
+            message: res?.data?.error || res?.data?.message || 'Could not update RRA status.'
+          })
+        return
+      }
+      const savedData = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
+      const saved = savedData ? { ...DEFAULT_RRA_TAX_PROFILE, ...savedData } : { ...currentProfile, rraEnabled: nextEnabled }
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('exbos:tax-profile-updated', { detail: saved }))
       }
@@ -175,11 +193,22 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
     }
     setSendingEmail(true)
     try {
-      await exbosApi.sendTaxPackToAccountant({
+      const res = await exbosApi.sendTaxPackToAccountant({
         recipientEmail: email,
         startDate,
         endDate
       })
+      if (!res?.ok) {
+        if (res?.status !== 402) {
+          addToast &&
+            addToast({
+              type: 'error',
+              title: 'Email Failed',
+              message: res?.data?.error || res?.data?.message || 'Could not send tax pack.'
+            })
+        }
+        return
+      }
       addToast &&
         addToast({
           type: 'success',

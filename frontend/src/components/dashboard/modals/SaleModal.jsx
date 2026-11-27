@@ -44,8 +44,9 @@ export default function SaleModal({
       exbosApi
         .getTaxProfile()
         .then((res) => {
-          if (mounted && res?.data) {
-            setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...res.data });
+          const fetchedProfile = res?.data?.data || (res?.data && "rraEnabled" in res.data ? res.data : null);
+          if (mounted && res?.ok && fetchedProfile) {
+            setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile });
           }
         })
         .catch(() => {});
