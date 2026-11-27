@@ -17,6 +17,7 @@ export default function BranchPerformanceCenterPanel({
   hideFinancials = false
 }) {
   const {
+    user = null,
     branches = [],
     activeBranchId = 'main',
     allWorkspaces = {},
@@ -24,7 +25,6 @@ export default function BranchPerformanceCenterPanel({
   } = useExbos()
 
   const currentYear = new Date().getFullYear()
-  const availableYears = [currentYear, currentYear - 1, currentYear - 2]
   const [selectedYear, setSelectedYear] = useState(currentYear)
   const [hoveredDay, setHoveredDay] = useState(null)
   const [viewMode, setViewMode] = useState('both') // 'both' | 'heatmap' | 'bar' | 'profit'
@@ -173,17 +173,99 @@ export default function BranchPerformanceCenterPanel({
     const bestBranch = perfList[0] || null
     const maxRevenue = Math.max(...perfList.map((b) => b.revenueRWF), 1)
 
-    // Full 52-week GitHub-style contribution grid aligned to Sun..Sat rows with Month labels
+    // Parse ISO YYYY-MM-DD safely in local time (avoiding UTC day-shift)
+    const parseIsoDay = (raw) => {
+      const s = String(raw || '').trim().slice(0, 10)
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+      if (!m) return null
+      const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+      return Number.isNaN(dt.getTime()) ? null : dt
+    }
+
     const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const formatShortDate = (dt) =>
+      dt ? `${MONTH_NAMES[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}` : ''
+
     const today = new Date()
+    const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+
+    // Determine business registration date from backend analytics, user profile, or main branch
+    const mainBranchObj = branches.find((b) => b.isMain || b.id === 'main')
+    const registeredDate =
+      parseIsoDay(backendAnalytics?.businessRegisteredAt) ||
+      parseIsoDay(user?.created_at || user?.createdAt) ||
+      parseIsoDay(mainBranchObj?.createdAt) ||
+      null
+
+    // Earliest recorded activity date (in case historical records were imported)
+    let earliestRecordDate = null
+    Object.entries(dailyMap).forEach(([isoKey, val]) => {
+      if (!val || (Number(val.count || 0) <= 0 && Number(val.revenueRWF || 0) <= 0)) return
+      const parsed = parseIsoDay(isoKey)
+      if (parsed && (!earliestRecordDate || parsed < earliestRecordDate)) {
+        earliestRecordDate = parsed
+      }
+    })
+
+    // Effective start of the business timeline
+    let effectiveStartDate = registeredDate || earliestRecordDate || todayLocal
+    if (earliestRecordDate && earliestRecordDate < effectiveStartDate) {
+      effectiveStartDate = earliestRecordDate
+    }
+    if (effectiveStartDate > todayLocal) {
+      effectiveStartDate = todayLocal
+    }
+
+    const firstYear = Math.min(currentYear, effectiveStartDate.getFullYear())
+    const minSelectableYear = Math.max(firstYear, currentYear - 4)
+    const availableYears = []
+    for (let y = currentYear; y >= minSelectableYear; y -= 1) {
+      availableYears.push(y)
+    }
+
+    const effectiveSelectedYear = availableYears.includes(selectedYear) ? selectedYear : currentYear
+    const hasPreviousYear = firstYear < currentYear
+    const rollingYearStart = new Date(todayLocal.getFullYear(), todayLocal.getMonth(), todayLocal.getDate() - 364)
+    const hasFullRollingYear = hasPreviousYear && effectiveStartDate <= rollingYearStart
+
+    // Determine exact calendar range:
+    // - If business does NOT have a previous year, only show currentYear (Jan 1 -> today), never spilling into last year.
+    // - If business DOES have a previous year:
+    //   - On currentYear: show rolling last 365 days if registered >= 1 year ago, else from effectiveStartDate -> today.
+    //   - On any prior year: show Jan 1 -> Dec 31 of that year.
     const endDate =
-      selectedYear === currentYear
-        ? new Date(today.getFullYear(), today.getMonth(), today.getDate())
-        : new Date(selectedYear, 11, 31)
-    const rawStart =
-      selectedYear === currentYear
-        ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 364)
-        : new Date(selectedYear, 0, 1)
+      effectiveSelectedYear === currentYear
+        ? todayLocal
+        : new Date(effectiveSelectedYear, 11, 31)
+
+    let rawStart
+    if (effectiveSelectedYear === currentYear) {
+      if (!hasPreviousYear) {
+        rawStart = new Date(currentYear, 0, 1)
+      } else if (hasFullRollingYear) {
+        rawStart = rollingYearStart
+      } else {
+        rawStart = new Date(effectiveStartDate)
+      }
+    } else {
+      rawStart = new Date(effectiveSelectedYear, 0, 1)
+    }
+
+    // Clear period subtitle for the header count
+    const registeredLabel = registeredDate ? formatShortDate(registeredDate) : ''
+    let periodLabel = `in ${effectiveSelectedYear}`
+    if (effectiveSelectedYear === currentYear) {
+      if (hasFullRollingYear) {
+        periodLabel = 'in the last year'
+      } else if (hasPreviousYear) {
+        periodLabel = registeredLabel ? `since ${registeredLabel}` : `in ${currentYear}`
+      } else {
+        periodLabel = registeredLabel ? `in ${currentYear} (since ${registeredLabel})` : `in ${currentYear}`
+      }
+    } else if (registeredDate && effectiveSelectedYear === registeredDate.getFullYear()) {
+      periodLabel = `in ${effectiveSelectedYear} (registered ${registeredLabel})`
+    }
+
     // Align start to Sunday so rows match Sun(0), Mon(1), Tue(2), Wed(3), Thu(4), Fri(5), Sat(6)
     const startDate = new Date(rawStart)
     startDate.setDate(startDate.getDate() - startDate.getDay())
@@ -204,10 +286,11 @@ export default function BranchPerformanceCenterPanel({
         const dt = new Date(cursor)
         const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
         const inRange = dt >= rawStart && dt <= endDate
-        const entry = inRange ? (dailyMap[iso] || { count: 0, revenueRWF: 0 }) : { count: 0, revenueRWF: 0 }
-        if (inRange) yearTotalOps += entry.count
+        const beforeRegistration = inRange && Boolean(registeredDate) && dt < effectiveStartDate
+        const entry = inRange && !beforeRegistration ? (dailyMap[iso] || { count: 0, revenueRWF: 0 }) : { count: 0, revenueRWF: 0 }
+        if (inRange && !beforeRegistration) yearTotalOps += entry.count
         let level = 0
-        if (inRange && (entry.count > 0 || entry.revenueRWF > 0)) {
+        if (inRange && !beforeRegistration && (entry.count > 0 || entry.revenueRWF > 0)) {
           const ratio = Math.max(entry.revenueRWF / maxDayRev, entry.count / maxDayCnt)
           level = ratio <= 0.25 ? 1 : ratio <= 0.5 ? 2 : ratio <= 0.75 ? 3 : 4
         }
@@ -218,7 +301,7 @@ export default function BranchPerformanceCenterPanel({
             lastMonthKey = mKey
           }
         }
-        weekCol.push({ date: iso, ...entry, level, inRange })
+        weekCol.push({ date: iso, ...entry, level, inRange, beforeRegistration })
         cursor.setDate(cursor.getDate() + 1)
       }
       weeks.push(weekCol)
@@ -232,10 +315,14 @@ export default function BranchPerformanceCenterPanel({
       weeks,
       monthLabels,
       yearTotalOps,
+      availableYears,
+      effectiveSelectedYear,
+      periodLabel,
+      registeredLabel,
       totalOps: Object.values(dailyMap).reduce((a, b) => a + b.count, 0),
       totalBranchRev: perfList.reduce((a, b) => a + b.revenueRWF, 0)
     }
-  }, [allWorkspaces, activeArchId, branches, selectedBranchFilter, backendAnalytics, selectedYear, currentYear])
+  }, [allWorkspaces, activeArchId, branches, user, selectedBranchFilter, backendAnalytics, selectedYear, currentYear])
 
   const customBranches = branches.filter((b) => !b.isMain && b.id !== 'main')
   // Only the Main HQ Dashboard visualizes cross-branch performance, and only when at least 1 custom branch exists
@@ -247,7 +334,7 @@ export default function BranchPerformanceCenterPanel({
   return (
     <div className="rounded-3xl border border-[#218DFF]/30 bg-gradient-to-br from-[#06143D]/95 via-[#040D29]/95 to-[#07184A]/95 p-4 sm:p-6 space-y-4 sm:space-y-5 shadow-xl overflow-hidden max-w-full">
       {/* Header + Visualization Switcher */}
-      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 border-b border-white/10 pb-4">
+      <div className="flex flex-col justify-between gap-3.5 border-b border-white/10 pb-4">
         <div className="flex items-start gap-3 min-w-0">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF] shrink-0 mt-0.5">
             <GitBranch className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -271,7 +358,7 @@ export default function BranchPerformanceCenterPanel({
         </div>
 
         {/* Visualization Mode Switcher — all 4 tabs always visible on desktop without scrolling */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full 2xl:w-auto shrink-0">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2.5 w-full shrink-0">
           {branches.length > 1 && (
             <select
               value={selectedBranchFilter}
@@ -325,17 +412,19 @@ export default function BranchPerformanceCenterPanel({
         {(viewMode === 'both' || viewMode === 'heatmap') && (
           <div className="flex flex-col md:flex-row gap-4 min-w-0">
             <div className="flex-1 min-w-0 space-y-2.5">
-              {/* Top Count Header (GitHub-style) */}
+              {/* Top Count Header (GitHub-style, registration-aware) */}
               <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
                 <div className="text-xs sm:text-sm font-semibold text-white">
                   <span className="font-orbitron font-bold text-[#9EDCFF]">
                     {computed.yearTotalOps.toLocaleString()}
                   </span>{' '}
-                  operations {selectedYear === currentYear ? 'in the last year' : `in ${selectedYear}`}
+                  {computed.yearTotalOps === 1 ? 'operation' : 'operations'} {computed.periodLabel}
                 </div>
                 <span className="text-[11px] text-slate-400">
                   {hoveredDay
-                    ? `${hoveredDay.date}: ${hoveredDay.count} ${hoveredDay.count === 1 ? 'entry' : 'entries'} · ${formatRWF(hoveredDay.revenueRWF, hideFinancials)}`
+                    ? hoveredDay.beforeRegistration
+                      ? `${hoveredDay.date}: Before registration${computed.registeredLabel ? ` (${computed.registeredLabel})` : ''}`
+                      : `${hoveredDay.date}: ${hoveredDay.count} ${hoveredDay.count === 1 ? 'entry' : 'entries'} · ${formatRWF(hoveredDay.revenueRWF, hideFinancials)}`
                     : 'Branch activity pulse'}
                 </span>
               </div>
@@ -359,7 +448,7 @@ export default function BranchPerformanceCenterPanel({
                       </div>
                     </div>
 
-                    {/* Weekday Labels + 52-Week Squares Grid */}
+                    {/* Weekday Labels + Squares Grid */}
                     <div className="flex items-start gap-2">
                       {/* Weekday Axis (Mon, Wed, Fri) */}
                       <div className="flex flex-col justify-between text-[10px] text-slate-400 font-medium select-none w-6 shrink-0 pt-[14px] h-[95px]">
@@ -379,14 +468,18 @@ export default function BranchPerformanceCenterPanel({
                                 onMouseLeave={() => setHoveredDay(null)}
                                 onClick={() => day.inRange && setHoveredDay(day)}
                                 title={
-                                  day.inRange
-                                    ? `${day.date}: ${day.count} entries · ${formatRWF(day.revenueRWF, hideFinancials)}`
-                                    : ''
+                                  !day.inRange
+                                    ? ''
+                                    : day.beforeRegistration
+                                      ? `${day.date}: Before registration${computed.registeredLabel ? ` (${computed.registeredLabel})` : ''}`
+                                      : `${day.date}: ${day.count} ${day.count === 1 ? 'entry' : 'entries'} · ${formatRWF(day.revenueRWF, hideFinancials)}`
                                 }
                                 className={`w-[11px] h-[11px] rounded-[2px] border transition-transform ${
-                                  day.inRange
-                                    ? `hover:scale-125 cursor-pointer ${LEVEL_COLORS[day.level] || LEVEL_COLORS[0]}`
-                                    : 'opacity-0 pointer-events-none border-transparent'
+                                  !day.inRange
+                                    ? 'opacity-0 pointer-events-none border-transparent'
+                                    : day.beforeRegistration
+                                      ? 'bg-white/[0.02] border-white/[0.05] opacity-40 cursor-default'
+                                      : `hover:scale-125 cursor-pointer ${LEVEL_COLORS[day.level] || LEVEL_COLORS[0]}`
                                 }`}
                               />
                             ))}
@@ -411,10 +504,10 @@ export default function BranchPerformanceCenterPanel({
               </div>
             </div>
 
-            {/* Right-Hand Year Selector Sidebar (GitHub-style, ExBOS Sapphire Blue Active Pill) */}
+            {/* Right-Hand Year Selector Sidebar (Only years the business existed, ExBOS Sapphire Blue Active Pill) */}
             <div className="flex flex-row md:flex-col gap-1.5 md:w-24 shrink-0 md:pt-7">
-              {availableYears.map((yr) => {
-                const active = selectedYear === yr
+              {computed.availableYears.map((yr) => {
+                const active = computed.effectiveSelectedYear === yr
                 return (
                   <button
                     key={yr}

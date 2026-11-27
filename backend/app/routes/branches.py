@@ -1270,6 +1270,21 @@ def branch_analytics():
             "level": level,
         })
 
+    # Resolve business registration date from owner user record or main branch
+    owner_doc = user_doc
+    if not owner_doc or (owner_doc.get("email") or "").strip().lower() != scope_key:
+        owner_doc = db.users.find_one({"email": scope_key}) or user_doc or {}
+    raw_registered_at = (
+        owner_doc.get("created_at")
+        or owner_doc.get("createdAt")
+        or main_branch.get("createdAt")
+        or ""
+    )
+    if isinstance(raw_registered_at, datetime):
+        business_registered_at = raw_registered_at.date().isoformat()
+    else:
+        business_registered_at = str(raw_registered_at or "").strip()[:10]
+
     return success_response(
         data={
             "branches": perf_sorted,
@@ -1280,6 +1295,7 @@ def branch_analytics():
                 bid: {d: dict(val) for d, val in dmap.items()}
                 for bid, dmap in daily_by_branch.items()
             },
+            "businessRegisteredAt": business_registered_at,
             "totalRevenueRWF": sum(b["revenueRWF"] for b in perf_sorted),
             "totalNetProfitRWF": sum(b["netProfitRWF"] for b in perf_sorted),
         },
