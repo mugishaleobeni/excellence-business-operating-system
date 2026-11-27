@@ -68,6 +68,7 @@ import ProductModal from "./modals/ProductModal"
 import SaleModal from "./modals/SaleModal"
 import BulkProductImportModal from "./modals/BulkProductImportModal"
 import CashierShiftModal from "./modals/CashierShiftModal"
+import MonthlyFixedCostsAndBreakEvenPanel from "./expenses/MonthlyFixedCostsAndBreakEvenPanel"
 import PurchaseModal from "./modals/PurchaseModal"
 import CustomerModal from "./modals/CustomerModal"
 import SupplierModal from "./modals/SupplierModal"
@@ -2629,6 +2630,16 @@ export default function InteractiveModulePanel({
           })
         }}
       />
+
+      {/* Monthly Employee Payroll, Rent & Fixed Bills + Live Break-Even Engine (Expenses Module) */}
+      {activeModule === 'Expenses' && (
+        <MonthlyFixedCostsAndBreakEvenPanel
+          activeArchId={activeArchId}
+          activeBranchId={activeBranchId}
+          hideFinancials={hideFinancials}
+          addToast={addToast}
+        />
+      )}
 
       {/* Quick Retail Power Actions (Bulk CSV Import & Cashier Shift Z-Report) */}
       {(activeModule === 'Products' || activeModule === 'Inventory' || activeModule === 'Sales') && (

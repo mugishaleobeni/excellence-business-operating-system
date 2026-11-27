@@ -228,6 +228,7 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             patch("app.routes.storage.get_db", return_value=self.db),
             patch("app.routes.training.get_db", return_value=self.db),
             patch("app.routes.shifts.get_db", return_value=self.db),
+            patch("app.routes.commitments.get_db", return_value=self.db),
         ]
         for p in self.db_patchers:
             p.start()
@@ -889,6 +890,87 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             self.assertGreaterEqual(dig["lowStockCount"], 1)
             self.assertGreaterEqual(dig["expiringSoonCount"], 1)
             self.assertTrue(mock_dig.called)
+
+    # ------------------------------------------------------------------
+    # 10. MONTHLY EMPLOYEE PAYROLL, RENT & LIVE BREAK-EVEN ENGINE
+    # ------------------------------------------------------------------
+    def test_10_monthly_payroll_fixed_bills_and_breakeven_engine(self):
+        email = "payroll@exbos.rw"
+        self.db.users.insert_one(
+            {"email": email, "name": "Demo Owner", "businessName": "Kigali Retail", "plan": "Silver", "accountStatus": "Active"}
+        )
+        headers = self._auth_header(email)
+        month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+
+        # 1. Add Employee (150,000 RWF/mo) + Shop Rent (300,000 RWF/mo) => 450,000 RWF Monthly Fixed
+        r_emp = self.client.post(
+            "/api/v1/commitments",
+            json={"kind": "employee", "name": "Alice Cashier", "roleOrCategory": "Cashier", "monthlyAmountRWF": 150000},
+            headers=headers,
+        )
+        self.assertEqual(r_emp.status_code, 201, r_emp.get_data(as_text=True))
+        emp_id = r_emp.get_json()["data"]["commitment"]["id"]
+
+        r_rent = self.client.post(
+            "/api/v1/commitments",
+            json={"kind": "fixed_bill", "name": "Shop Rent", "roleOrCategory": "Shop Rent", "monthlyAmountRWF": 300000},
+            headers=headers,
+        )
+        self.assertEqual(r_rent.status_code, 201)
+
+        # 2. Pay 50,000 RWF partial salary -> remaining owed = 100,000 RWF + Expense & Transaction saved
+        r_pay = self.client.post(
+            f"/api/v1/commitments/{emp_id}/pay",
+            json={"amountRWF": 50000, "paymentMethod": "MTN MoMo", "monthKey": month_key, "archId": "buy-and-sell"},
+            headers=headers,
+        )
+        self.assertEqual(r_pay.status_code, 201, r_pay.get_data(as_text=True))
+
+        # 3. Record 200,000 RWF profit (below 450,000 RWF fixed costs) -> Loss Zone
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={
+                "id": "SAL-BE-1",
+                "title": "Sale 1",
+                "amountRWF": 500000,
+                "unitCostRWF": 300000,
+                "profitRWF": 200000,
+                "quantity": 1,
+                "date": f"{month_key}-10",
+            },
+            headers=headers,
+        )
+        r_list1 = self.client.get(f"/api/v1/commitments?archId=buy-and-sell&month={month_key}", headers=headers)
+        self.assertEqual(r_list1.status_code, 200)
+        d1 = r_list1.get_json()["data"]
+        emp_row = d1["employees"][0]
+        self.assertEqual(emp_row["paidThisMonthRWF"], 50000)
+        self.assertEqual(emp_row["remainingThisMonthRWF"], 100000)
+        self.assertEqual(emp_row["monthStatus"], "Partial")
+        be1 = d1["breakEven"]
+        self.assertEqual(be1["totalMonthlyFixedRWF"], 450000)
+        self.assertFalse(be1["isProfitable"])
+        self.assertEqual(be1["netMonthlyProfitOrLossRWF"], -250000)
+        self.assertGreater(be1["dailySalesTargetToBreakEvenRWF"], 0)
+
+        # 4. Record another 400,000 RWF profit (total 600k vs 450k fixed) -> Profit / Benefit Zone (+150k)
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={
+                "id": "SAL-BE-2",
+                "title": "Sale 2",
+                "amountRWF": 1000000,
+                "unitCostRWF": 600000,
+                "profitRWF": 400000,
+                "quantity": 1,
+                "date": f"{month_key}-15",
+            },
+            headers=headers,
+        )
+        be2 = self.client.get(f"/api/v1/commitments?archId=buy-and-sell&month={month_key}", headers=headers).get_json()["data"]["breakEven"]
+        self.assertTrue(be2["isProfitable"])
+        self.assertEqual(be2["netMonthlyProfitOrLossRWF"], 150000)
+        self.assertEqual(be2["breakEvenPercent"], 100)
 
 
 if __name__ == "__main__":

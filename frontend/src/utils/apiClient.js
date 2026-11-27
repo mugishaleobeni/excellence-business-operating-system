@@ -501,7 +501,24 @@ export const exbosApi = {
   updateDigestSettings: (payload = {}) =>
     apiRequest('/shifts/digest/settings', { method: 'PUT', body: payload }),
   sendDigestNow: (payload = {}) =>
-    apiRequest('/shifts/digest/send-now', { method: 'POST', body: payload })
+    apiRequest('/shifts/digest/send-now', { method: 'POST', body: payload }),
+
+  // Monthly Employee Payroll, Rent & Fixed Bills + Live Break-Even Engine
+  getCommitments: ({ archId = 'buy-and-sell', branchId = 'main', month = '' } = {}) => {
+    const qs = new URLSearchParams()
+    if (archId) qs.set('archId', archId)
+    if (branchId) qs.set('branchId', branchId)
+    if (month) qs.set('month', month)
+    return apiRequest(`/commitments?${qs.toString()}`)
+  },
+  createCommitment: (payload = {}) =>
+    apiRequest('/commitments', { method: 'POST', body: payload }),
+  updateCommitment: (id, payload = {}) =>
+    apiRequest(`/commitments/${encodeURIComponent(id)}`, { method: 'PUT', body: payload }),
+  deleteCommitment: (id) =>
+    apiRequest(`/commitments/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  payCommitment: (id, payload = {}) =>
+    apiRequest(`/commitments/${encodeURIComponent(id)}/pay`, { method: 'POST', body: payload })
 }
 
 export const apiClient = exbosApi
