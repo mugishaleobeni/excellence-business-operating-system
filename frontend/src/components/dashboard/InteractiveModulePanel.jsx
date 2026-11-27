@@ -66,6 +66,8 @@ import PurchaseReturnsView from "./views/PurchaseReturnsView"
 import StockLinesView from "./views/StockLinesView"
 import ProductModal from "./modals/ProductModal"
 import SaleModal from "./modals/SaleModal"
+import BulkProductImportModal from "./modals/BulkProductImportModal"
+import CashierShiftModal from "./modals/CashierShiftModal"
 import PurchaseModal from "./modals/PurchaseModal"
 import CustomerModal from "./modals/CustomerModal"
 import SupplierModal from "./modals/SupplierModal"
@@ -773,6 +775,8 @@ export default function InteractiveModulePanel({
 
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
   const [forceProductModal, setForceProductModal] = useState(false)
+  const [bulkImportOpen, setBulkImportOpen] = useState(false)
+  const [shiftModalOpen, setShiftModalOpen] = useState(false)
   const [receiveStockMode, setReceiveStockMode] = useState(false)
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryNameInput, setCategoryNameInput] = useState('')
@@ -2625,6 +2629,47 @@ export default function InteractiveModulePanel({
         }}
       />
 
+      {/* Quick Retail Power Actions (Bulk CSV Import & Cashier Shift Z-Report) */}
+      {(activeModule === 'Products' || activeModule === 'Inventory' || activeModule === 'Sales') && (
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          {(activeModule === 'Products' || activeModule === 'Inventory') && (
+            <button
+              type="button"
+              onClick={() => setBulkImportOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-[#218DFF]/35 text-[#9EDCFF] hover:text-white text-xs font-bold cursor-pointer transition"
+            >
+              Import Products from Excel / CSV
+            </button>
+          )}
+          {activeModule === 'Sales' && (
+            <button
+              type="button"
+              onClick={() => setShiftModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/40 text-emerald-300 text-xs font-bold cursor-pointer transition"
+            >
+              Cashier Shift &amp; Z-Report
+            </button>
+          )}
+        </div>
+      )}
+
+      <BulkProductImportModal
+        isOpen={bulkImportOpen}
+        onClose={() => setBulkImportOpen(false)}
+        activeArchId={activeArchId}
+        activeBranchId={activeBranchId}
+        addToast={addToast}
+      />
+
+      <CashierShiftModal
+        isOpen={shiftModalOpen}
+        onClose={() => setShiftModalOpen(false)}
+        activeArchId={activeArchId}
+        activeBranchId={activeBranchId}
+        user={user}
+        addToast={addToast}
+      />
+
       <SaleModal
         isOpen={modalOpen && isSaleForm}
         onClose={() => { setModalOpen(false); setEditRow(null); }}
@@ -2645,6 +2690,10 @@ export default function InteractiveModulePanel({
             const unitCost = Number(selectedProd.purchasePriceRWF ?? selectedProd.unitCostRWF) || 0
             const expectedProfit = newPrice > unitCost ? newPrice - unitCost : (Number(selectedProd.expectedUnitProfitRWF) || 0)
             const expectedMargin = newPrice > 0 ? Math.round((expectedProfit / newPrice) * 100) : 0
+            const remainingSerials =
+              salePayload.serialNumber && Array.isArray(selectedProd.serialNumbers)
+                ? selectedProd.serialNumbers.filter((sn) => sn !== salePayload.serialNumber)
+                : selectedProd.serialNumbers
 
             const prodUpdates = {
               quantity: newStock,
@@ -2654,6 +2703,7 @@ export default function InteractiveModulePanel({
               expectedUnitProfitRWF: expectedProfit,
               expectedMarginPct: expectedMargin,
               amountRWF: newStock * newPrice,
+              ...(Array.isArray(remainingSerials) ? { serialNumbers: remainingSerials } : {}),
               status: newStock <= (Number(selectedProd.lowStockAlert) || 5) ? (newStock <= 0 ? "Out of Stock" : "Low Stock") : "Active"
             }
 

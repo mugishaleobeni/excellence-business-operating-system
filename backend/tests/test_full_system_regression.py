@@ -227,6 +227,7 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             patch("app.routes.whatsapp.get_db", return_value=self.db),
             patch("app.routes.storage.get_db", return_value=self.db),
             patch("app.routes.training.get_db", return_value=self.db),
+            patch("app.routes.shifts.get_db", return_value=self.db),
         ]
         for p in self.db_patchers:
             p.start()
@@ -789,6 +790,105 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         # 7. Super Admin overview reflects 40,000 RWF paid training revenue
         ov = self.client.get("/api/v1/training/admin/overview", headers=admin_h).get_json()["data"]
         self.assertEqual(ov["kpis"]["totalRevenueRWF"], 40000)
+
+    # ------------------------------------------------------------------
+    # 9. BULK CSV IMPORT (WHOLESALE/IMEI/EXPIRY), SHIFTS Z-REPORT & DIGEST
+    # ------------------------------------------------------------------
+    def test_09_bulk_csv_import_cashier_shift_zreport_and_daily_digest(self):
+        free_email = "free-shop@exbos.rw"
+        pro_email = "pro-shop@exbos.rw"
+        self.db.users.insert_one(
+            {"email": free_email, "name": "Free Owner", "phone": "+250788111222", "plan": "Free", "accountStatus": "Active"}
+        )
+        self.db.users.insert_one(
+            {"email": pro_email, "name": "Pro Owner", "businessName": "Kigali Mega Mart", "phone": "+250788333444", "plan": "Bronze", "accountStatus": "Active"}
+        )
+        free_h = self._auth_header(free_email)
+        pro_h = self._auth_header(pro_email)
+
+        # A. Bulk CSV Import with Wholesale, Batch/Expiry & IMEI Serials + SKU Deduplication
+        items = [
+            {
+                "title": "Samsung A15",
+                "sku": "SAM-A15",
+                "purchasePriceRWF": 180000,
+                "sellingPriceRWF": 220000,
+                "wholesalePriceRWF": 200000,
+                "wholesaleMinQty": 3,
+                "quantity": 4,
+                "serialNumbers": ["IMEI-001", "IMEI-002"],
+            },
+            {
+                "title": "Paracetamol 500mg",
+                "sku": "PHARM-01",
+                "purchasePriceRWF": 1000,
+                "sellingPriceRWF": 2000,
+                "quantity": 3,
+                "lowStockAlert": 5,
+                "batchNumber": "B-2026",
+                "expiryDate": "2026-12-10",
+            },
+        ]
+        r_bulk1 = self.client.post("/api/v1/workspaces/buy-and-sell/records/Inventory/bulk", json={"items": items}, headers=pro_h)
+        self.assertEqual(r_bulk1.status_code, 201, r_bulk1.get_data(as_text=True))
+        d1 = r_bulk1.get_json()["data"]
+        self.assertEqual(d1["createdCount"], 2)
+        self.assertEqual(d1["updatedCount"], 0)
+
+        # Re-importing same SKUs updates existing records instead of duplicating
+        items[0]["quantity"] = 10
+        r_bulk2 = self.client.post("/api/v1/workspaces/buy-and-sell/records/Inventory/bulk", json={"items": items}, headers=pro_h)
+        self.assertEqual(r_bulk2.status_code, 201)
+        self.assertEqual(r_bulk2.get_json()["data"]["updatedCount"], 2)
+
+        # B. Cashier Shift Open -> Record Cash Sale -> Close Shift with Shortage -> Silent Owner Alert
+        r_open = self.client.post(
+            "/api/v1/shifts/open",
+            json={"openingFloatRWF": 50000, "cashierName": "Alice Cashier", "archId": "buy-and-sell"},
+            headers=pro_h,
+        )
+        self.assertEqual(r_open.status_code, 201, r_open.get_data(as_text=True))
+        shift_id = r_open.get_json()["data"]["shift"]["id"]
+
+        # Duplicate open shift on same branch rejected (409)
+        self.assertEqual(
+            self.client.post("/api/v1/shifts/open", json={"openingFloatRWF": 10000}, headers=pro_h).status_code,
+            409,
+        )
+
+        # Record a 30,000 RWF Cash sale during shift (expected cash = 50k + 30k = 80k)
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={"id": "SAL-SHF-1", "title": "Cash Sale", "amountRWF": 30000, "paymentMethod": "Cash", "status": "Paid"},
+            headers=pro_h,
+        )
+
+        # Close shift with counted cash 72,000 RWF -> 8,000 RWF shortage triggers Owner WhatsApp + notification
+        with patch("app.services.whatsapp_client.send_whatsapp_message", return_value={"ok": True}) as mock_wa:
+            r_close = self.client.post(
+                f"/api/v1/shifts/{shift_id}/close",
+                json={"countedCashRWF": 72000, "closingNotes": "Evening close"},
+                headers=pro_h,
+            )
+            self.assertEqual(r_close.status_code, 200, r_close.get_data(as_text=True))
+            closed = r_close.get_json()["data"]["shift"]
+            self.assertEqual(closed["expectedCashRWF"], 80000)
+            self.assertEqual(closed["varianceRWF"], -8000)
+            self.assertTrue(mock_wa.called)
+
+        # C. Daily Owner WhatsApp Digest: Free plan blocked (402), Bronze plan succeeds (200)
+        self.assertEqual(
+            self.client.post("/api/v1/shifts/digest/send-now", json={"archId": "buy-and-sell"}, headers=free_h).status_code,
+            402,
+        )
+        with patch("app.services.whatsapp_client.send_whatsapp_message", return_value={"ok": True}) as mock_dig:
+            r_dig = self.client.post("/api/v1/shifts/digest/send-now", json={"archId": "buy-and-sell"}, headers=pro_h)
+            self.assertEqual(r_dig.status_code, 200, r_dig.get_data(as_text=True))
+            dig = r_dig.get_json()["data"]["digest"]
+            self.assertEqual(dig["totalSalesRWF"], 30000)
+            self.assertGreaterEqual(dig["lowStockCount"], 1)
+            self.assertGreaterEqual(dig["expiringSoonCount"], 1)
+            self.assertTrue(mock_dig.called)
 
 
 if __name__ == "__main__":

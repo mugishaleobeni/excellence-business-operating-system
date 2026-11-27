@@ -1789,4 +1789,161 @@ def get_public_document(doc_id: str):
     )
 
 
+@workspaces_bp.route("/<string:arch_id>/records/Inventory/bulk", methods=["POST"])
+def bulk_import_inventory_records(arch_id: str):
+    """
+    Bulk import products & opening stock from Excel/CSV (supports wholesale pricing,
+    batch/expiry dates, serial/IMEI lists, and SKU deduplication).
+    """
+    if arch_id not in ARCHITECTURE_IDS:
+        return error_response(error=f"Unknown architecture '{arch_id}'.", status_code=404)
+
+    db = get_db()
+    scope_key = _resolve_scope_key(db)
+    payload = request.get_json(silent=True) or {}
+    items = payload.get("items")
+    if not isinstance(items, list) or len(items) == 0:
+        return error_response("Provide a non-empty 'items' array to import.", status_code=400)
+    if len(items) > 500:
+        return error_response("Maximum 500 products per CSV import batch.", status_code=400)
+
+    req_branch_id = str(payload.get("branchId") or "main").strip()
+    _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, req_branch_id)
+    if branch_doc and effective_branch_id != "main" and str(branch_doc.get("status") or "Active") == "Frozen":
+        return error_response(
+            f"Branch '{branch_doc.get('name', effective_branch_id)}' is Frozen (Read-Only) by Main HQ.",
+            status_code=403,
+        )
+
+    from app.utils.entitlements import check_entitlement
+    allowed, limit_err = check_entitlement(db, scope_key, "maxProducts")
+    if not allowed:
+        return error_response(error=limit_err["message"], details=limit_err, status_code=402)
+
+    ws = _load_or_init_workspace(db, arch_id, scope_key, persist_if_missing=True)
+    records = dict(ws.get("records") or {})
+    inv_list = list(records.get("Inventory") or [])
+    prod_list = list(records.get("Products") or [])
+
+    sku_index = {}
+    for idx, existing in enumerate(inv_list):
+        if isinstance(existing, dict):
+            ek = str(existing.get("sku") or "").strip().lower()
+            eb = str(existing.get("branchId") or "main").strip()
+            if ek:
+                sku_index[(ek, eb)] = idx
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    base_ms = int(now.timestamp() * 1000)
+
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    imported_records = []
+
+    for i, raw in enumerate(items):
+        if not isinstance(raw, dict):
+            skipped_count += 1
+            continue
+        title = str(raw.get("title") or raw.get("name") or "").strip()
+        if not title:
+            skipped_count += 1
+            continue
+
+        sku = str(raw.get("sku") or raw.get("barcode") or "").strip()
+        purchase_p = max(0.0, float(raw.get("purchasePriceRWF") or raw.get("costPrice") or 0))
+        selling_p = max(0.0, float(raw.get("sellingPriceRWF") or raw.get("price") or 0))
+        wholesale_p = max(0.0, float(raw.get("wholesalePriceRWF") or 0))
+        wholesale_min = max(1, int(float(raw.get("wholesaleMinQty") or 5)))
+        qty = max(0.0, float(raw.get("quantity") or raw.get("stock") or 0))
+        low_alert = max(0.0, float(raw.get("lowStockAlert") or 5))
+        batch_no = str(raw.get("batchNumber") or "").strip()[:60]
+        expiry = str(raw.get("expiryDate") or "").strip()[:10]
+        serials = raw.get("serialNumbers")
+        if isinstance(serials, str):
+            serials = [s.strip() for s in serials.split("|") if s.strip()]
+        elif not isinstance(serials, list):
+            serials = []
+
+        sku_key = (sku.lower(), effective_branch_id)
+        if sku and sku_key in sku_index:
+            idx = sku_index[sku_key]
+            existing = dict(inv_list[idx])
+            existing["title"] = title
+            existing["name"] = title
+            existing["purchasePriceRWF"] = purchase_p or existing.get("purchasePriceRWF", 0)
+            existing["sellingPriceRWF"] = selling_p or existing.get("sellingPriceRWF", 0)
+            if wholesale_p > 0:
+                existing["wholesalePriceRWF"] = wholesale_p
+                existing["wholesaleMinQty"] = wholesale_min
+            existing["quantity"] = qty
+            if batch_no:
+                existing["batchNumber"] = batch_no
+            if expiry:
+                existing["expiryDate"] = expiry
+            if serials:
+                existing["trackSerialNumbers"] = True
+                existing["serialNumbers"] = serials
+            existing["updatedAt"] = now_iso
+            inv_list[idx] = existing
+            updated_count += 1
+            imported_records.append(existing)
+            continue
+
+        rec_id = f"PRD-CSV-{base_ms}-{i + 1}"
+        new_rec = {
+            "id": rec_id,
+            "title": title,
+            "name": title,
+            "sku": sku or f"SKU-{base_ms % 100000}-{i + 1}",
+            "category": str(raw.get("category") or "General").strip() or "General",
+            "unit": str(raw.get("unit") or "piece").strip() or "piece",
+            "purchasePriceRWF": purchase_p,
+            "sellingPriceRWF": selling_p,
+            "wholesalePriceRWF": wholesale_p,
+            "wholesaleMinQty": wholesale_min,
+            "amountRWF": selling_p,
+            "quantity": qty,
+            "lowStockAlert": low_alert,
+            "batchNumber": batch_no,
+            "expiryDate": expiry,
+            "trackSerialNumbers": bool(raw.get("trackSerialNumbers") or len(serials) > 0),
+            "serialNumbers": serials,
+            "variants": raw.get("variants") if isinstance(raw.get("variants"), list) else [],
+            "branchId": effective_branch_id,
+            "status": "In Stock" if qty > 0 else "Out of Stock",
+            "date": now.strftime("%Y-%m-%d"),
+            "createdAt": now_iso,
+            "updatedAt": now_iso,
+        }
+        inv_list.insert(0, new_rec)
+        prod_list.insert(0, dict(new_rec))
+        if sku:
+            sku_index[sku_key] = 0
+        created_count += 1
+        imported_records.append(new_rec)
+
+    records["Inventory"] = inv_list
+    records["Products"] = prod_list
+    db.workspaces.update_one(
+        {"scopeKey": scope_key, "architectureId": arch_id},
+        {"$set": {"records": records, "updatedAt": now_iso}},
+        upsert=True,
+    )
+    _sync_bucket_to_module_records(db, scope_key, arch_id, "Inventory", inv_list, now_iso)
+
+    return success_response(
+        data={
+            "createdCount": created_count,
+            "updatedCount": updated_count,
+            "skippedCount": skipped_count,
+            "importedRecords": imported_records[:50],
+        },
+        message=f"Bulk import complete: {created_count} created, {updated_count} updated, {skipped_count} skipped.",
+        status_code=201,
+    )
+
+
+
 

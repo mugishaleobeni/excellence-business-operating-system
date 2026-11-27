@@ -10,6 +10,7 @@ import BarcodeScannerModal from "../../common/BarcodeScannerModal";
 import { exbosApi } from "../../../utils/apiClient";
 import { computeVatSplit, DEFAULT_RRA_TAX_PROFILE } from "../../../utils/rraTaxUtils";
 import { readCachedTaxProfile, writeCachedTaxProfile } from "../../../utils/offlineStorage";
+import { printThermalReceipt } from "../../../utils/printDocument";
 
 export default function SaleModal({
   isOpen,
@@ -47,6 +48,9 @@ export default function SaleModal({
   });
   const [saleCustomerTin, setSaleCustomerTin] = useState("");
   const [saleEbmNumber, setSaleEbmNumber] = useState("");
+  const [salePriceTier, setSalePriceTier] = useState("retail"); // 'retail' | 'wholesale'
+  const [saleSerialNumber, setSaleSerialNumber] = useState("");
+  const [saleVariant, setSaleVariant] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -121,6 +125,9 @@ export default function SaleModal({
       setSaleCustomerPhone("");
       setSaleCustomerTin("");
       setSaleEbmNumber("");
+      setSalePriceTier("retail");
+      setSaleSerialNumber("");
+      setSaleVariant("");
       setSalePaymentMethod("Cash");
       setSalePaymentStatus("Paid in Full");
       setSaleProductDropdownOpen(false);
@@ -202,6 +209,9 @@ export default function SaleModal({
 
   const handleSelectProduct = (prod) => {
     setSaleProductId(prod.id);
+    setSalePriceTier("retail");
+    setSaleSerialNumber(Array.isArray(prod.serialNumbers) && prod.serialNumbers[0] ? prod.serialNumbers[0] : "");
+    setSaleVariant(Array.isArray(prod.variants) && prod.variants[0] ? (typeof prod.variants[0] === "string" ? prod.variants[0] : prod.variants[0]?.label || "") : "");
     setSaleUnitPrice(prod.sellingPriceRWF ? String(prod.sellingPriceRWF) : (prod.amountRWF ? String(prod.amountRWF) : ""));
     setSaleProductDropdownOpen(false);
     setSaleProductSearch("");
@@ -273,6 +283,9 @@ export default function SaleModal({
       customer: custPhone ? `${custName} (${custPhone})` : custName,
       customerName: custName,
       customerPhone: custPhone,
+      priceTier: salePriceTier,
+      ...(saleSerialNumber.trim() ? { serialNumber: saleSerialNumber.trim() } : {}),
+      ...(saleVariant.trim() ? { variant: saleVariant.trim() } : {}),
       ...(taxProfile.rraEnabled
         ? {
             customerTin: saleCustomerTin.trim(),
@@ -598,13 +611,104 @@ export default function SaleModal({
 
                   {/* Stock & Cost info pill if product selected */}
                   {selectedSaleProduct && (
-                    <div className="flex flex-wrap items-center justify-between text-[11px] px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-300">
-                      <span className="flex items-center gap-1.5">
-                        <Package className="w-3.5 h-3.5 text-[#218DFF]" />
-                        <span>In Stock: <strong className="text-white">{saleAvailableStock} {saleUnit}</strong></span>
-                      </span>
-                      <span>Unit Cost: <strong className="text-slate-200">{formatRWF(saleUnitCost)}</strong></span>
-                      <span>Catalog Price: <strong className="text-[#9EDCFF]">{formatRWF(saleOriginalCatalogPrice)}</strong></span>
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between text-[11px] px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-slate-300">
+                        <span className="flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-[#218DFF]" />
+                          <span>In Stock: <strong className="text-white">{saleAvailableStock} {saleUnit}</strong></span>
+                        </span>
+                        <span>Unit Cost: <strong className="text-slate-200">{formatRWF(saleUnitCost)}</strong></span>
+                        <span>Catalog Price: <strong className="text-[#9EDCFF]">{formatRWF(saleOriginalCatalogPrice)}</strong></span>
+                      </div>
+
+                      {/* Dual Retail / Wholesale Price Tier Toggle */}
+                      {Number(selectedSaleProduct.wholesalePriceRWF || 0) > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[#218DFF]/10 border border-[#218DFF]/30 text-[11px]">
+                          <span className="text-[#9EDCFF] font-semibold">
+                            Pricing Mode (Wholesale min {selectedSaleProduct.wholesaleMinQty || 5} {saleUnit})
+                          </span>
+                          <div className="inline-flex rounded-lg bg-[#03091F] p-0.5 gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSalePriceTier("retail");
+                                setSaleUnitPrice(String(selectedSaleProduct.sellingPriceRWF || selectedSaleProduct.amountRWF || 0));
+                              }}
+                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold cursor-pointer ${
+                                salePriceTier === "retail" ? "bg-[#218DFF] text-white" : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              Retail ({formatRWF(selectedSaleProduct.sellingPriceRWF || 0)})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSalePriceTier("wholesale");
+                                setSaleUnitPrice(String(selectedSaleProduct.wholesalePriceRWF));
+                              }}
+                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold cursor-pointer ${
+                                salePriceTier === "wholesale" ? "bg-emerald-500 text-slate-950" : "text-slate-400 hover:text-white"
+                              }`}
+                            >
+                              Wholesale ({formatRWF(selectedSaleProduct.wholesalePriceRWF)})
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Variant & Serial / IMEI Picker */}
+                      {(Boolean(selectedSaleProduct.trackSerialNumbers) ||
+                        (Array.isArray(selectedSaleProduct.serialNumbers) && selectedSaleProduct.serialNumbers.length > 0) ||
+                        (Array.isArray(selectedSaleProduct.variants) && selectedSaleProduct.variants.length > 0)) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {Array.isArray(selectedSaleProduct.variants) && selectedSaleProduct.variants.length > 0 && (
+                            <div>
+                              <label className="block text-[10px] font-bold text-[#9EDCFF] mb-1">Select Variant</label>
+                              <select
+                                value={saleVariant}
+                                onChange={(e) => setSaleVariant(e.target.value)}
+                                className="w-full px-3 py-2 rounded-xl bg-[#071644] border border-white/15 text-xs text-white"
+                              >
+                                {selectedSaleProduct.variants.map((v, i) => {
+                                  const label = typeof v === "string" ? v : v?.label || "";
+                                  return (
+                                    <option key={i} value={label}>
+                                      {label}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+                          {(Boolean(selectedSaleProduct.trackSerialNumbers) ||
+                            (Array.isArray(selectedSaleProduct.serialNumbers) && selectedSaleProduct.serialNumbers.length > 0)) && (
+                            <div>
+                              <label className="block text-[10px] font-bold text-[#9EDCFF] mb-1">IMEI / Serial Number</label>
+                              {Array.isArray(selectedSaleProduct.serialNumbers) && selectedSaleProduct.serialNumbers.length > 0 ? (
+                                <select
+                                  value={saleSerialNumber}
+                                  onChange={(e) => setSaleSerialNumber(e.target.value)}
+                                  className="w-full px-3 py-2 rounded-xl bg-[#071644] border border-white/15 text-xs font-mono text-white"
+                                >
+                                  {selectedSaleProduct.serialNumbers.map((sn, i) => (
+                                    <option key={i} value={sn}>
+                                      {sn}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={saleSerialNumber}
+                                  onChange={(e) => setSaleSerialNumber(e.target.value)}
+                                  placeholder="Scan or enter IMEI / Serial"
+                                  className="w-full px-3 py-2 rounded-xl bg-[#071644] border border-white/15 text-xs font-mono text-white"
+                                />
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

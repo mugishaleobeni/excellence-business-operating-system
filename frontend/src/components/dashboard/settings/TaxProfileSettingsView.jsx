@@ -21,21 +21,34 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [digest, setDigest] = useState({ enabled: false, sendHour: '20:00', phone: '', lastSentAt: '' })
+  const [savingDigest, setSavingDigest] = useState(false)
+  const [sendingDigest, setSendingDigest] = useState(false)
 
   useEffect(() => {
     let mounted = true
     const scope = getActiveTaxScope()
-    exbosApi
-      .getTaxProfile()
-      .then((res) => {
+    Promise.all([
+      exbosApi.getTaxProfile().catch(() => null),
+      exbosApi.getDigestSettings().catch(() => null)
+    ])
+      .then(([res, digRes]) => {
         const fetchedProfile = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
         if (mounted && res?.ok && fetchedProfile) {
           const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...fetchedProfile }
           setProfile(merged)
           writeCachedTaxProfile(scope, merged)
         }
+        const digData = digRes?.data?.data || digRes?.data
+        if (mounted && digRes?.ok && digData) {
+          setDigest({
+            enabled: Boolean(digData.enabled),
+            sendHour: digData.sendHour || '20:00',
+            phone: digData.phone || '',
+            lastSentAt: digData.lastSentAt || ''
+          })
+        }
       })
-      .catch(() => {})
       .finally(() => {
         if (mounted) setLoading(false)
       })
@@ -43,6 +56,46 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
       mounted = false
     }
   }, [])
+
+  const handleSaveDigest = async () => {
+    setSavingDigest(true)
+    try {
+      const res = await exbosApi.updateDigestSettings(digest)
+      if (!res?.ok) {
+        if (res?.status !== 402) {
+          addToast?.({ type: 'error', title: 'Could Not Save Digest', message: res?.data?.error || 'Try again.' })
+        }
+        return
+      }
+      addToast?.({
+        type: 'success',
+        title: 'Daily WhatsApp Digest Saved',
+        message: digest.enabled ? `Scheduled daily at ${digest.sendHour}.` : 'Daily WhatsApp Digest turned off.'
+      })
+    } finally {
+      setSavingDigest(false)
+    }
+  }
+
+  const handleSendDigestNow = async () => {
+    setSendingDigest(true)
+    try {
+      const res = await exbosApi.sendDigestNow({ phone: digest.phone })
+      if (!res?.ok) {
+        if (res?.status !== 402) {
+          addToast?.({ type: 'error', title: 'Digest Send Failed', message: res?.data?.error || 'Try again.' })
+        }
+        return
+      }
+      addToast?.({
+        type: 'success',
+        title: 'Daily Digest Sent',
+        message: `Today's sales, cash/MoMo, and stock summary was sent to ${digest.phone || 'your WhatsApp'}.`
+      })
+    } finally {
+      setSendingDigest(false)
+    }
+  }
 
   const updateField = (key, value) => {
     setProfile((prev) => ({ ...prev, [key]: value }))
@@ -311,6 +364,72 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Automated Daily Owner WhatsApp Digest Card */}
+      <div className="exbos-glass-card p-6 sm:p-8 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+          <div>
+            <span className="text-xs font-orbitron uppercase font-bold text-emerald-300">
+              Executive End-of-Day Automation (Bronze+)
+            </span>
+            <h3 className="font-orbitron text-lg font-extrabold text-white mt-0.5">
+              Automated Daily Owner WhatsApp Digest
+            </h3>
+            <p className="text-xs text-slate-300 mt-1">
+              Receive an automatic daily WhatsApp summary of Total Sales, Cash vs MoMo, Expenses, Net Cashflow, Low Stock, and Expiring Items.
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 text-xs font-bold text-white cursor-pointer shrink-0">
+            <input
+              type="checkbox"
+              checked={digest.enabled}
+              onChange={(e) => setDigest((p) => ({ ...p, enabled: e.target.checked }))}
+            />
+            <span>{digest.enabled ? 'Daily Digest: ON' : 'Daily Digest: OFF'}</span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+          <div>
+            <label className="font-bold text-slate-200 block mb-1">Owner WhatsApp Number</label>
+            <input
+              type="tel"
+              value={digest.phone}
+              onChange={(e) => setDigest((p) => ({ ...p, phone: e.target.value }))}
+              placeholder="+250788..."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#03091F]/80 border border-white/15 text-white"
+            />
+          </div>
+          <div>
+            <label className="font-bold text-slate-200 block mb-1">Daily Send Time</label>
+            <input
+              type="time"
+              value={digest.sendHour}
+              onChange={(e) => setDigest((p) => ({ ...p, sendHour: e.target.value }))}
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[#03091F]/80 border border-white/15 text-white"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <button
+            type="button"
+            disabled={sendingDigest}
+            onClick={handleSendDigestNow}
+            className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-xs font-bold cursor-pointer"
+          >
+            {sendingDigest ? 'Sending...' : 'Send Today\'s Digest Now'}
+          </button>
+          <button
+            type="button"
+            disabled={savingDigest}
+            onClick={handleSaveDigest}
+            className="px-4 py-2 rounded-xl bg-[#218DFF] hover:bg-[#197be6] text-white text-xs font-orbitron font-bold cursor-pointer"
+          >
+            {savingDigest ? 'Saving...' : 'Save Digest Settings'}
+          </button>
+        </div>
       </div>
     </div>
   )

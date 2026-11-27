@@ -41,6 +41,14 @@ export default function ProductModal({
   const [productThresholdLow, setProductThresholdLow] = useState("5");
   const [productThresholdMed, setProductThresholdMed] = useState("20");
   const [productThresholdHigh, setProductThresholdHigh] = useState("50");
+  const [wholesalePrice, setWholesalePrice] = useState("");
+  const [wholesaleMinQty, setWholesaleMinQty] = useState("5");
+  const [batchNumber, setBatchNumber] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
+  const [trackSerialNumbers, setTrackSerialNumbers] = useState(false);
+  const [serialNumbersText, setSerialNumbersText] = useState("");
+  const [variantsText, setVariantsText] = useState("");
+  const [showAdvancedRetail, setShowAdvancedRetail] = useState(false);
 
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState("");
@@ -63,6 +71,22 @@ export default function ProductModal({
       setProductCurrentStock(editRow.quantity !== undefined ? String(editRow.quantity) : "0");
       setProductLowStockAlert(editRow.lowStockAlert !== undefined ? String(editRow.lowStockAlert) : "5");
       setProductIsApproximateQty(Boolean(editRow.isApproximateQty));
+      setWholesalePrice(editRow.wholesalePriceRWF ? String(editRow.wholesalePriceRWF) : "");
+      setWholesaleMinQty(editRow.wholesaleMinQty ? String(editRow.wholesaleMinQty) : "5");
+      setBatchNumber(editRow.batchNumber || "");
+      setExpiryDate(editRow.expiryDate ? String(editRow.expiryDate).slice(0, 10) : "");
+      setTrackSerialNumbers(Boolean(editRow.trackSerialNumbers || (Array.isArray(editRow.serialNumbers) && editRow.serialNumbers.length > 0)));
+      setSerialNumbersText(Array.isArray(editRow.serialNumbers) ? editRow.serialNumbers.join(", ") : "");
+      setVariantsText(Array.isArray(editRow.variants) ? editRow.variants.map((v) => (typeof v === "string" ? v : v?.label || "")).filter(Boolean).join(", ") : "");
+      setShowAdvancedRetail(
+        Boolean(
+          editRow.wholesalePriceRWF ||
+            editRow.batchNumber ||
+            editRow.expiryDate ||
+            editRow.trackSerialNumbers ||
+            (Array.isArray(editRow.variants) && editRow.variants.length > 0)
+        )
+      );
     } else if (isOpen) {
       setTitle("");
       setProductSku("");
@@ -73,6 +97,14 @@ export default function ProductModal({
       setProductCurrentStock("0");
       setProductLowStockAlert("5");
       setProductIsApproximateQty(false);
+      setWholesalePrice("");
+      setWholesaleMinQty("5");
+      setBatchNumber("");
+      setExpiryDate("");
+      setTrackSerialNumbers(false);
+      setSerialNumbersText("");
+      setVariantsText("");
+      setShowAdvancedRetail(false);
       setShowInlineCategoryInput(false);
       setInlineCategoryName("");
     }
@@ -164,6 +196,19 @@ export default function ProductModal({
       purchasePriceRWF: cost,
       unitCostRWF: cost,
       sellingPriceRWF: price,
+      wholesalePriceRWF: parseNumericInput(wholesalePrice) || 0,
+      wholesaleMinQty: Math.max(1, Number(wholesaleMinQty) || 5),
+      batchNumber: batchNumber.trim(),
+      expiryDate: expiryDate ? String(expiryDate).slice(0, 10) : "",
+      trackSerialNumbers: Boolean(trackSerialNumbers),
+      serialNumbers: serialNumbersText
+        .split(/[\n,|]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+      variants: variantsText
+        .split(/[,|]+/)
+        .map((v) => v.trim())
+        .filter(Boolean),
       expectedUnitProfitRWF: unitIncome,
       expectedMarginPct: marginPct,
       amountRWF: price * stock,
@@ -691,6 +736,103 @@ export default function ProductModal({
                     </div>
                   </div>
                 )}
+
+                {/* Advanced Retail / Pharmacy / Electronics Options (Wholesale, Batch/Expiry, Serial/IMEI, Variants) */}
+                <div className="rounded-2xl bg-white/[0.04] border border-white/10 p-3.5 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedRetail((prev) => !prev)}
+                    className="w-full flex items-center justify-between text-left text-xs font-bold text-[#9EDCFF] cursor-pointer"
+                  >
+                    <span>Wholesale Price, Expiry Date, IMEI / Serial &amp; Variants (Optional)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/10 text-white">
+                      {showAdvancedRetail ? "Hide" : "Configure"}
+                    </span>
+                  </button>
+
+                  {showAdvancedRetail && (
+                    <div className="space-y-3 pt-2 border-t border-white/10 text-xs">
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] text-slate-300 mb-1">Wholesale Price (RWF)</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={wholesalePrice}
+                            onChange={(e) => setWholesalePrice(formatWithCommas(e.target.value))}
+                            placeholder="e.g. 18,000"
+                            className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-300 mb-1">Min Qty for Wholesale</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={wholesaleMinQty}
+                            onChange={(e) => setWholesaleMinQty(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] text-slate-300 mb-1">Batch Number (Pharmacy/Food)</label>
+                          <input
+                            type="text"
+                            value={batchNumber}
+                            onChange={(e) => setBatchNumber(e.target.value)}
+                            placeholder="e.g. BATCH-2026A"
+                            className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-300 mb-1">Expiry Date (30d Alert)</label>
+                          <input
+                            type="date"
+                            value={expiryDate}
+                            onChange={(e) => setExpiryDate(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] text-slate-300 mb-1">
+                          Product Variants (Comma-separated, e.g. Size M, Size L, Black)
+                        </label>
+                        <input
+                          type="text"
+                          value={variantsText}
+                          onChange={(e) => setVariantsText(e.target.value)}
+                          placeholder="e.g. Black 128GB, Blue 256GB"
+                          className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="inline-flex items-center gap-2 text-[11px] text-slate-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={trackSerialNumbers}
+                            onChange={(e) => setTrackSerialNumbers(e.target.checked)}
+                          />
+                          Track Serial Numbers / IMEI (Electronics &amp; Appliances)
+                        </label>
+                        {trackSerialNumbers && (
+                          <textarea
+                            rows={2}
+                            value={serialNumbersText}
+                            onChange={(e) => setSerialNumbersText(e.target.value)}
+                            placeholder="Enter IMEI / Serial numbers separated by commas or new lines"
+                            className="w-full px-3 py-2 rounded-xl bg-[#03091F] border border-white/15 text-white text-xs font-mono"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 </div>
 

@@ -293,8 +293,52 @@ export default function DashboardPage() {
           if (markOwnerNotificationRead) markOwnerNotificationRead(n.id)
         }
       }))
-    return [...serverAlerts, ...baseBusinessAlerts]
-  }, [ownerNotifications, dismissedAlertIds, baseBusinessAlerts, markOwnerNotificationRead])
+
+    // Pharmacy / Grocery Batch & Expiry Alerts (within 30 days or already expired)
+    const expiryAlerts = []
+    const recs = activeWorkspace?.records || {}
+    const invItems = [...(recs.Inventory || []), ...(recs.Products || [])]
+    const seenExp = new Set()
+    const nowDay = new Date().toISOString().slice(0, 10)
+    const soonDate = new Date()
+    soonDate.setDate(soonDate.getDate() + 30)
+    const soonDay = soonDate.toISOString().slice(0, 10)
+
+    let expiringCount = 0
+    let expiredCount = 0
+    invItems.forEach((item) => {
+      if (!item || !item.expiryDate) return
+      const idKey = String(item.id || item.title || '')
+      if (idKey && seenExp.has(idKey)) return
+      if (idKey) seenExp.add(idKey)
+      const exp = String(item.expiryDate).slice(0, 10)
+      if (exp < nowDay) expiredCount += 1
+      else if (exp <= soonDay) expiringCount += 1
+    })
+
+    if (expiredCount > 0 && !dismissedAlertIds.includes('exbos-expired-stock')) {
+      expiryAlerts.push({
+        id: 'exbos-expired-stock',
+        title: `${expiredCount} Expired Stock Item${expiredCount === 1 ? '' : 's'}`,
+        message: 'Remove or write off expired batches from inventory to stay compliant.',
+        bg: 'bg-rose-500/15 border-rose-400/40',
+        actionLabel: 'Inspect Stock',
+        onAction: () => handleModuleClick('Products')
+      })
+    }
+    if (expiringCount > 0 && !dismissedAlertIds.includes('exbos-expiring-soon')) {
+      expiryAlerts.push({
+        id: 'exbos-expiring-soon',
+        title: `${expiringCount} Item${expiringCount === 1 ? '' : 's'} Expiring Within 30 Days`,
+        message: 'Prioritize FEFO sales or promotions on short-dated batches.',
+        bg: 'bg-amber-500/15 border-amber-400/40',
+        actionLabel: 'View Products',
+        onAction: () => handleModuleClick('Products')
+      })
+    }
+
+    return [...serverAlerts, ...expiryAlerts, ...baseBusinessAlerts]
+  }, [ownerNotifications, dismissedAlertIds, baseBusinessAlerts, markOwnerNotificationRead, activeWorkspace])
 
   return (
     <div className="exbos-dashboard-bg">

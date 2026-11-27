@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { formatRWF } from '../../../utils/currencyWords'
 import { downloadDocumentFile, DEFAULT_DOCUMENT_TEMPLATE } from './documentUtils'
-import { printBusinessDocument } from '../../../utils/printDocument'
+import { printBusinessDocument, printThermalReceipt } from '../../../utils/printDocument'
 
 export default function DocumentPreviewModal({
   isOpen,
@@ -64,7 +64,27 @@ export default function DocumentPreviewModal({
               className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-[#9EDCFF] hover:text-white flex items-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-3.5 h-3.5 text-[#218DFF]" />
-              <span className="hidden sm:inline">Print</span>
+              <span className="hidden sm:inline">Print A4</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => printThermalReceipt(doc, businessInfo, '80mm')}
+              title="Print 80mm POS Thermal Receipt"
+              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-emerald-300 hover:text-white flex items-center gap-1 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">80mm</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => printThermalReceipt(doc, businessInfo, '58mm')}
+              title="Print 58mm Mini Thermal Receipt"
+              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-semibold text-amber-300 hover:text-white flex items-center gap-1 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">58mm</span>
             </button>
 
             <button

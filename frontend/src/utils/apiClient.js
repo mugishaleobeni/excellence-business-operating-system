@@ -483,7 +483,25 @@ export const exbosApi = {
   superAdminDeleteTrainingCourse: (courseId) =>
     apiRequest(`/training/admin/courses/${encodeURIComponent(courseId)}`, {
       method: 'DELETE'
-    })
+    }),
+
+  // Bulk CSV Product Import, Cashier Shifts (Z-Report) & Daily WhatsApp Digest
+  bulkImportProducts: (archId, payload = {}) =>
+    apiRequest(withScope(`/workspaces/${encodeURIComponent(archId || 'buy-and-sell')}/records/Inventory/bulk`), {
+      method: 'POST',
+      body: payload
+    }),
+  getShifts: (branchId = '') =>
+    apiRequest(`/shifts${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`),
+  openShift: (payload = {}) =>
+    apiRequest('/shifts/open', { method: 'POST', body: payload }),
+  closeShift: (shiftId, payload = {}) =>
+    apiRequest(`/shifts/${encodeURIComponent(shiftId)}/close`, { method: 'POST', body: payload }),
+  getDigestSettings: () => apiRequest('/shifts/digest/settings'),
+  updateDigestSettings: (payload = {}) =>
+    apiRequest('/shifts/digest/settings', { method: 'PUT', body: payload }),
+  sendDigestNow: (payload = {}) =>
+    apiRequest('/shifts/digest/send-now', { method: 'POST', body: payload })
 }
 
 export const apiClient = exbosApi

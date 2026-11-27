@@ -68,6 +68,59 @@ export function executePrintHtml(htmlContent, documentTitle = 'ExBOS Document') 
 }
 
 /**
+ * Print a crisp 58mm or 80mm POS Thermal Receipt (Bluetooth / USB thermal printers)
+ */
+export function printThermalReceipt(docItem, businessInfo = {}, paperWidth = '80mm') {
+  if (!docItem) return
+  const widthCss = paperWidth === '58mm' ? '58mm' : '80mm'
+  const bName = businessInfo.businessName || 'ExBOS Business'
+  const bPhone = businessInfo.phone || ''
+  const bAddress = businessInfo.address || 'Kigali, Rwanda'
+  const items = Array.isArray(docItem.items) ? docItem.items : []
+  const totalAmount = Number(docItem.amount || 0)
+
+  const itemRows = items
+    .map(
+      (it) => `
+      <div style="display:flex;justify-content:space-between;gap:6px;margin:4px 0;font-size:11px;">
+        <div style="flex:1;">
+          <strong>${it.name || 'Item'}</strong>
+          <div style="font-size:10px;color:#333;">${it.quantity || 1} × ${formatRWF(it.unitPrice || it.total || 0)}</div>
+          ${it.serialNumber ? `<div style="font-size:9px;font-family:monospace;">IMEI/SN: ${it.serialNumber}</div>` : ''}
+          ${it.variant ? `<div style="font-size:9px;">Variant: ${it.variant}</div>` : ''}
+        </div>
+        <div style="font-weight:700;white-space:nowrap;">${formatRWF(it.total ?? 0)}</div>
+      </div>`
+    )
+    .join('')
+
+  const html = `
+    <div style="width:${widthCss};max-width:${widthCss};margin:0 auto;padding:8px 6px;font-family:'Courier New',monospace;color:#000;background:#fff;line-height:1.35;">
+      <div style="text-align:center;border-bottom:1px dashed #000;padding-bottom:6px;margin-bottom:6px;">
+        <div style="font-size:14px;font-weight:900;text-transform:uppercase;">${bName}</div>
+        <div style="font-size:10px;">${bAddress}${bPhone ? ` · ${bPhone}` : ''}</div>
+        <div style="font-size:11px;font-weight:700;margin-top:4px;">${docItem.type || 'POS RECEIPT'} #${docItem.id || ''}</div>
+        <div style="font-size:10px;">${docItem.date || new Date().toISOString().slice(0, 10)}</div>
+      </div>
+      ${docItem.recipientName ? `<div style="font-size:10px;margin-bottom:6px;">Customer: <strong>${docItem.recipientName}</strong></div>` : ''}
+      <div style="border-bottom:1px dashed #000;padding-bottom:6px;margin-bottom:6px;">
+        ${itemRows || `<div style="font-size:11px;">${docItem.title || 'Sale Receipt'}</div>`}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:900;margin:6px 0;">
+        <span>TOTAL</span>
+        <span>${formatRWF(totalAmount)}</span>
+      </div>
+      ${docItem.paymentMethod ? `<div style="font-size:10px;">Payment: ${docItem.paymentMethod}</div>` : ''}
+      ${docItem.ebmNumber ? `<div style="font-size:10px;">EBM #: ${docItem.ebmNumber}</div>` : ''}
+      <div style="text-align:center;border-top:1px dashed #000;margin-top:8px;padding-top:6px;font-size:10px;">
+        Thank you for your business!<br/>Powered by ExBOS · PYLARIX
+      </div>
+    </div>
+  `
+  executePrintHtml(html, `${docItem.type || 'Receipt'}-${docItem.id || 'POS'}-${paperWidth}`)
+}
+
+/**
  * Print an official Business Document (Invoice, Receipt, Quotation, Purchase Order, Statement)
  */
 export function printBusinessDocument(docItem, businessInfo = {}) {
