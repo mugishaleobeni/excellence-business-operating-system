@@ -403,7 +403,8 @@ export const exbosApi = {
     }),
   superAdminResetPlanLimits: () =>
     apiRequest('/super-admin/plan-limits/reset', { method: 'POST' }),
-  getTaxProfile: () => apiRequest(withScope('/tax/profile')),
+  getTaxProfile: (branchId = 'main') =>
+    apiRequest(withScope(`/tax/profile${branchId ? `?branchId=${encodeURIComponent(branchId)}` : ''}`)),
   updateTaxProfile: (payload = {}) =>
     apiRequest(withScope('/tax/profile'), { method: 'PUT', body: payload }),
   getTaxSummary: (params = {}) => {

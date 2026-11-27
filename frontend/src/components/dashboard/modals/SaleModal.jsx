@@ -22,7 +22,7 @@ export default function SaleModal({
   activePage = "Sales",
   onSaveSale
 }) {
-  const { addDemoRecord } = useExbos();
+  const { addDemoRecord, activeBranchId = "main" } = useExbos();
   const [saleProductId, setSaleProductId] = useState("");
   const [saleQuantity, setSaleQuantity] = useState("1");
   const [saleUnitPrice, setSaleUnitPrice] = useState("");
@@ -59,14 +59,17 @@ export default function SaleModal({
       try {
         const raw = localStorage.getItem("exbos_user");
         const u = raw ? JSON.parse(raw) : null;
-        return String(u?.ownerScopeKey || u?.email || "").trim().toLowerCase();
+        const base = String(u?.ownerScopeKey || u?.email || "").trim().toLowerCase();
+        return base ? `${base}__${activeBranchId || "main"}` : "";
       } catch {
         return "";
       }
     };
     if (isOpen) {
+      const cached = readCachedTaxProfile(getScope());
+      if (cached) setTaxProfile({ ...DEFAULT_RRA_TAX_PROFILE, ...cached });
       exbosApi
-        .getTaxProfile()
+        .getTaxProfile(activeBranchId || "main")
         .then((res) => {
           const fetchedProfile = res?.data?.data || (res?.data && "rraEnabled" in res.data ? res.data : null);
           if (mounted && res?.ok && fetchedProfile) {
@@ -79,9 +82,12 @@ export default function SaleModal({
     }
     const onUpdated = (e) => {
       if (e?.detail) {
-        const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...e.detail };
-        setTaxProfile(merged);
-        writeCachedTaxProfile(getScope(), merged);
+        const detailBranch = e.detail.branchId || "main";
+        if (detailBranch === (activeBranchId || "main") || detailBranch === "main") {
+          const merged = { ...DEFAULT_RRA_TAX_PROFILE, ...e.detail };
+          setTaxProfile(merged);
+          writeCachedTaxProfile(getScope(), merged);
+        }
       }
     };
     window.addEventListener("exbos:tax-profile-updated", onUpdated);
@@ -89,7 +95,7 @@ export default function SaleModal({
       mounted = false;
       window.removeEventListener("exbos:tax-profile-updated", onUpdated);
     };
-  }, [isOpen]);
+  }, [isOpen, activeBranchId]);
 
   const handleBarcodeDetectedForSale = (code) => {
     const q = String(code || "").trim().toLowerCase();

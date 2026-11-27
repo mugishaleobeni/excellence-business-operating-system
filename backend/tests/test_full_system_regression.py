@@ -229,6 +229,7 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             patch("app.routes.training.get_db", return_value=self.db),
             patch("app.routes.shifts.get_db", return_value=self.db),
             patch("app.routes.commitments.get_db", return_value=self.db),
+            patch("app.routes.tax.get_db", return_value=self.db),
         ]
         for p in self.db_patchers:
             p.start()
@@ -971,6 +972,82 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertTrue(be2["isProfitable"])
         self.assertEqual(be2["netMonthlyProfitOrLossRWF"], 150000)
         self.assertEqual(be2["breakEvenPercent"], 100)
+
+    # ------------------------------------------------------------------
+    # 11. MULTI-BRANCH RRA TAX (INHERIT MAIN HQ TIN + SEPARATE BRANCH TIN)
+    # ------------------------------------------------------------------
+    def test_11_multi_branch_rra_tax_inherit_and_separate_tin_modes(self):
+        owner_email = "multitax@exbos.rw"
+        mgr_email = "kimironko-mgr@exbos.rw"
+        self.db.users.insert_one(
+            {"email": owner_email, "name": "Group Owner", "plan": "Silver", "accountStatus": "Active"}
+        )
+        self.db.users.insert_one(
+            {
+                "email": mgr_email,
+                "name": "Kimironko Manager",
+                "ownerScopeKey": owner_email,
+                "assignedBranchId": "BR-KIM",
+                "role": "Branch Manager",
+                "accountStatus": "Active",
+            }
+        )
+        self.db.branches.insert_one({"id": "main", "scopeKey": owner_email, "name": "Main HQ", "isMain": True})
+        self.db.branches.insert_one({"id": "BR-KIM", "scopeKey": owner_email, "name": "Kimironko Shop", "isMain": False})
+        self.db.branches.insert_one({"id": "BR-MUS", "scopeKey": owner_email, "name": "Musanze Cafe", "isMain": False})
+
+        owner_h = self._auth_header(owner_email)
+        mgr_h = self._auth_header(mgr_email)
+
+        # 1. Configure Main HQ TIN (102345678, 18% VAT)
+        r_main = self.client.put(
+            "/api/v1/tax/profile",
+            json={"branchId": "main", "rraEnabled": True, "tin": "102345678", "regime": "vat_18", "rraBranchCode": "00"},
+            headers=owner_h,
+        )
+        self.assertEqual(r_main.status_code, 200)
+
+        # 2. Branch 1 (BR-KIM) defaults to Inherit Main HQ TIN -> gets 102345678 & vat_18 automatically!
+        r_kim = self.client.get("/api/v1/tax/profile?branchId=BR-KIM", headers=owner_h)
+        self.assertEqual(r_kim.status_code, 200)
+        kim_prof = r_kim.get_json()["data"]
+        self.assertEqual(kim_prof["taxMode"], "inherit_main")
+        self.assertEqual(kim_prof["tin"], "102345678")
+        self.assertEqual(kim_prof["regime"], "vat_18")
+        self.assertTrue(kim_prof["rraEnabled"])
+
+        # 3. Branch Manager is read-only on PUT /tax/profile (403)
+        self.assertEqual(
+            self.client.put("/api/v1/tax/profile", json={"tin": "999999999"}, headers=mgr_h).status_code,
+            403,
+        )
+
+        # 4. Branch 2 (BR-MUS) configured with Separate Branch TIN (109876543, 3% Turnover)
+        r_mus = self.client.put(
+            "/api/v1/tax/profile",
+            json={
+                "branchId": "BR-MUS",
+                "taxMode": "separate",
+                "rraEnabled": True,
+                "tin": "109876543",
+                "regime": "turnover_3",
+                "rraBranchCode": "02",
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_mus.status_code, 200)
+        mus_prof = r_mus.get_json()["data"]
+        self.assertEqual(mus_prof["tin"], "109876543")
+        self.assertEqual(mus_prof["regime"], "turnover_3")
+        self.assertEqual(mus_prof["taxMode"], "separate")
+
+        # 5. Consolidated summary detects multiple distinct TINs & returns 3-row branchBreakdown
+        r_sum = self.client.get("/api/v1/tax/summary?branchId=all", headers=owner_h)
+        self.assertEqual(r_sum.status_code, 200)
+        sum_data = r_sum.get_json()["data"]
+        self.assertEqual(len(sum_data["branchBreakdown"]), 3)
+        codes = [w["code"] for w in sum_data["readinessWarnings"]]
+        self.assertIn("MULTIPLE_TINS_DETECTED", codes)
 
 
 if __name__ == "__main__":

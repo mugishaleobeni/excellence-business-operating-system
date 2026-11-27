@@ -14,6 +14,7 @@ import {
   Building2,
   Lock
 } from 'lucide-react'
+import { useExbos } from '../../../context/ExbosContext'
 import { exbosApi } from '../../../utils/apiClient'
 import { formatRWF } from '../../../utils/currencyWords'
 import { DEFAULT_RRA_TAX_PROFILE, getNextRraDeadlines, openPrintableRraTaxPack } from '../../../utils/rraTaxUtils'
@@ -41,10 +42,12 @@ function getPresetDates(preset) {
 }
 
 export default function RraTaxCenterView({ user, businessName, hideFinancials = false, addToast }) {
+  const { branches = [], activeBranchId = 'main', isBranchManager = false } = useExbos()
   const initialRange = getPresetDates('this_month')
   const [preset, setPreset] = useState('this_month')
   const [startDate, setStartDate] = useState(initialRange.startDate)
   const [endDate, setEndDate] = useState(initialRange.endDate)
+  const [selectedBranchId, setSelectedBranchId] = useState(isBranchManager ? activeBranchId : 'all')
   const [activeTab, setActiveTab] = useState('sales')
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState('')
@@ -53,11 +56,12 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
   const [summary, setSummary] = useState(null)
 
   const hasExportAccess = canUseFeature(user, 'allowRraTaxPack')
+  const effectiveBranchId = isBranchManager ? activeBranchId : selectedBranchId
 
-  const loadSummary = useCallback(async (sDate, eDate) => {
+  const loadSummary = useCallback(async (sDate, eDate, bId) => {
     setLoading(true)
     try {
-      const res = await exbosApi.getTaxSummary({ startDate: sDate, endDate: eDate })
+      const res = await exbosApi.getTaxSummary({ startDate: sDate, endDate: eDate, branchId: bId })
       const summaryData = res?.data?.data || (res?.data && 'profile' in res.data ? res.data : null)
       if (res?.ok && summaryData) {
         setSummary(summaryData)
@@ -85,8 +89,8 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
   }, [addToast])
 
   useEffect(() => {
-    loadSummary(startDate, endDate)
-  }, [startDate, endDate, loadSummary])
+    loadSummary(startDate, endDate, effectiveBranchId)
+  }, [startDate, endDate, effectiveBranchId, loadSummary])
 
   const handlePresetChange = (nextPreset) => {
     setPreset(nextPreset)
@@ -114,7 +118,7 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('exbos:tax-profile-updated', { detail: saved }))
       }
-      await loadSummary(startDate, endDate)
+      await loadSummary(startDate, endDate, effectiveBranchId)
       addToast &&
         addToast({
           type: 'success',
@@ -136,7 +140,7 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
   const handleExportCsv = async (type) => {
     setExporting(type)
     try {
-      await exbosApi.downloadTaxExport(type, { startDate, endDate })
+      await exbosApi.downloadTaxExport(type, { startDate, endDate, branchId: effectiveBranchId })
       addToast &&
         addToast({
           type: 'success',
@@ -258,8 +262,25 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
             </span>
             {profile.tin && (
               <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-white/10 text-white">
-                TIN: {profile.tin}
+                TIN: {profile.tin}{profile.rraBranchCode ? ` · Br ${profile.rraBranchCode}` : ''}
               </span>
+            )}
+            {!isBranchManager && branches.length > 1 && (
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="px-2.5 py-1 rounded-full bg-[#071644] border border-[#218DFF]/40 text-[10px] font-bold text-[#9EDCFF] cursor-pointer"
+              >
+                <option value="all">All Branches (Consolidated)</option>
+                <option value="main">Main HQ</option>
+                {branches
+                  .filter((b) => !b.isMain && b.id !== 'main')
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Branch: {b.name}
+                    </option>
+                  ))}
+              </select>
             )}
           </div>
           <p className="text-xs text-slate-300">
@@ -636,6 +657,74 @@ export default function RraTaxCenterView({ user, businessName, hideFinancials = 
           )}
         </div>
       </div>
+
+      {/* Per-Branch RRA Tax Breakdown Table (when viewing All Branches Consolidated) */}
+      {Array.isArray(summary?.branchBreakdown) && summary.branchBreakdown.length > 1 && (
+        <div className="exbos-glass-card p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="font-orbitron text-sm font-bold text-white">Per-Branch RRA Tax Breakdown</h3>
+              <p className="text-[11px] text-slate-300">
+                Click any branch to view &amp; export its individual TIN Annex CSV.
+              </p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-white/10 text-[10px] uppercase tracking-wider text-slate-400">
+                  <th className="py-2 pr-3">Branch</th>
+                  <th className="py-2 pr-3">TIN &amp; Mode</th>
+                  <th className="py-2 pr-3">Regime</th>
+                  <th className="py-2 pr-3 text-right">Gross Sales</th>
+                  <th className="py-2 pr-3 text-right">Net VAT / 3% Tax</th>
+                  <th className="py-2 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {summary.branchBreakdown.map((br) => (
+                  <tr key={br.branchId} className="hover:bg-white/5">
+                    <td className="py-2.5 pr-3 font-bold text-white">
+                      {br.branchName}
+                      <span className="ml-1.5 text-[10px] font-mono text-slate-400">#{br.rraBranchCode}</span>
+                    </td>
+                    <td className="py-2.5 pr-3">
+                      <div className="font-mono text-[#9EDCFF]">{br.tin || 'Not Set'}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {br.branchId === 'main'
+                          ? 'Main HQ'
+                          : br.taxMode === 'inherit_main'
+                          ? 'Inherits Main HQ'
+                          : 'Separate Branch TIN'}
+                      </div>
+                    </td>
+                    <td className="py-2.5 pr-3 text-slate-300">
+                      {br.regime === 'vat_18' ? '18% VAT' : br.regime === 'exempt' ? 'Exempt' : '3% Turnover'}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right text-white font-semibold">{mask(br.totalGrossSales)}</td>
+                    <td className="py-2.5 pr-3 text-right text-emerald-300 font-bold">
+                      {br.regime === 'vat_18'
+                        ? mask(br.netVatPayable)
+                        : br.regime === 'exempt'
+                        ? mask(0)
+                        : mask(br.turnoverTax3Percent)}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBranchId(br.branchId)}
+                        className="px-2.5 py-1 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 text-[#9EDCFF] text-[10px] font-bold cursor-pointer"
+                      >
+                        Inspect Branch
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

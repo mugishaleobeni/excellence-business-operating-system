@@ -23,6 +23,9 @@ DEFAULT_TAX_PROFILE = {
     "showOnReceipts": True,
     "trackWithholdingTax": False,
     "accountantEmail": "",
+    "branchId": "main",
+    "taxMode": "separate",  # "inherit_main" | "separate"
+    "rraBranchCode": "00",
 }
 
 SALE_BUCKETS = ("Sales", "Jobs", "KitchenOrders", "MixedSales", "LivestockSales")
@@ -64,14 +67,93 @@ def _resolve_scope_and_user(db):
     return scope, user_doc
 
 
-def _get_tax_profile(db, scope: str) -> dict:
-    doc = db.tax_profiles.find_one({"scopeKey": scope})
-    profile = dict(DEFAULT_TAX_PROFILE)
-    if doc:
+def _resolve_actor_branch_lock(db) -> tuple[bool, str]:
+    """Return (is_branch_manager, assigned_branch_id) for the current JWT actor."""
+    try:
+        verify_jwt_in_request(optional=True)
+        ident = get_jwt_identity()
+        if not ident:
+            return False, ""
+        actor = db.users.find_one({"email": str(ident).strip().lower()})
+        if actor and actor.get("assignedBranchId"):
+            return True, str(actor["assignedBranchId"]).strip()
+    except Exception:
+        pass
+    return False, ""
+
+
+def _get_raw_tax_doc(db, scope: str, branch_id: str = "main") -> dict | None:
+    bid = str(branch_id or "main").strip() or "main"
+    if bid.lower() == "all":
+        bid = "main"
+    doc = db.tax_profiles.find_one({"scopeKey": scope, "branchId": bid})
+    if not doc and bid == "main":
+        # Backward compatibility: legacy single-profile documents without branchId
+        doc = db.tax_profiles.find_one({"scopeKey": scope, "branchId": {"$exists": False}})
+        if not doc:
+            doc = db.tax_profiles.find_one({"scopeKey": scope})
+    return doc
+
+
+def _get_tax_profile(db, scope: str, branch_id: str = "main") -> dict:
+    """
+    Resolve effective RRA Tax Profile for a branch:
+    - Main HQ ('main'): returns Main HQ's own profile (default rraBranchCode='00').
+    - Custom branch:
+      - If taxMode == 'inherit_main' (default): inherits Main HQ's TIN, rraEnabled, regime,
+        priceMode, filingFrequency, toggles, and accountantEmail while preserving the branch's
+        own rraBranchCode and branchId.
+      - If taxMode == 'separate': uses the branch's own independent 9-digit TIN, regime,
+        and RRA settings.
+    """
+    bid = str(branch_id or "main").strip() or "main"
+    if bid.lower() == "all":
+        bid = "main"
+
+    main_doc = _get_raw_tax_doc(db, scope, "main")
+    main_profile = dict(DEFAULT_TAX_PROFILE)
+    main_profile["branchId"] = "main"
+    main_profile["taxMode"] = "separate"
+    main_profile["rraBranchCode"] = "00"
+    if main_doc:
         for k in DEFAULT_TAX_PROFILE:
-            if k in doc and doc[k] is not None:
-                profile[k] = doc[k]
-    return profile
+            if k in main_doc and main_doc[k] is not None:
+                main_profile[k] = main_doc[k]
+        main_profile["branchId"] = "main"
+        main_profile["taxMode"] = "separate"
+        main_profile["rraBranchCode"] = str(main_doc.get("rraBranchCode") or "00")
+
+    if bid == "main":
+        return main_profile
+
+    branch_doc = _get_raw_tax_doc(db, scope, bid)
+    tax_mode = str((branch_doc or {}).get("taxMode") or "inherit_main").strip()
+    if tax_mode not in ("inherit_main", "separate"):
+        tax_mode = "inherit_main"
+    branch_code = str((branch_doc or {}).get("rraBranchCode") or "01").strip()[:6] or "01"
+
+    if tax_mode == "inherit_main":
+        return {
+            **main_profile,
+            "branchId": bid,
+            "taxMode": "inherit_main",
+            "rraBranchCode": branch_code,
+            "inheritedFromMain": True,
+        }
+
+    branch_profile = dict(DEFAULT_TAX_PROFILE)
+    branch_profile["branchId"] = bid
+    branch_profile["taxMode"] = "separate"
+    branch_profile["rraBranchCode"] = branch_code
+    branch_profile["inheritedFromMain"] = False
+    if branch_doc:
+        for k in DEFAULT_TAX_PROFILE:
+            if k in branch_doc and branch_doc[k] is not None:
+                branch_profile[k] = branch_doc[k]
+        branch_profile["branchId"] = bid
+        branch_profile["taxMode"] = "separate"
+        branch_profile["rraBranchCode"] = branch_code
+    return branch_profile
 
 
 def _parse_date(raw: str | None) -> str:
@@ -366,17 +448,39 @@ def _collect_tax_ledger(db, scope: str, profile: dict, start_date: str, end_date
 def get_tax_profile():
     db = get_db()
     scope, _ = _resolve_scope_and_user(db)
-    return success_response(data=_get_tax_profile(db, scope))
+    is_manager, assigned_branch = _resolve_actor_branch_lock(db)
+    branch_id = assigned_branch if is_manager and assigned_branch else str(request.args.get("branchId") or "main").strip()
+    return success_response(data=_get_tax_profile(db, scope, branch_id))
 
 
 @tax_bp.put("/profile")
 def update_tax_profile():
     db = get_db()
     scope, _ = _resolve_scope_and_user(db)
-    payload = request.get_json(silent=True) or {}
+    is_manager, _ = _resolve_actor_branch_lock(db)
+    if is_manager:
+        return error_response(
+            "Only the Business Owner can modify RRA TIN and Tax Regime settings.",
+            status_code=403,
+        )
 
-    current = _get_tax_profile(db, scope)
+    payload = request.get_json(silent=True) or {}
+    branch_id = str(payload.get("branchId") or request.args.get("branchId") or "main").strip() or "main"
+    if branch_id.lower() == "all":
+        branch_id = "main"
+
+    current = _get_tax_profile(db, scope, branch_id)
     updated = dict(current)
+    updated["branchId"] = branch_id
+
+    if branch_id == "main":
+        updated["taxMode"] = "separate"
+    elif payload.get("taxMode") in ("inherit_main", "separate"):
+        updated["taxMode"] = payload["taxMode"]
+
+    if "rraBranchCode" in payload:
+        code_clean = re.sub(r"[^0-9A-Za-z\-]", "", str(payload.get("rraBranchCode") or ""))[:6]
+        updated["rraBranchCode"] = code_clean or ("00" if branch_id == "main" else "01")
 
     if "rraEnabled" in payload:
         updated["rraEnabled"] = bool(payload["rraEnabled"])
@@ -398,20 +502,22 @@ def update_tax_profile():
     if "accountantEmail" in payload:
         updated["accountantEmail"] = str(payload.get("accountantEmail") or "").strip().lower()
 
+    updated.pop("inheritedFromMain", None)
     now_iso = datetime.now(timezone.utc).isoformat()
     db.tax_profiles.update_one(
-        {"scopeKey": scope},
-        {"$set": {**updated, "scopeKey": scope, "updatedAt": now_iso}},
+        {"scopeKey": scope, "branchId": branch_id},
+        {"$set": {**updated, "scopeKey": scope, "branchId": branch_id, "updatedAt": now_iso}},
         upsert=True,
     )
-    return success_response(data=updated, message="RRA Tax Profile saved.")
+    effective = _get_tax_profile(db, scope, branch_id)
+    return success_response(data=effective, message="RRA Tax Profile saved.")
 
 
 @tax_bp.get("/summary")
 def get_tax_summary():
     db = get_db()
     scope, _ = _resolve_scope_and_user(db)
-    profile = _get_tax_profile(db, scope)
+    is_manager, assigned_branch = _resolve_actor_branch_lock(db)
 
     today = datetime.now(timezone.utc).date()
     default_start = today.replace(day=1).isoformat()
@@ -419,9 +525,54 @@ def get_tax_summary():
 
     start_date = _parse_date(request.args.get("startDate")) or default_start
     end_date = _parse_date(request.args.get("endDate")) or default_end
-    branch_id = str(request.args.get("branchId") or "").strip()
+    branch_id = assigned_branch if is_manager and assigned_branch else str(request.args.get("branchId") or "all").strip()
 
+    profile = _get_tax_profile(db, scope, branch_id if branch_id.lower() != "all" else "main")
     ledger = _collect_tax_ledger(db, scope, profile, start_date, end_date, branch_id)
+
+    # Compute per-branch breakdown & detect multiple distinct TINs when viewing consolidated 'all'
+    branch_breakdown = []
+    if not is_manager and branch_id.lower() in ("all", ""):
+        branches_docs = list(db.branches.find({"scopeKey": scope}))
+        if not any(str(b.get("id") or "") == "main" for b in branches_docs):
+            branches_docs.insert(0, {"id": "main", "name": "Main HQ", "isMain": True})
+        distinct_tins = set()
+        for b in branches_docs:
+            bid = str(b.get("id") or "main").strip()
+            b_prof = _get_tax_profile(db, scope, bid)
+            b_ledger = _collect_tax_ledger(db, scope, b_prof, start_date, end_date, bid)
+            b_tin = str(b_prof.get("tin") or "").strip()
+            if b_prof.get("rraEnabled") and b_tin:
+                distinct_tins.add(b_tin)
+            branch_breakdown.append(
+                {
+                    "branchId": bid,
+                    "branchName": b.get("name") or ("Main HQ" if bid == "main" else bid),
+                    "taxMode": b_prof.get("taxMode", "inherit_main"),
+                    "rraBranchCode": b_prof.get("rraBranchCode", "00"),
+                    "rraEnabled": bool(b_prof.get("rraEnabled")),
+                    "tin": b_tin,
+                    "regime": b_prof.get("regime", "turnover_3"),
+                    "totalGrossSales": b_ledger["totals"]["totalGrossSales"],
+                    "outputVat": b_ledger["totals"]["outputVat"],
+                    "claimableInputVat": b_ledger["totals"]["claimableInputVat"],
+                    "netVatPayable": b_ledger["totals"]["netVatPayable"],
+                    "turnoverTax3Percent": b_ledger["totals"]["turnoverTax3Percent"],
+                }
+            )
+        if len(distinct_tins) > 1:
+            ledger["readinessWarnings"].insert(
+                0,
+                {
+                    "severity": "warning",
+                    "code": "MULTIPLE_TINS_DETECTED",
+                    "message": (
+                        f"Your branches use {len(distinct_tins)} different RRA TINs ({', '.join(sorted(distinct_tins))}). "
+                        "Select each branch individually above before exporting CSV Annexes for RRA e-Tax."
+                    ),
+                },
+            )
+    ledger["branchBreakdown"] = branch_breakdown
     return success_response(data=ledger)
 
 
@@ -429,6 +580,7 @@ def get_tax_summary():
 def export_tax_csv(export_type: str):
     db = get_db()
     scope, user_doc = _resolve_scope_and_user(db)
+    is_manager, assigned_branch = _resolve_actor_branch_lock(db)
 
     allowed, denial = check_entitlement(db, scope, "allowRraTaxPack", user_doc)
     if not allowed:
@@ -438,11 +590,11 @@ def export_tax_csv(export_type: str):
             status_code=402,
         )
 
-    profile = _get_tax_profile(db, scope)
     today = datetime.now(timezone.utc).date()
     start_date = _parse_date(request.args.get("startDate")) or today.replace(day=1).isoformat()
     end_date = _parse_date(request.args.get("endDate")) or today.isoformat()
-    branch_id = str(request.args.get("branchId") or "").strip()
+    branch_id = assigned_branch if is_manager and assigned_branch else str(request.args.get("branchId") or "all").strip()
+    profile = _get_tax_profile(db, scope, branch_id if branch_id.lower() != "all" else "main")
 
     ledger = _collect_tax_ledger(db, scope, profile, start_date, end_date, branch_id)
 

@@ -1,23 +1,28 @@
 import React, { useEffect, useState } from 'react'
-import { ShieldCheck, FileText, Save, CheckCircle2, Info, Power, Mail, Receipt, Calculator } from 'lucide-react'
+import { ShieldCheck, FileText, Save, CheckCircle2, Info, Power, Mail, Receipt, Calculator, GitBranch, Lock } from 'lucide-react'
+import { useExbos } from '../../../context/ExbosContext'
 import { exbosApi } from '../../../utils/apiClient'
 import { DEFAULT_RRA_TAX_PROFILE } from '../../../utils/rraTaxUtils'
 import { readCachedTaxProfile, writeCachedTaxProfile } from '../../../utils/offlineStorage'
 
-function getActiveTaxScope() {
+function getActiveTaxScope(branchId = 'main') {
   try {
     const raw = localStorage.getItem('exbos_user')
     const u = raw ? JSON.parse(raw) : null
-    return String(u?.ownerScopeKey || u?.email || '').trim().toLowerCase()
+    const base = String(u?.ownerScopeKey || u?.email || '').trim().toLowerCase()
+    const bid = String(branchId || 'main').trim()
+    return base ? `${base}__${bid}` : ''
   } catch {
     return ''
   }
 }
 
 export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
+  const { branches = [], activeBranchId = 'main', isBranchManager = false } = useExbos()
+  const [selectedBranchId, setSelectedBranchId] = useState(isBranchManager ? activeBranchId : 'main')
   const [profile, setProfile] = useState(() => {
-    const cached = readCachedTaxProfile(getActiveTaxScope())
-    return cached ? { ...DEFAULT_RRA_TAX_PROFILE, ...cached } : DEFAULT_RRA_TAX_PROFILE
+    const cached = readCachedTaxProfile(getActiveTaxScope(isBranchManager ? activeBranchId : 'main'))
+    return cached ? { ...DEFAULT_RRA_TAX_PROFILE, ...cached } : { ...DEFAULT_RRA_TAX_PROFILE, branchId: 'main', taxMode: 'separate', rraBranchCode: '00' }
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -25,11 +30,16 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
   const [savingDigest, setSavingDigest] = useState(false)
   const [sendingDigest, setSendingDigest] = useState(false)
 
+  const targetBranchId = isBranchManager ? activeBranchId : selectedBranchId
+  const isCustomBranch = targetBranchId !== 'main'
+  const isInheritingMain = isCustomBranch && profile.taxMode === 'inherit_main'
+
   useEffect(() => {
     let mounted = true
-    const scope = getActiveTaxScope()
+    const scope = getActiveTaxScope(targetBranchId)
+    setLoading(true)
     Promise.all([
-      exbosApi.getTaxProfile().catch(() => null),
+      exbosApi.getTaxProfile(targetBranchId).catch(() => null),
       exbosApi.getDigestSettings().catch(() => null)
     ])
       .then(([res, digRes]) => {
@@ -55,7 +65,7 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [targetBranchId])
 
   const handleSaveDigest = async () => {
     setSavingDigest(true)
@@ -102,7 +112,8 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
   }
 
   const handleSave = async (overrideProfile = null) => {
-    const payload = overrideProfile || profile
+    if (isBranchManager) return
+    const payload = { ...(overrideProfile || profile), branchId: targetBranchId }
     const previousProfile = profile
     setSaving(true)
     try {
@@ -120,7 +131,7 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
       const savedData = res?.data?.data || (res?.data && 'rraEnabled' in res.data ? res.data : null)
       const saved = savedData ? { ...DEFAULT_RRA_TAX_PROFILE, ...savedData } : payload
       setProfile(saved)
-      writeCachedTaxProfile(getActiveTaxScope(), saved)
+      writeCachedTaxProfile(getActiveTaxScope(targetBranchId), saved)
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('exbos:tax-profile-updated', { detail: saved }))
       }
@@ -182,8 +193,8 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
           <button
             type="button"
             onClick={handleToggleMaster}
-            disabled={saving}
-            className={`px-4 py-3 rounded-2xl border font-orbitron text-xs font-bold flex items-center gap-2.5 transition cursor-pointer shrink-0 ${
+            disabled={saving || isBranchManager || isInheritingMain}
+            className={`px-4 py-3 rounded-2xl border font-orbitron text-xs font-bold flex items-center gap-2.5 transition cursor-pointer shrink-0 disabled:opacity-50 ${
               profile.rraEnabled
                 ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/30'
                 : 'bg-white/5 border-white/15 text-slate-300 hover:bg-white/10'
@@ -194,7 +205,122 @@ export default function TaxProfileSettingsView({ addToast, onProfileSaved }) {
           </button>
         </div>
 
-        {!profile.rraEnabled ? (
+        {/* Multi-Branch TIN & Tax Mode Controller */}
+        {!isBranchManager && branches.length > 1 && (
+          <div className="p-4 rounded-2xl bg-[#03091F]/70 border border-[#218DFF]/30 space-y-3 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 text-[#9EDCFF] font-bold">
+                <GitBranch className="w-4 h-4 shrink-0" />
+                <span>Configure Tax &amp; TIN Per Branch</span>
+              </div>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="px-3 py-2 rounded-xl bg-[#071644] border border-white/20 text-white font-semibold cursor-pointer"
+              >
+                <option value="main">Main HQ (Default TIN)</option>
+                {branches
+                  .filter((b) => !b.isMain && b.id !== 'main')
+                  .map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Branch: {b.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {isCustomBranch && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...profile, taxMode: 'inherit_main' }
+                    setProfile(next)
+                    handleSave(next)
+                  }}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                    isInheritingMain
+                      ? 'bg-[#218DFF]/20 border-[#218DFF] text-white'
+                      : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/25'
+                  }`}
+                >
+                  <div className="font-bold">Inherit Main HQ TIN &amp; Tax Regime</div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Same company TIN, separate RRA Branch Code (e.g. 01, 02).
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...profile, taxMode: 'separate' }
+                    setProfile(next)
+                    handleSave(next)
+                  }}
+                  className={`p-3 rounded-xl border text-left transition cursor-pointer ${
+                    !isInheritingMain
+                      ? 'bg-emerald-500/20 border-emerald-400 text-white'
+                      : 'bg-white/5 border-white/10 text-slate-300 hover:border-white/25'
+                  }`}
+                >
+                  <div className="font-bold">Separate Branch TIN &amp; Tax Regime</div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Independent 9-digit TIN &amp; VAT/Turnover regime for this branch.
+                  </p>
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-slate-300 font-semibold">RRA EBM Branch Code:</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={profile.rraBranchCode || (isCustomBranch ? '01' : '00')}
+                  onChange={(e) => updateField('rraBranchCode', e.target.value)}
+                  placeholder="00"
+                  className="w-20 px-2.5 py-1 rounded-lg bg-[#071644] border border-white/20 text-white font-mono text-xs"
+                />
+              </div>
+              {isInheritingMain && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => handleSave()}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#218DFF] text-white font-bold cursor-pointer"
+                >
+                  {saving ? 'Saving...' : 'Save Branch Code'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isBranchManager && (
+          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-400/30 flex items-center gap-2.5 text-xs text-amber-200">
+            <Lock className="w-4 h-4 shrink-0" />
+            <span>
+              Viewing your branch&apos;s RRA tax configuration (Read-Only). Only the Business Owner can modify TIN or Tax Regime settings.
+            </span>
+          </div>
+        )}
+
+        {isInheritingMain ? (
+          <div className="p-5 rounded-2xl bg-[#03091F]/60 border border-[#218DFF]/30 flex items-start gap-3.5 text-xs text-slate-300">
+            <Info className="w-5 h-5 text-[#9EDCFF] shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="font-bold text-white text-sm">
+                Inheriting Main HQ RRA Profile (Branch Code: {profile.rraBranchCode || '01'})
+              </p>
+              <p>
+                Effective TIN: <strong className="text-white font-mono">{profile.tin || 'Not set on Main HQ'}</strong> ·
+                Status: <strong className="text-emerald-300">{profile.rraEnabled ? 'ENABLED' : 'OFF'}</strong> ·
+                Regime: <strong className="text-white">{profile.regime === 'vat_18' ? '18% VAT' : profile.regime === 'exempt' ? 'Exempt' : '3% Turnover'}</strong>.
+                Switch to <strong>Separate Branch TIN</strong> above if this branch has its own legal 9-digit TIN.
+              </p>
+            </div>
+          </div>
+        ) : !profile.rraEnabled ? (
           <div className="p-5 rounded-2xl bg-[#03091F]/60 border border-white/10 flex items-start gap-3.5">
             <Info className="w-5 h-5 text-[#9EDCFF] shrink-0 mt-0.5" />
             <div className="space-y-1.5 text-xs text-slate-300">
