@@ -289,7 +289,7 @@ export default function DashboardPage() {
         actionLabel: 'View Branches',
         onAction: () => {
           handleModuleClick('Settings')
-          setActivePage('Business Profile')
+          setActivePage('Branch Management')
           if (markOwnerNotificationRead) markOwnerNotificationRead(n.id)
         }
       }))

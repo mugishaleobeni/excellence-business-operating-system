@@ -1462,6 +1462,10 @@ export default function InteractiveModulePanel({
       )
     }
 
+    if (activePage === 'Branch Management') {
+      return <BranchSettingsCard activeArchId={activeArchId} currentArch={currentArch} />
+    }
+
     if (activePage === 'RRA Tax & EBM') {
       return <TaxProfileSettingsView addToast={addToast} />
     }
@@ -1777,9 +1781,6 @@ export default function InteractiveModulePanel({
             </button>
           </div>
         </div>
-
-        {/* Multi-Branch Management (Creates branches appearing in sidebar navigation) */}
-        <BranchSettingsCard activeArchId={activeArchId} currentArch={currentArch} />
 
         {/* Danger Zone: Account Deletion */}
         <div className="rounded-2xl border-2 border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-[#040C26]/95 p-6 sm:p-7 space-y-4 shadow-xl">

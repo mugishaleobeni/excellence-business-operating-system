@@ -48,7 +48,7 @@ export const SIX_ARCHITECTURES = [
       Reports: ['Production & Yield', 'Sales & Margins', 'Profit & Loss', 'Cash Movement', 'RRA Tax Center'],
       Documents: ['Document Explorer', 'Recent Documents', 'Share & Export'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp'],
-      Settings: ['Business Profile', 'Team & Permissions', 'RRA Tax & EBM', 'Subscription']
+      Settings: ['Business Profile', 'Branch Management', 'Team & Permissions', 'RRA Tax & EBM', 'Subscription']
     }
   },
   {
@@ -90,7 +90,7 @@ export const SIX_ARCHITECTURES = [
       Suppliers: ['All Suppliers', 'Amounts Owed'],
       Expenses: ['All Expenses', 'Expense Categories'],
       Reports: ['Sales Report', 'Stock Report', 'Purchases Report', 'Profit & Loss', 'Cash Movement', 'Customer Debts', 'Supplier Debts', 'RRA Tax Center'],
-      Settings: ['Business Profile', 'Team & Permissions', 'RRA Tax & EBM', 'Subscription'],
+      Settings: ['Business Profile', 'Branch Management', 'Team & Permissions', 'RRA Tax & EBM', 'Subscription'],
       Documents: ['Overview', 'Invoices', 'Receipts', 'Quotations', 'Purchase Orders', 'Statements', 'Sent History', 'Templates'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp']
     }
@@ -133,7 +133,7 @@ export const SIX_ARCHITECTURES = [
       Suppliers: ['All Suppliers', 'Amounts Owed'],
       Expenses: ['All Expenses', 'Expense Categories'],
       Reports: ['Sales Report', 'Stock Report', 'Purchases Report', 'Profit & Loss', 'Cash Movement', 'Customer Debts', 'Supplier Debts', 'RRA Tax Center'],
-      Settings: ['Business Profile', 'Staff & Commissions', 'RRA Tax & EBM', 'Subscription'],
+      Settings: ['Business Profile', 'Branch Management', 'Staff & Commissions', 'RRA Tax & EBM', 'Subscription'],
       Documents: ['Overview', 'Invoices', 'Receipts', 'Quotations', 'Purchase Orders', 'Statements', 'Sent History', 'Templates'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp']
     }
@@ -175,7 +175,7 @@ export const SIX_ARCHITECTURES = [
       Purchases: ['Feed & Input Orders', 'Unpaid Purchases'],
       Expenses: ['All Expenses', 'Budget Categories (Auto-Sorted)'],
       Reports: ['Sales Report', 'Stock Report', 'Purchases Report', 'Profit & Loss', 'Cash Movement', 'Customer Debts', 'Supplier Debts', 'RRA Tax Center'],
-      Settings: ['Farm Profile', 'Survival Period Settings', 'RRA Tax & EBM', 'Subscription'],
+      Settings: ['Farm Profile', 'Branch Management', 'Survival Period Settings', 'RRA Tax & EBM', 'Subscription'],
       Documents: ['Overview', 'Invoices', 'Receipts', 'Quotations', 'Purchase Orders', 'Statements', 'Sent History', 'Templates'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp']
     }
@@ -219,7 +219,7 @@ export const SIX_ARCHITECTURES = [
       Suppliers: ['All Suppliers', 'Amounts Owed'],
       Expenses: ['All Expenses', 'Expense Categories'],
       Reports: ['Sales Report', 'Stock Report', 'Purchases Report', 'Profit & Loss', 'Cash Movement', 'Customer Debts', 'Supplier Debts', 'RRA Tax Center'],
-      Settings: ['Restaurant & Rooms Setup', 'Staff & Shifts', 'RRA Tax & EBM', 'Subscription'],
+      Settings: ['Restaurant & Rooms Setup', 'Branch Management', 'Staff & Shifts', 'RRA Tax & EBM', 'Subscription'],
       Documents: ['Overview', 'Invoices', 'Receipts', 'Quotations', 'Purchase Orders', 'Statements', 'Sent History', 'Templates'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp']
     }
@@ -264,7 +264,7 @@ export const SIX_ARCHITECTURES = [
       Customers: ['Customer Directory', 'Outstanding Balances'],
       Expenses: ['All Expenses', 'Categories & Activity Tags'],
       Reports: ['Sales Report', 'Stock Report', 'Purchases Report', 'Profit & Loss', 'Cash Movement', 'Customer Debts', 'Supplier Debts', 'RRA Tax Center'],
-      Settings: ['Business Activities (On/Off)', 'Dashboard Layout', 'RRA Tax & EBM', 'Subscription'],
+      Settings: ['Business Activities (On/Off)', 'Branch Management', 'Dashboard Layout', 'RRA Tax & EBM', 'Subscription'],
       Documents: ['Overview', 'Invoices', 'Receipts', 'Quotations', 'Purchase Orders', 'Statements', 'Sent History', 'Templates'],
       Integrations: ['Gmail', 'Google Drive', 'WhatsApp']
     }
