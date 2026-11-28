@@ -430,8 +430,9 @@ def _build_live_business_summary_text(db, user_doc: dict, arch_id: str) -> str:
 
 
 @whatsapp_bp.route("/config", methods=["GET"])
+@require_super_admin
 def get_whatsapp_config_route():
-    """Return Hybrid Sandbox/Production config, Webhook info, Registered Recipients (with 24h window), and recent logs."""
+    """Super Admin only: Return Hybrid Sandbox/Production config, Webhook info, Registered Recipients, and delivery logs."""
     db = get_db()
     user_doc = _resolve_active_user(db)
     cfg = get_whatsapp_delivery_config(db)

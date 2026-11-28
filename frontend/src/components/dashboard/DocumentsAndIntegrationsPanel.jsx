@@ -3,7 +3,6 @@ import { useExbos } from '../../context/ExbosContext'
 import { formatRWF } from '../../utils/currencyWords'
 import { printReportDocument } from '../../utils/printDocument'
 import { exbosApi } from '../../utils/apiClient'
-import WhatsAppSandboxControlPanel from './integrations/WhatsAppSandboxControlPanel'
 import {
   Folder,
   FileText,
@@ -45,6 +44,7 @@ export default function DocumentsAndIntegrationsPanel({
 }) {
   const {
     user,
+    isBranchManager,
     hideFinancials,
     integrations,
     setIntegrations,
@@ -754,84 +754,83 @@ export default function DocumentsAndIntegrationsPanel({
           </div>
         </div>
 
-        {/* C. EXCELLENCE BOS Official WhatsApp Integration */}
-        <div className="sapphire-analytics-card p-6 space-y-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <MessageSquare className="w-5 h-5" />
-            </div>
-            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-orbitron font-bold">
-              {waMetaConfigured ? 'Meta Cloud API Live' : 'Official ExBOS Linked (Ready for Meta)'}
-            </span>
-          </div>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h3 className="font-orbitron text-base font-bold text-[#071544] dark:text-white">
-                EXCELLENCE BOS WhatsApp
-              </h3>
-              <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                Linked Phone: <strong>{integrations.whatsapp.linkedBusinessPhone}</strong> · Structured Menu &amp; Commands
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={handleConnectWhatsApp}
-              disabled={waConnecting}
-              className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-400/30 text-[10px] font-bold text-emerald-300 cursor-pointer whitespace-nowrap"
-            >
-              {waConnecting ? 'Sending...' : 'Send Welcome'}
-            </button>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              { label: '0 Menu', cmd: '0' },
-              { label: '1 Products', cmd: '1' },
-              { label: '5 Report', cmd: '5' },
-              { label: '6 Unpaid', cmd: '6' }
-            ].map((q) => (
-              <button
-                key={q.cmd}
-                type="button"
-                onClick={() => sendWhatsAppCommand(q.cmd)}
-                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-[10px] font-semibold text-[#9EDCFF] cursor-pointer"
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="max-h-36 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-white/70 dark:bg-[#03091F]/70 border border-[#9EDCFF]/20 text-[11px] whitespace-pre-line">
-            {waMessages.map((m, i) => (
-              <div
-                key={i}
-                className={
-                  m.from === 'bot'
-                    ? 'text-[#071544] dark:text-[#9EDCFF]'
-                    : 'text-emerald-600 dark:text-emerald-300 font-semibold text-right'
-                }
-              >
-                {m.text}
+        {/* C. EXCELLENCE BOS Official WhatsApp Integration (Business Owner Only — hidden from Branch Managers) */}
+        {!isBranchManager && (
+          <div className="sapphire-analytics-card p-6 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <MessageSquare className="w-5 h-5" />
               </div>
-            ))}
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-orbitron font-bold">
+                {waMetaConfigured ? 'WhatsApp Connected' : 'WhatsApp Assistant Ready'}
+              </span>
+            </div>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h3 className="font-orbitron text-base font-bold text-[#071544] dark:text-white">
+                  EXCELLENCE BOS WhatsApp
+                </h3>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  Linked Phone: <strong>{integrations.whatsapp.linkedBusinessPhone}</strong> · Structured Menu &amp; Commands
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleConnectWhatsApp}
+                disabled={waConnecting}
+                className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-400/30 text-[10px] font-bold text-emerald-300 cursor-pointer whitespace-nowrap"
+              >
+                {waConnecting ? 'Sending...' : 'Send Welcome'}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: '0 Menu', cmd: '0' },
+                { label: '1 Products', cmd: '1' },
+                { label: '5 Report', cmd: '5' },
+                { label: '6 Unpaid', cmd: '6' }
+              ].map((q) => (
+                <button
+                  key={q.cmd}
+                  type="button"
+                  onClick={() => sendWhatsAppCommand(q.cmd)}
+                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 border border-white/15 text-[10px] font-semibold text-[#9EDCFF] cursor-pointer"
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="max-h-36 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-white/70 dark:bg-[#03091F]/70 border border-[#9EDCFF]/20 text-[11px] whitespace-pre-line">
+              {waMessages.map((m, i) => (
+                <div
+                  key={i}
+                  className={
+                    m.from === 'bot'
+                      ? 'text-[#071544] dark:text-[#9EDCFF]'
+                      : 'text-emerald-600 dark:text-emerald-300 font-semibold text-right'
+                  }
+                >
+                  {m.text}
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleWhatsAppSend} className="flex gap-1.5">
+              <input
+                type="text"
+                value={waInput}
+                onChange={(e) => setWaInput(e.target.value)}
+                placeholder='Try: "1", "5", "SALE 1 iPhone 300000", "UNPAID"'
+                className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#071544] border border-blue-200 dark:border-[#9EDCFF]/30 text-xs text-[#071544] dark:text-white"
+              />
+              <button type="submit" className="btn-sapphire px-3 py-2 text-xs">
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
           </div>
-
-          <form onSubmit={handleWhatsAppSend} className="flex gap-1.5">
-            <input
-              type="text"
-              value={waInput}
-              onChange={(e) => setWaInput(e.target.value)}
-              placeholder='Try: "1", "5", "SALE 1 iPhone 300000", "UNPAID"'
-              className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-[#071544] border border-blue-200 dark:border-[#9EDCFF]/30 text-xs text-[#071544] dark:text-white"
-            />
-            <button type="submit" className="btn-sapphire px-3 py-2 text-xs">
-              <Send className="w-3.5 h-3.5" />
-            </button>
-          </form>
-        </div>
-
-        {/* D. Meta WhatsApp Hybrid Sandbox, Registered Recipients & Live Alerts Center */}
-        <WhatsAppSandboxControlPanel activeArchId={activeArchId} />
+        )}
       </div>
       )}
     </div>
