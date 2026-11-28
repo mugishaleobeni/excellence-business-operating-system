@@ -955,7 +955,176 @@ export const KINYARWANDA_DICT = {
   'transferred': 'Ryimuriwe Ahandi',
   'tag / name': 'Ikirango / Izina',
   'seller / origin': 'Uwagurishije / Inkomoko',
-  'group batch': 'Itsinda'
+  'group batch': 'Itsinda',
+
+  // Branch Management, Lifecycle & Sales-Only Controls
+  'branch management': "Imicungire y'Amashami",
+  'branches, security & multi-location control': "Amashami, Umutekano n'Imicungire y'Ahantu Henwinshi",
+  'branch name': "Izina ry'Ishami",
+  'create branch': 'Fungura Ishami',
+  'creating...': 'Birimo gufungurwa...',
+  'edit branch': 'Hindura Ishami',
+  'delete branch': 'Siba Ishami',
+  'switch': 'Hindura',
+  'main hq': 'Icyicaro Gikuru (Main HQ)',
+  'hq locked': 'Main HQ Ifunze',
+  'no delete': 'Gusiba Birabujijwe',
+  'sales-only': 'Kugurisha Gusa',
+  'active manager': 'Umuyobozi Urakora',
+  'deactivated / cut off': 'Yahagaritswe',
+  'pending manager setup': 'Ategereje Gufungura Konti',
+  'edit manager': 'Hindura Umuyobozi',
+  'deactivate': 'Hagarika',
+  'deactivating...': 'Birimo guhagarikwa...',
+  'activate': 'Fungura Nanone',
+  'activating...': 'Birimo gufungurwa...',
+  'delete manager': 'Siba Umuyobozi',
+  'remove permanently?': 'Umusibe burundu?',
+  'manager full name': "Amazina Yombi y'Umuyobozi",
+  'login email': 'Imeyili yo Kwinjira',
+  'phone / whatsapp': 'Telefoni / WhatsApp',
+  'new password (optional, min 6 chars)': 'Ijambo ry\'Ibanga Rishya (Si ngombwa, nibura inyuguti 6)',
+  'leave blank to keep existing password': 'Reka ubusa kugira ngo ugumane iryo yari afite',
+  'save manager changes': "Bika Impinduka z'Umuyobozi",
+  'saving changes...': 'Birimo kubikwa...',
+  'quick manager action presets': "Ibyiciro Byihuse by'Uburenganzira bw'Umuyobozi",
+  'sales-only cashier (hq issues stock)': 'Kugurisha Gusa (Main HQ niyo Itanga Ububiko)',
+  'standard branch manager': "Umuyobozi w'Ishami Usanzwe",
+  'full branch supervisor': "Umugenzuzi w'Ishami Wuzuye",
+  'branch operational status': "Imiterere y'Imikorere y'Ishami",
+  'optional owner security pin (4–8 digits)': "PIN y'Umutekano ya Nyiri Ubucuruzi (Imibare 4–8)",
+  'max single expense limit (rwf, 0 = no cap)': 'Ntarengwa ku Gikoreshwa Rimwe (RWF, 0 = Nta ntarengwa)',
+  'allow adding / importing products': 'Emerera Kongeramo / Kwinjiza Ibicuruzwa',
+  'allow editing products & stock counts': "Emerera Guhindura Ibicuruzwa n'Umubare mu Bubiko",
+  'allow deleting products': 'Emerera Gusiba Ibicuruzwa',
+  'allow changing selling prices': 'Emerera Guhindura Ibiciro byo Kugurisha',
+  'allow deleting sales, purchases & expenses': "Emerera Gusiba Ibyagurishijwe, Ibyaguzwe n'Ibikoreshwa",
+  'allow recording branch expenses': "Emerera Kwandika Ibikoreshwa by'Ishami",
+  'allow viewing cost & profit margins': "Emerera Kureba Ikiguzi n'Inyungu",
+  'block direct entry to main hq': 'Hagarika Kwinjira ku Cyicaro Gikuru Nta Ruhushya',
+  'save security & permissions': "Bika Umutekano n'Uburenganzira",
+  'saving policy...': 'Birimo kubikwa...',
+  'locked by hq': 'Gufunzwe na Main HQ',
+  'stock is managed & issued by main hq (sales-only mode)': 'Ububiko bucungwa kandi butangwa na Main HQ (Kugurisha Gusa)',
+  'main hq product': 'Igicuruzwa cyo ku Cyicaro Gikuru',
+  'quantity to transfer': 'Ingano yo Kohereza',
+  'add to dispatch': 'Ongeraho ku Rutonde',
+  'handover note (optional)': 'Ubutumwa bw\'Ihererekanya (Si ngombwa)',
+  'transfer stock to branch': 'Ohereza Ububiko ku Ishami',
+  'dispatching...': 'Birimo koherezwa...',
+  'transferring...': 'Birimo koherezwa...',
+  'generate manager setup link': "Kora Umurongo wo Gufungura Konti y'Umuyobozi",
+  'generating secure link...': 'Birimo gukorwa...',
+  'manager name (optional)': "Izina ry'Umuyobozi (Si ngombwa)",
+  'email to auto-send link (optional)': 'Imeyili yo Koherezwaho Umurongo (Si ngombwa)',
+  'phone / whatsapp (optional)': 'Telefoni / WhatsApp (Si ngombwa)',
+
+  // RRA Tax Center & Multi-Branch TIN
+  'rra tax & vat': 'Imisoro ya RRA & TVA',
+  'rra tax center': "Ikigo cy'Imisoro ya RRA",
+  'rra compliance': 'Iyubahiriza rya RRA',
+  'rra tax tracking': "Gukurikirana Imisoro ya RRA",
+  'tax profile': "Umwirondoro w'Imisoro",
+  'tin number': 'Nomero ya TIN',
+  'company tin': "TIN y'Ikigo",
+  'branch tin': "TIN y'Ishami",
+  'inherit main hq tin': 'Koresha TIN ya Main HQ',
+  'separate branch tin': "TIN Yihariye y'Ishami",
+  'vat registered': 'Wanditswe kuri TVA (18%)',
+  'output vat': 'TVA ku Byagurishijwe',
+  'input vat': 'TVA ku Byaguzwe',
+  'net vat payable': 'TVA Igomba Kwishyurwa',
+  'taxable sales': 'Ibyagurishijwe Bisoreshwa',
+  'exempt sales': 'Ibyagurishijwe Bidasoreshwa',
+  'export rra excel': 'Sohora Excel ya RRA',
+  'export rra csv': 'Sohora CSV ya RRA',
+  'ebm invoice number': "Nomero y'Inyemezabuguzi ya EBM",
+  'customer tin': "TIN y'Umukiriya",
+  'per-branch tax breakdown': "Isesengura ry'Imisoro kuri Buri Shami",
+  'save tax settings': "Bika Igenamiterere ry'Imisoro",
+
+  // Monthly Payroll, Rent & Break-Even Engine
+  'monthly payroll, rent & break-even': "Imishahara, Ubukode n'Inyungu Ntarengwa ya Buri Kwezi",
+  'monthly fixed costs': 'Ibikoreshwa Bihoraho bya Buri Kwezi',
+  'employee payroll': "Imishahara y'Abakozi",
+  'employees': 'Abakozi',
+  'fixed bills': 'Fagitire Zihoraho',
+  'monthly break-even': 'Inyungu Ntarengwa ya Buri Kwezi',
+  'break-even progress': "Iterambere ryo Kugera ku Nyungu Ntarengwa",
+  'add employee': 'Ongeramo Umukozi',
+  'add fixed bill': 'Ongeramo Fagitire Ihoraho',
+  'pay salary': 'Ishyura Umushahara',
+  'pay bill': 'Ishyura Fagitire',
+  'shop rent': "Ubukode bw'Iduka",
+  'electricity & water': "Amashanyarazi n'Amazi",
+  'internet & phone': 'Interineti na Telefoni',
+  'security & cleaning': "Umutekano n'Isuku",
+  'bank / loan repayment': 'Kwishyura Inguzanyo ya Banki',
+  'taxes & licenses': "Imisoro n'Impushya",
+  'equipment lease': "Ubukode bw'Ibikoresho",
+  'other fixed bill': 'Indi Fagitire Ihoraho',
+  'paid this month': 'Byishyuwe uku Kwezi',
+  'remaining': 'Bisigaye',
+  'partial': 'Igice',
+  'due day': 'Itariki yo Kwishyura',
+  'monthly salary': "Umushahara w'Ukwezi",
+  'monthly amount': "Amafaranga y'Ukwezi",
+  'profitable': 'Urimo Kunguka',
+  'loss zone': 'Nturagera ku Nyungu',
+  'sales needed to break even': 'Ibyagurishijwe Bikenewe ngo Ugere ku Nyungu',
+
+  // Cashier Shift & Thermal Receipts
+  'cashier shift & z-report': "Igihe cy'Umubitsi & Raporo ya Z",
+  'cashier shift & daily z-report': "Igihe cy'Umubitsi & Raporo ya Buri Munsi (Z-Report)",
+  'open shift': "Tangira Igihe cy'Umubitsi",
+  'close shift': "Funga Igihe cy'Umubitsi",
+  'opening float': 'Amafaranga yo Gutangira',
+  'actual counted cash in drawer (rwf)': 'Amafaranga Yabaruwe mu Isanduku (RWF)',
+  'counted cash': 'Amafaranga Yabaruwe',
+  'expected cash': 'Amafaranga Yitezwe',
+  'cash sales': 'Ibyagurishijwe mu Ntoki',
+  'cash expenses': 'Ibikoreshwa byo mu Ntoki',
+  'drawer variance': 'Ikinyuranyo mu Isanduku',
+  'cash shortage': 'Amafaranga Yabuze',
+  'cash overage': 'Amafaranga Yarenzeho',
+  'print thermal receipt': 'Sohora Inyemezabwishyu (Thermal)',
+  '58mm receipt': 'Inyemezabwishyu 58mm',
+  '80mm receipt': 'Inyemezabwishyu 80mm',
+  'print 80mm z-report': 'Sohora Raporo ya Z (80mm)',
+
+  // Bulk Import, Wholesale, Batch/Expiry, Serial/IMEI
+  'import products from excel / csv': 'Injiza Ibicuruzwa bivuye muri Excel / CSV',
+  'bulk excel / csv product import': 'Kwinjiza Ibicuruzwa Byinshi (Excel / CSV)',
+  'download csv template': 'Kurura Imbonerahamwe ya CSV',
+  'retail price': 'Igiciro cya Deta',
+  'wholesale price': 'Igiciro cya Gro',
+  'wholesale min qty': 'Ingano Ntoya ya Gro',
+  'batch number': 'Nomero ya Batch',
+  'expiry date': 'Itariki yo Kurangira',
+  'serial / imei numbers': 'Nomero za Serial / IMEI',
+  'scan barcode': 'Soma Barcode',
+  'barcode scanner': 'Umusomyi wa Barcode',
+
+  // Training Academy & Offline Mode
+  'staff training': "Amahugurwa y'Abakozi",
+  'training academy': 'Ishuri rya ExBOS',
+  'exbos academy': 'Ishuri rya ExBOS',
+  'start lesson': 'Tangira Isomo',
+  'mark complete': 'Garagaza ko Byarangiye',
+  'book live training': 'Saba Amahugurwa Imbonankubone',
+  'offline mode': 'Uburyo bwa Offline',
+  'saved locally (offline)': 'Byabitswe kuri Telefoni/Mudasobwa (Offline)',
+  'saved locally': 'Byabitswe kuri iki Gikoresho',
+  'synced': 'Byahujwe',
+  'syncing...': 'Birimo guhuzwa...',
+  'sync now': 'Huza Ubu',
+  'pending sync': 'Bitegereje Guhuzwa',
+  'online': 'Kuri Interineti',
+  'offline': 'Nta Interineti',
+  'signed in (offline mode)': 'Winjiye (Uburyo bwa Offline)',
+  'main hq unlocked (offline)': 'Main HQ Yafunguwe (Offline)',
+  'retry': 'Ongera Ugerageze',
+  'dismiss': 'Funga'
 }
 
 const DYNAMIC_PATTERNS = [
@@ -1036,12 +1205,36 @@ const DYNAMIC_PATTERNS = [
     replace: (_, name) => `Shyiraho Umuyobozi w'Ishami — ${name}`
   },
   {
+    regex: /^Edit Branch Manager\s*—\s*(.+)$/i,
+    replace: (_, name) => `Hindura Umuyobozi w'Ishami — ${name}`
+  },
+  {
     regex: /^Branch Security & Permissions\s*—\s*(.+)$/i,
     replace: (_, name) => `Umutekano n'Uburenganzira by'Ishami — ${name}`
   },
   {
     regex: /^Transfer Stock from Main HQ\s*→\s*(.+)$/i,
     replace: (_, name) => `Ohereza Ububiko buva ku Cyicaro Gikuru → ${name}`
+  },
+  {
+    regex: /^Recent HQ Stock Handovers to\s+(.+)$/i,
+    replace: (_, name) => `Ububiko Buheruka Koherezwa ku Ishami rya ${name}`
+  },
+  {
+    regex: /^Dispatch (\d+) Products?$/i,
+    replace: (_, n) => `Ohereza Ibicuruzwa ${n}`
+  },
+  {
+    regex: /^Dispatch Batch \((\d+) products?\):$/i,
+    replace: (_, n) => `Urutonde rwo Kohereza (Ibicuruzwa ${n}):`
+  },
+  {
+    regex: /^(\d+(?:\.\d+)?)\s+units?$/i,
+    replace: (_, n) => `Ibice ${n}`
+  },
+  {
+    regex: /^(\d+)\s+pending$/i,
+    replace: (_, n) => `${n} bitegereje`
   },
   {
     regex: /^Organized ledger records, status tracking, and row actions for (.+)\.$/i,
@@ -1175,7 +1368,43 @@ const PHRASE_REPLACEMENTS = [
   ['monthly', 'Buri Kwezi'],
   ['weekly', 'Buri Cyumweru'],
   ['daily', 'Buri Munsi'],
-  ['today', 'Uyu Munsi']
+  ['today', 'Uyu Munsi'],
+  ['branch management', "Imicungire y'Amashami"],
+  ['stock transfer', 'Kohereza Ububiko'],
+  ['permissions', 'Uburenganzira'],
+  ['security', 'Umutekano'],
+  ['notifications', 'Imenyesha'],
+  ['password', "Ijambo ry'Ibanga"],
+  ['location', 'Aho Biherereye'],
+  ['employees', 'Abakozi'],
+  ['employee', 'Umukozi'],
+  ['payroll', 'Imishahara'],
+  ['salary', 'Umushahara'],
+  ['salaries', 'Imishahara'],
+  ['break-even', 'Inyungu Ntarengwa'],
+  ['fixed bills', 'Fagitire Zihoraho'],
+  ['fixed costs', 'Ibikoreshwa Bihoraho'],
+  ['cashier', 'Umubitsi'],
+  ['shift', "Igihe cy'Akazi"],
+  ['training', 'Amahugurwa'],
+  ['offline', 'Nta Interineti'],
+  ['online', 'Kuri Interineti'],
+  ['synced', 'Byahujwe'],
+  ['pending', 'Bitegereje'],
+  ['deactivated', 'Yahagaritswe'],
+  ['activate', 'Fungura'],
+  ['deactivate', 'Hagarika'],
+  ['remove', 'Siba'],
+  ['manage', 'Cunga'],
+  ['create', 'Fungura'],
+  ['assign', 'Shyiraho'],
+  ['transfer', 'Ohereza'],
+  ['import', 'Injiza'],
+  ['export', 'Sohora'],
+  ['download', 'Kurura'],
+  ['print', 'Sohora ku Rupapuro'],
+  ['tax', 'Umusoro'],
+  ['vat', 'TVA']
 ]
 
 function translateSingleSegment(segment) {
@@ -1183,9 +1412,26 @@ function translateSingleSegment(segment) {
   const trimmed = segment.trim().replace(/\s+/g, ' ')
   if (!trimmed) return segment
 
-  const lower = trimmed.toLowerCase()
+  // Strip optional trailing required marker (" *") or colon (":") for exact dictionary matching
+  const suffixMatch = trimmed.match(/(\s*\*|:)$/)
+  const suffix = suffixMatch ? suffixMatch[1] : ''
+  const core = suffix ? trimmed.slice(0, -suffix.length).trim() : trimmed
+
+  const lower = core.toLowerCase()
   const direct = KINYARWANDA_DICT[lower]
-  if (direct) return direct
+  if (direct) return `${direct}${suffix}`
+
+  // Handle "Label: Value" strings (e.g. "Cashier: Alice", "Status: Active", "Opening Float: 50,000 RWF")
+  const colonIdx = trimmed.indexOf(': ')
+  if (colonIdx > 0 && colonIdx < 42) {
+    const labelPart = trimmed.slice(0, colonIdx).trim()
+    const valuePart = trimmed.slice(colonIdx + 2)
+    const translatedLabel = KINYARWANDA_DICT[labelPart.toLowerCase()]
+    if (translatedLabel) {
+      const maybeVal = KINYARWANDA_DICT[valuePart.trim().toLowerCase()]
+      return `${translatedLabel}: ${maybeVal || valuePart}`
+    }
+  }
 
   for (const pat of DYNAMIC_PATTERNS) {
     const m = trimmed.match(pat.regex)
@@ -1230,8 +1476,8 @@ export function translateToKinyarwanda(text) {
     }
   }
 
-  // Handle separator-delimited compound labels ("A · B", "A — B", "A | B")
-  for (const sep of [' · ', ' — ', ' | ']) {
+  // Handle separator-delimited compound labels ("A · B", "A — B", "A | B", "A → B")
+  for (const sep of [' · ', ' — ', ' | ', ' → ']) {
     if (trimmed.includes(sep)) {
       const parts = trimmed.split(sep).map((p) => translateSingleSegment(p))
       return `${leading}${parts.join(sep)}${trailing}`

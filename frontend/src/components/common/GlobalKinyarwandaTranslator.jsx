@@ -134,6 +134,8 @@ export default function GlobalKinyarwandaTranslator() {
       mutations.forEach((m) => {
         if (m.type === 'characterData' && m.target) {
           pendingRoots.add(m.target)
+        } else if (m.type === 'attributes' && m.target) {
+          pendingRoots.add(m.target)
         } else if (m.type === 'childList') {
           if (m.target) pendingRoots.add(m.target)
           m.addedNodes.forEach((n) => pendingRoots.add(n))
@@ -152,7 +154,9 @@ export default function GlobalKinyarwandaTranslator() {
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: true,
+      attributeFilter: ATTRS_TO_TRANSLATE
     })
 
     return () => {
