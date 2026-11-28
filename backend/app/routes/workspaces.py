@@ -1380,10 +1380,20 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
     records_map = ws.get("records", create_empty_record_buckets())
     bucket_list = records_map.get(module_name, [])
 
+    sibling_product_buckets = ("Inventory", "Products", "FinishedGoods", "Stock")
     deleted_item = next(
         (item for item in bucket_list if str(item.get("id")) == str(record_id)),
         None,
     )
+    if deleted_item is None and module_name in sibling_product_buckets:
+        for sib_b in sibling_product_buckets:
+            sib_found = next(
+                (item for item in (records_map.get(sib_b) or []) if isinstance(item, dict) and str(item.get("id")) == str(record_id)),
+                None,
+            )
+            if sib_found is not None:
+                deleted_item = sib_found
+                break
     del_actor_doc = None
     del_is_manager = False
     del_eff_branch_id = None
@@ -1422,7 +1432,7 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
 
     # If deleting a product/catalog item, also purge any mirrored copy in sibling product buckets
     # (Inventory <-> Products <-> FinishedGoods <-> Stock) so it never resurrects on refresh.
-    sibling_product_buckets = ("Inventory", "Products", "FinishedGoods", "Stock")
+    purged_ids: set[str] = {str(record_id)}
     if module_name in sibling_product_buckets:
         del_title_norm = (
             str((deleted_item or {}).get("title") or (deleted_item or {}).get("name") or "").strip().lower()
@@ -1452,6 +1462,8 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
                 same_mirror = bool(del_title_norm and sib_title == del_title_norm and sib_branch == del_branch_norm)
                 if same_id or same_mirror:
                     removed_any = True
+                    if sib_item.get("id"):
+                        purged_ids.add(str(sib_item.get("id")))
                     continue
                 cleaned_sib.append(sib_item)
             if removed_any:
@@ -1710,10 +1722,24 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
             "id": str(record_id),
         }
     )
-    if module_name in PRODUCT_BUCKETS:
-        db.products.delete_one(
-            {"scopeKey": scope_key, "architectureId": arch_id, "id": str(record_id)}
+    # Purge all sibling product bucket entries in db.module_records & db.products and write tombstones
+    # so a concurrent POST /api/v1/storage snapshot from any tab/device can NEVER resurrect deleted records.
+    for pid in purged_ids:
+        if module_name in sibling_product_buckets:
+            for sb in sibling_product_buckets:
+                db.module_records.delete_one(
+                    {"scopeKey": scope_key, "architectureId": arch_id, "bucket": sb, "id": pid}
+                )
+        db.deleted_records.update_one(
+            {"scopeKey": scope_key, "architectureId": arch_id, "id": pid},
+            {"$set": {"scopeKey": scope_key, "architectureId": arch_id, "id": pid, "bucket": module_name, "deletedAt": now_iso}},
+            upsert=True,
         )
+    if module_name in PRODUCT_BUCKETS:
+        for pid in purged_ids:
+            db.products.delete_one(
+                {"scopeKey": scope_key, "architectureId": arch_id, "id": pid}
+            )
         if del_is_manager and isinstance(deleted_item, dict):
             try:
                 from app.services.owner_audit_notifier import notify_owner_branch_product_action

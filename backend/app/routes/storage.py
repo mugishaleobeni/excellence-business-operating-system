@@ -178,6 +178,13 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
             if isinstance(incoming_records, dict) and existing_ws:
                 existing_records = existing_ws.get("records") or {}
                 merged_records = dict(existing_records)
+                # Load tombstones of explicitly deleted records so stale snapshots NEVER resurrect them
+                tombstone_ids: set[str] = {
+                    str(td.get("id") or "")
+                    for td in db.deleted_records.find({"scopeKey": scope_key, "architectureId": arch_id})
+                    if td.get("id")
+                }
+
                 # Query live IDs in db.module_records for this architecture so a stale snapshot from
                 # another device (e.g. PC vs Phone PWA) never wipes out records added on the other device.
                 live_mod_docs = list(
@@ -192,7 +199,7 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                     c_doc.pop("scopeKey", None)
                     b_name = c_doc.get("bucket") or "Inventory"
                     r_id = str(c_doc.get("id") or "")
-                    if r_id:
+                    if r_id and r_id not in tombstone_ids:
                         live_by_bucket.setdefault(b_name, {})[r_id] = c_doc
                         if b_name in ("Products", "FinishedGoods", "Stock"):
                             live_by_bucket.setdefault("Inventory", {})[r_id] = c_doc
@@ -206,21 +213,22 @@ def save_storage_snapshot(validated_data: StorageSnapshotSchema):
                         if not isinstance(item, dict):
                             continue
                         iid = str(item.get("id") or "")
+                        if iid and iid in tombstone_ids:
+                            continue
                         if iid:
                             seen_ids.add(iid)
                         combined_bucket.append(item)
                     # Preserve any live cloud records from db.module_records not yet present in this device's snapshot
                     for live_id, live_item in live_by_bucket.get(bucket_name, {}).items():
-                        if live_id not in seen_ids:
+                        if live_id not in seen_ids and live_id not in tombstone_ids:
                             combined_bucket.insert(0, live_item)
                             seen_ids.add(live_id)
 
-                    if len(combined_bucket) > 0 or len(existing_records.get(bucket_name) or []) == 0:
-                        merged_records[bucket_name] = combined_bucket
-                        if len(combined_bucket) > 0:
-                            _sync_bucket_to_module_records(
-                                db, scope_key, arch_id, bucket_name, combined_bucket, now_iso
-                            )
+                    merged_records[bucket_name] = combined_bucket
+                    if len(combined_bucket) > 0:
+                        _sync_bucket_to_module_records(
+                            db, scope_key, arch_id, bucket_name, combined_bucket, now_iso
+                        )
                 ws_data = {**ws_data, "records": merged_records}
             elif isinstance(incoming_records, dict):
                 for bucket_name, bucket_items in incoming_records.items():

@@ -1424,6 +1424,9 @@ export function ExbosProvider({ children }) {
 
     if (!isHydratedRef.current || isFetchingCloudRef.current) return
     if (!effectiveScope) return
+    // Never fire background POST /storage while a direct CRUD mutation (add/edit/delete) is in-flight
+    // so full-state snapshots never race against targeted DELETE/POST calls
+    if (inFlightMutationCountRef.current > 0) return
     // Never fire background POST /storage requests while offline
     if (typeof navigator !== 'undefined' && !navigator.onLine) return
 

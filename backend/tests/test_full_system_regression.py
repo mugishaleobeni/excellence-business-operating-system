@@ -1429,6 +1429,27 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertEqual(inv_remaining, [])
         self.assertEqual(prod_remaining, [])
 
+        # Even if a stale POST /api/v1/storage snapshot arrives containing the deleted product, tombstones prevent resurrection!
+        r_stale = self.client.post(
+            "/api/storage",
+            json={
+                "user": {"email": owner_email, "architectureId": "buy-and-sell"},
+                "workspaces": {
+                    "buy-and-sell": {
+                        "records": {
+                            "Inventory": [{"id": sugar_branch_id, "title": "Sugar 1kg", "branchId": branch_id, "quantity": 8}],
+                            "Products": [{"id": sugar_branch_id, "title": "Sugar 1kg", "branchId": branch_id, "quantity": 8}],
+                        }
+                    }
+                },
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_stale.status_code, 200)
+        ws_after_stale = self.db.workspaces.find_one({"scopeKey": owner_email, "architectureId": "buy-and-sell"})
+        self.assertFalse(any(p.get("id") == sugar_branch_id for p in ws_after_stale["records"].get("Inventory", [])))
+        self.assertFalse(any(p.get("id") == sugar_branch_id for p in ws_after_stale["records"].get("Products", [])))
+
 
 if __name__ == "__main__":
     unittest.main()
