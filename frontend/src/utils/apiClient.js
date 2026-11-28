@@ -70,6 +70,16 @@ export function getAuthHeaders() {
 }
 
 export async function apiRequest(endpoint, { method = 'GET', body = null, timeoutMs = 25000 } = {}) {
+  // Fast-fail immediately when the browser is offline — zero delay and zero raw "Failed to fetch"
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return {
+      ok: false,
+      status: 0,
+      offline: true,
+      error: 'You are currently offline. Your work is saved on this device and will sync automatically when you reconnect.'
+    }
+  }
+
   const fetchWithTimeout = async (url, options, ms) => {
     if (typeof AbortController === 'undefined' || !ms) {
       return fetch(url, options)
@@ -102,10 +112,12 @@ export async function apiRequest(endpoint, { method = 'GET', body = null, timeou
       if (typeof window !== 'undefined' && isLocalHost(window.location?.hostname || '')) {
         // Fallback to Vite proxy on localhost if direct port 5000 is unreachable
         response = await fetchWithTimeout(`/api/v1${endpoint}`, options, timeoutMs)
+      } else if (method === 'GET') {
+        // Retry once on GET in case of transient connection reset; mutations fall back fast to offline queue
+        await new Promise((r) => setTimeout(r, 400))
+        response = await fetchWithTimeout(`${apiBase}${endpoint}`, options, Math.min(timeoutMs, 10000))
       } else {
-        // Retry once against production backend in case of transient connection reset
-        await new Promise((r) => setTimeout(r, 500))
-        response = await fetchWithTimeout(`${apiBase}${endpoint}`, options, timeoutMs)
+        throw firstErr
       }
     }
     const data = await response.json().catch(() => null)
@@ -151,11 +163,21 @@ export async function apiRequest(endpoint, { method = 'GET', body = null, timeou
     }
   } catch (err) {
     const rawMsg = String(err?.message || err || '')
-    const friendly =
-      err?.name === 'AbortError' || rawMsg.toLowerCase().includes('abort') || rawMsg.toLowerCase().includes('timed out')
-        ? 'Request timed out — server is waking up or network is slow. Please try again.'
-        : rawMsg || 'Network request failed.'
-    return { ok: false, status: 0, error: friendly }
+    const lower = rawMsg.toLowerCase()
+    const isOfflineErr =
+      (typeof navigator !== 'undefined' && navigator.onLine === false) ||
+      lower.includes('failed to fetch') ||
+      lower.includes('networkerror') ||
+      lower.includes('load failed') ||
+      lower.includes('network request failed') ||
+      lower.includes('internet_disconnected')
+    const isTimeout = err?.name === 'AbortError' || lower.includes('abort') || lower.includes('timed out')
+    const friendly = isOfflineErr
+      ? 'You are currently offline. Your work is saved on this device and will sync automatically when you reconnect.'
+      : isTimeout
+      ? 'Connection is slow or offline. Changes are saved locally and will sync automatically once connected.'
+      : rawMsg || 'Connection interrupted. Please try again.'
+    return { ok: false, status: 0, offline: isOfflineErr || isTimeout, error: friendly }
   }
 }
 

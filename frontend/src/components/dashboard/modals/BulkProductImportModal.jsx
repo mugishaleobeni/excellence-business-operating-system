@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Upload, Download, X, FileSpreadsheet, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { exbosApi } from '../../../utils/apiClient'
 import { formatRWF } from '../../../utils/currencyWords'
+import { useExbos } from '../../../context/ExbosContext'
 
 const CSV_TEMPLATE = [
   'title,sku,category,unit,purchasePriceRWF,sellingPriceRWF,wholesalePriceRWF,wholesaleMinQty,quantity,lowStockAlert,batchNumber,expiryDate,serialNumbers',
@@ -87,6 +88,7 @@ export default function BulkProductImportModal({
   addToast,
   onImported
 }) {
+  const { addDemoRecord } = useExbos()
   const [parsedRows, setParsedRows] = useState([])
   const [fileName, setFileName] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
@@ -129,11 +131,45 @@ export default function BulkProductImportModal({
     if (parsedRows.length === 0) return
     setImporting(true)
     setErrorMsg('')
+    const importOfflineLocally = () => {
+      const targetBranch = activeBranchId || 'main'
+      const nowMs = Date.now()
+      parsedRows.forEach((row, idx) => {
+        addDemoRecord?.(activeArchId, 'Inventory', {
+          ...row,
+          id: `IMP-${nowMs}-${idx}`,
+          branchId: targetBranch,
+          stock: row.quantity,
+          currentStock: row.quantity,
+          unitCostRWF: row.purchasePriceRWF,
+          costPerUnitRWF: row.purchasePriceRWF,
+          amountRWF: (row.sellingPriceRWF || row.purchasePriceRWF || 0) * (row.quantity || 1)
+        })
+      })
+      addToast?.({
+        type: 'warning',
+        title: 'Imported Locally (Offline)',
+        message: `${parsedRows.length} product(s) added immediately on this device and queued to sync once online.`
+      })
+      onImported?.({ createdCount: parsedRows.length, updatedCount: 0, offline: true })
+      setParsedRows([])
+      setFileName('')
+      onClose?.()
+    }
+
     try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        importOfflineLocally()
+        return
+      }
       const res = await exbosApi.bulkImportProducts(activeArchId, {
         branchId: activeBranchId || 'main',
         items: parsedRows
       })
+      if (!res?.ok && (res?.offline || res?.status === 0)) {
+        importOfflineLocally()
+        return
+      }
       const data = res?.data?.data || res?.data
       if (!res?.ok) {
         setErrorMsg(res?.data?.error || res?.error || 'Bulk import failed.')
@@ -269,3 +305,4 @@ export default function BulkProductImportModal({
     </div>
   )
 }
+

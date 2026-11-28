@@ -14,6 +14,8 @@ import {
 } from 'lucide-react'
 import { exbosApi } from '../../../utils/apiClient'
 import { formatRWF, formatWithCommas, parseNumericInput } from '../../../utils/currencyWords'
+import { useExbos } from '../../../context/ExbosContext'
+import { readOfflineJsonCache, writeOfflineJsonCache } from '../../../utils/offlineStorage'
 
 const BILL_CATEGORIES = [
   'Shop Rent',
@@ -32,12 +34,15 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
   hideFinancials = false,
   addToast
 }) {
+  const { enqueueOfflineAction } = useExbos()
   const [monthKey, setMonthKey] = useState(() => new Date().toISOString().slice(0, 7))
   const [activeTab, setActiveTab] = useState('employees') // 'employees' | 'bills'
   const [loading, setLoading] = useState(true)
   const [employees, setEmployees] = useState([])
   const [fixedBills, setFixedBills] = useState([])
   const [breakEven, setBreakEven] = useState(null)
+
+  const cacheKey = `exbos_commitments_${activeArchId}_${activeBranchId || 'main'}_${monthKey}`
 
   // Add Employee / Fixed Bill inline form
   const [showAddForm, setShowAddForm] = useState(false)
@@ -59,7 +64,15 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
   const mask = (v) => (hideFinancials ? '••••••' : formatRWF(Number(v || 0)))
 
   const loadData = useCallback(async () => {
-    setLoading(true)
+    const cached = readOfflineJsonCache(cacheKey)
+    if (cached) {
+      setEmployees(Array.isArray(cached.employees) ? cached.employees : [])
+      setFixedBills(Array.isArray(cached.fixedBills) ? cached.fixedBills : [])
+      setBreakEven(cached.breakEven || null)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     try {
       const res = await exbosApi.getCommitments({
         archId: activeArchId,
@@ -68,14 +81,21 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
       })
       const data = res?.data?.data || res?.data
       if (res?.ok && data) {
-        setEmployees(Array.isArray(data.employees) ? data.employees : [])
-        setFixedBills(Array.isArray(data.fixedBills) ? data.fixedBills : [])
+        const nextEmps = Array.isArray(data.employees) ? data.employees : []
+        const nextBills = Array.isArray(data.fixedBills) ? data.fixedBills : []
+        setEmployees(nextEmps)
+        setFixedBills(nextBills)
         setBreakEven(data.breakEven || null)
+        writeOfflineJsonCache(cacheKey, {
+          employees: nextEmps,
+          fixedBills: nextBills,
+          breakEven: data.breakEven || null
+        })
       }
     } finally {
       setLoading(false)
     }
-  }, [activeArchId, activeBranchId, monthKey])
+  }, [activeArchId, activeBranchId, monthKey, cacheKey])
 
   useEffect(() => {
     loadData()
@@ -96,19 +116,51 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
     const amt = parseNumericInput(formMonthlyAmt)
     if (!formName.trim() || amt <= 0) return
     setSavingForm(true)
-    try {
-      const res = await exbosApi.createCommitment({
-        kind: formKind,
-        name: formName.trim(),
-        roleOrCategory: formRoleOrCat.trim(),
-        phone: formPhone.trim(),
-        monthlyAmountRWF: amt,
-        dueDay: Number(formDueDay || 28),
-        archId: activeArchId,
-        branchId: activeBranchId || 'main'
+    const payload = {
+      kind: formKind,
+      name: formName.trim(),
+      roleOrCategory: formRoleOrCat.trim(),
+      phone: formPhone.trim(),
+      monthlyAmountRWF: amt,
+      dueDay: Number(formDueDay || 28),
+      archId: activeArchId,
+      branchId: activeBranchId || 'main'
+    }
+    const saveOfflineLocally = () => {
+      const localItem = {
+        ...payload,
+        id: `CMT-${Date.now()}`,
+        paidThisMonthRWF: 0,
+        remainingThisMonthRWF: amt,
+        monthStatus: 'Unpaid',
+        _pendingSync: true
+      }
+      const nextEmps = formKind === 'employee' ? [localItem, ...employees] : employees
+      const nextBills = formKind !== 'employee' ? [localItem, ...fixedBills] : fixedBills
+      setEmployees(nextEmps)
+      setFixedBills(nextBills)
+      writeOfflineJsonCache(cacheKey, { employees: nextEmps, fixedBills: nextBills, breakEven })
+      enqueueOfflineAction?.({ type: 'commitment_add', payload })
+      addToast?.({
+        type: 'warning',
+        title: 'Saved Locally (Offline)',
+        message: `${formName.trim()} (${formatRWF(amt)}/mo) added on this device and queued to sync once online.`
       })
+      setShowAddForm(false)
+      setActiveTab(formKind === 'employee' ? 'employees' : 'bills')
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        saveOfflineLocally()
+        return
+      }
+      const res = await exbosApi.createCommitment(payload)
+      if (!res?.ok && (res?.offline || res?.status === 0)) {
+        saveOfflineLocally()
+        return
+      }
       if (!res?.ok) {
-        addToast?.({ type: 'error', title: 'Save Failed', message: res?.data?.error || 'Could not save commitment.' })
+        addToast?.({ type: 'error', title: 'Save Failed', message: res?.data?.error || res?.error || 'Could not save commitment.' })
         return
       }
       addToast?.({
@@ -125,7 +177,24 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
   }
 
   const handleDeleteCommitment = async (item) => {
+    const deleteOfflineLocally = () => {
+      const nextEmps = employees.filter((e) => e.id !== item.id)
+      const nextBills = fixedBills.filter((b) => b.id !== item.id)
+      setEmployees(nextEmps)
+      setFixedBills(nextBills)
+      writeOfflineJsonCache(cacheKey, { employees: nextEmps, fixedBills: nextBills, breakEven })
+      enqueueOfflineAction?.({ type: 'commitment_delete', commitmentId: item.id })
+      addToast?.({ type: 'warning', title: 'Removed Locally (Offline)', message: `Removed "${item.name}". Will sync once online.` })
+    }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      deleteOfflineLocally()
+      return
+    }
     const res = await exbosApi.deleteCommitment(item.id)
+    if (!res?.ok && (res?.offline || res?.status === 0)) {
+      deleteOfflineLocally()
+      return
+    }
     if (res?.ok) {
       addToast?.({ type: 'info', title: 'Removed', message: `Removed "${item.name}" from monthly commitments.` })
       loadData()
@@ -146,16 +215,52 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
     const amt = parseNumericInput(payAmount)
     if (amt <= 0) return
     setPaying(true)
-    try {
-      const res = await exbosApi.payCommitment(payTarget.id, {
-        amountRWF: amt,
-        paymentMethod: payMethod,
-        notes: payNotes.trim(),
-        monthKey,
-        archId: activeArchId
+    const payPayload = {
+      amountRWF: amt,
+      paymentMethod: payMethod,
+      notes: payNotes.trim(),
+      monthKey,
+      archId: activeArchId
+    }
+    const payOfflineLocally = () => {
+      const updateList = (list) =>
+        list.map((it) => {
+          if (it.id !== payTarget.id) return it
+          const nextPaid = Number(it.paidThisMonthRWF || 0) + amt
+          const nextRem = Math.max(0, Number(it.monthlyAmountRWF || 0) - nextPaid)
+          return {
+            ...it,
+            paidThisMonthRWF: nextPaid,
+            remainingThisMonthRWF: nextRem,
+            monthStatus: nextRem <= 0 ? 'Paid' : 'Partial',
+            _pendingSync: true
+          }
+        })
+      const nextEmps = updateList(employees)
+      const nextBills = updateList(fixedBills)
+      setEmployees(nextEmps)
+      setFixedBills(nextBills)
+      writeOfflineJsonCache(cacheKey, { employees: nextEmps, fixedBills: nextBills, breakEven })
+      enqueueOfflineAction?.({ type: 'commitment_pay', commitmentId: payTarget.id, payload: payPayload })
+      addToast?.({
+        type: 'warning',
+        title: 'Payment Saved Locally (Offline)',
+        message: `Paid ${formatRWF(amt)} for ${payTarget.name}. Will sync automatically when online.`
       })
+      setPayTarget(null)
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        payOfflineLocally()
+        return
+      }
+      const res = await exbosApi.payCommitment(payTarget.id, payPayload)
+      if (!res?.ok && (res?.offline || res?.status === 0)) {
+        payOfflineLocally()
+        return
+      }
       if (!res?.ok) {
-        addToast?.({ type: 'error', title: 'Payment Failed', message: res?.data?.error || 'Could not record payment.' })
+        addToast?.({ type: 'error', title: 'Payment Failed', message: res?.data?.error || res?.error || 'Could not record payment.' })
         return
       }
       addToast?.({
@@ -617,3 +722,4 @@ export default function MonthlyFixedCostsAndBreakEvenPanel({
     </div>
   )
 }
+

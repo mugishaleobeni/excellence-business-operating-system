@@ -3,6 +3,8 @@ import { X, Clock, CheckCircle2, AlertTriangle, Printer, DollarSign, ShieldAlert
 import { exbosApi } from '../../../utils/apiClient'
 import { formatRWF, formatWithCommas, parseNumericInput } from '../../../utils/currencyWords'
 import { printThermalReceipt } from '../../../utils/printDocument'
+import { useExbos } from '../../../context/ExbosContext'
+import { readOfflineJsonCache, writeOfflineJsonCache } from '../../../utils/offlineStorage'
 
 export default function CashierShiftModal({
   isOpen,
@@ -12,6 +14,7 @@ export default function CashierShiftModal({
   user = null,
   addToast
 }) {
+  const { enqueueOfflineAction } = useExbos()
   const [loading, setLoading] = useState(true)
   const [activeShift, setActiveShift] = useState(null)
   const [shifts, setShifts] = useState([])
@@ -20,19 +23,31 @@ export default function CashierShiftModal({
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  const shiftCacheKey = `exbos_shifts_${activeBranchId || 'main'}`
+
   const loadShifts = useCallback(async () => {
-    setLoading(true)
+    const cached = readOfflineJsonCache(shiftCacheKey)
+    if (cached) {
+      setActiveShift(cached.activeShift || null)
+      setShifts(Array.isArray(cached.shifts) ? cached.shifts : [])
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     try {
       const res = await exbosApi.getShifts(activeBranchId)
       const data = res?.data?.data || res?.data
       if (res?.ok && data) {
-        setActiveShift(data.activeShift || null)
-        setShifts(Array.isArray(data.shifts) ? data.shifts : [])
+        const nextActive = data.activeShift || null
+        const nextList = Array.isArray(data.shifts) ? data.shifts : []
+        setActiveShift(nextActive)
+        setShifts(nextList)
+        writeOfflineJsonCache(shiftCacheKey, { activeShift: nextActive, shifts: nextList })
       }
     } finally {
       setLoading(false)
     }
-  }, [activeBranchId])
+  }, [activeBranchId, shiftCacheKey])
 
   useEffect(() => {
     if (isOpen) {
@@ -47,16 +62,43 @@ export default function CashierShiftModal({
   const handleOpenShift = async (e) => {
     e.preventDefault()
     setSubmitting(true)
-    try {
-      const res = await exbosApi.openShift({
-        branchId: activeBranchId || 'main',
-        archId: activeArchId,
-        openingFloatRWF: parseNumericInput(openingFloat) || 0,
-        cashierName: user?.name || user?.email || 'Cashier',
-        notes: notes.trim()
+    const openPayload = {
+      branchId: activeBranchId || 'main',
+      archId: activeArchId,
+      openingFloatRWF: parseNumericInput(openingFloat) || 0,
+      cashierName: user?.name || user?.email || 'Cashier',
+      notes: notes.trim()
+    }
+    const openOfflineLocally = () => {
+      const localShift = {
+        id: `SHF-${Date.now()}`,
+        ...openPayload,
+        status: 'Open',
+        openedAt: new Date().toISOString(),
+        _pendingSync: true
+      }
+      setActiveShift(localShift)
+      writeOfflineJsonCache(shiftCacheKey, { activeShift: localShift, shifts })
+      enqueueOfflineAction?.({ type: 'shift_open', payload: openPayload })
+      addToast?.({
+        type: 'warning',
+        title: 'Shift Opened Locally (Offline)',
+        message: 'Drawer float saved on this device and will sync automatically when online.'
       })
+      setNotes('')
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        openOfflineLocally()
+        return
+      }
+      const res = await exbosApi.openShift(openPayload)
+      if (!res?.ok && (res?.offline || res?.status === 0)) {
+        openOfflineLocally()
+        return
+      }
       if (!res?.ok) {
-        addToast?.({ type: 'error', title: 'Could Not Open Shift', message: res?.data?.error || 'Try again.' })
+        addToast?.({ type: 'error', title: 'Could Not Open Shift', message: res?.data?.error || res?.error || 'Try again.' })
         return
       }
       addToast?.({ type: 'success', title: 'Cashier Shift Opened', message: 'Drawer float recorded. Happy selling!' })
@@ -71,14 +113,46 @@ export default function CashierShiftModal({
     e.preventDefault()
     if (!activeShift) return
     setSubmitting(true)
-    try {
-      const res = await exbosApi.closeShift(activeShift.id, {
-        countedCashRWF: parseNumericInput(countedCash) || 0,
-        closingNotes: notes.trim()
+    const closePayload = {
+      countedCashRWF: parseNumericInput(countedCash) || 0,
+      closingNotes: notes.trim()
+    }
+    const closeOfflineLocally = () => {
+      const closedShift = {
+        ...activeShift,
+        ...closePayload,
+        status: 'Closed',
+        closedAt: new Date().toISOString(),
+        expectedCashRWF: activeShift.openingFloatRWF || 0,
+        varianceRWF: (closePayload.countedCashRWF || 0) - (activeShift.openingFloatRWF || 0),
+        _pendingSync: true
+      }
+      const nextShifts = [closedShift, ...shifts.filter((s) => s.id !== closedShift.id)]
+      setActiveShift(null)
+      setShifts(nextShifts)
+      writeOfflineJsonCache(shiftCacheKey, { activeShift: null, shifts: nextShifts })
+      enqueueOfflineAction?.({ type: 'shift_close', shiftId: activeShift.id, payload: closePayload })
+      addToast?.({
+        type: 'warning',
+        title: 'Shift Closed Locally (Offline)',
+        message: 'Z-Report saved on this device and will sync automatically when online.'
       })
+      setCountedCash('')
+      setNotes('')
+    }
+    try {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        closeOfflineLocally()
+        return
+      }
+      const res = await exbosApi.closeShift(activeShift.id, closePayload)
+      if (!res?.ok && (res?.offline || res?.status === 0)) {
+        closeOfflineLocally()
+        return
+      }
       const closed = res?.data?.data?.shift || res?.data?.shift
       if (!res?.ok) {
-        addToast?.({ type: 'error', title: 'Close Failed', message: res?.data?.error || 'Could not close shift.' })
+        addToast?.({ type: 'error', title: 'Close Failed', message: res?.data?.error || res?.error || 'Could not close shift.' })
         return
       }
       const variance = Number(closed?.varianceRWF || 0)
@@ -293,3 +367,4 @@ export default function CashierShiftModal({
     </div>
   )
 }
+

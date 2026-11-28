@@ -16,7 +16,11 @@ import {
   idbSet,
   generateQueueId,
   readFailedOfflineActions,
-  writeFailedOfflineActions
+  writeFailedOfflineActions,
+  saveOfflineCredentialVerifier,
+  verifyOfflineCredential,
+  saveOfflineOwnerSecretVerifier,
+  verifyOfflineOwnerSecret
 } from '../utils/offlineStorage'
 
 const ExbosContext = createContext(null)
@@ -427,12 +431,35 @@ export function ExbosProvider({ children }) {
     if (!trimmed) {
       return { ok: false, error: 'Please enter the Owner password or security PIN.' }
     }
+    const ownerScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+    const unlockLocally = () => {
+      const targetId = pendingBranchSwitchId || 'main'
+      setPendingBranchSwitchId(null)
+      setActiveBranchId(targetId)
+      addToast({
+        type: 'success',
+        title: 'Main HQ Unlocked (Offline)',
+        message: 'Owner identity verified locally. Switched to Main HQ.'
+      })
+      return { ok: true, offline: true }
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const validOffline = await verifyOfflineOwnerSecret(ownerScope, trimmed)
+      if (validOffline) return unlockLocally()
+      return {
+        ok: false,
+        error: 'Invalid Owner password or security PIN (verified offline).'
+      }
+    }
+
     try {
       const res = await exbosApi.verifyOwnerBranchSwitch({
         secret: trimmed,
         fromBranchId: activeBranchId
       })
       if (res?.ok && (res?.data?.data?.verified || res?.data?.verified)) {
+        saveOfflineOwnerSecretVerifier(ownerScope, trimmed).catch(() => {})
         const targetId = pendingBranchSwitchId || 'main'
         setPendingBranchSwitchId(null)
         setActiveBranchId(targetId)
@@ -443,14 +470,24 @@ export function ExbosProvider({ children }) {
         })
         return { ok: true }
       }
+      if (res?.offline || res?.status === 0) {
+        const validOffline = await verifyOfflineOwnerSecret(ownerScope, trimmed)
+        if (validOffline) return unlockLocally()
+        return {
+          ok: false,
+          error: 'You are offline and this password/PIN could not be verified locally.'
+        }
+      }
       return {
         ok: false,
         error: res?.error || res?.data?.error || 'Invalid Owner password or security PIN.'
       }
     } catch (err) {
+      const validOffline = await verifyOfflineOwnerSecret(ownerScope, trimmed)
+      if (validOffline) return unlockLocally()
       return {
         ok: false,
-        error: err?.message || 'Could not verify Owner credentials.'
+        error: 'Could not verify Owner credentials while offline.'
       }
     }
   }
@@ -1560,6 +1597,16 @@ export function ExbosProvider({ children }) {
             res = await exbosApi.deleteTransaction(item.txId)
           } else if (item.type === 'workspace') {
             res = await exbosApi.patchWorkspace(item.archId, item.payload)
+          } else if (item.type === 'commitment_add') {
+            res = await exbosApi.createCommitment(item.payload)
+          } else if (item.type === 'commitment_delete') {
+            res = await exbosApi.deleteCommitment(item.commitmentId)
+          } else if (item.type === 'commitment_pay') {
+            res = await exbosApi.payCommitment(item.commitmentId, item.payload)
+          } else if (item.type === 'shift_open') {
+            res = await exbosApi.openShift(item.payload)
+          } else if (item.type === 'shift_close') {
+            res = await exbosApi.closeShift(item.shiftId, item.payload)
           }
 
           // Treat 404 on delete/delete_tx as already deleted on server (idempotent success)
@@ -1890,11 +1937,14 @@ export function ExbosProvider({ children }) {
     const prodQty = Number(newItem?.quantity ?? newItem?.currentStock ?? newItem?.stock ?? 0)
     const prodCost = Number(newItem?.costPerUnitRWF ?? newItem?.unitCostRWF ?? newItem?.purchasePriceRWF ?? 0)
     const prodPrice = Number(newItem?.sellingPriceRWF ?? newItem?.sellingPrice ?? newItem?.priceRWF ?? 0)
+    const resolvedBranchId = String(newItem?.branchId || activeBranchId || 'main').trim() || 'main'
+    const isCurrentlyOffline = typeof navigator !== 'undefined' && navigator.onLine === false
     const entry = {
-      id: recordId,
-      date: todayStr,
-      branchId: newItem?.branchId || activeBranchId || 'main',
       ...newItem,
+      id: recordId,
+      date: newItem?.date || todayStr,
+      branchId: resolvedBranchId,
+      ...(isCurrentlyOffline ? { _pendingSync: true } : {}),
       ...(isProductBucket
         ? {
             name: newItem?.name || newItem?.title || 'Product',
@@ -1968,7 +2018,7 @@ export function ExbosProvider({ children }) {
         nextRecords.Products = [entry, ...existingProducts.filter((r) => r.id !== entry.id)]
       }
 
-      return {
+      const nextState = {
         ...prev,
         [targetArch]: {
           ...base,
@@ -1976,6 +2026,12 @@ export function ExbosProvider({ children }) {
           records: nextRecords
         }
       }
+      // Flush immediately to localStorage + IndexedDB so even an instant refresh preserves the new item
+      const activeScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+      if (activeScope) {
+        writeScopedOfflineCache(activeScope, nextState, transactions)
+      }
+      return nextState
     })
 
     if (moduleName === 'Sales' && Number(newItem.amountRWF) > 0) {
@@ -2472,18 +2528,40 @@ export function ExbosProvider({ children }) {
       )
       if (!exists && !hasIdentity) return prev
       const updatedList = exists
-        ? currentList.map((r) => (r.id === recordId ? { ...r, ...updatedFields } : r))
-        : [{ id: recordId, ...updatedFields }, ...currentList]
-      return {
+        ? currentList.map((r) =>
+            r.id === recordId
+              ? { ...r, ...updatedFields, branchId: updatedFields?.branchId || r.branchId || activeBranchId || 'main' }
+              : r
+          )
+        : [{ ...updatedFields, id: recordId, branchId: updatedFields?.branchId || activeBranchId || 'main' }, ...currentList]
+      const nextRecords = {
+        ...base.records,
+        [moduleName]: updatedList
+      }
+      // Keep Products and Inventory buckets in sync on edits too
+      if (moduleName === 'Inventory' || moduleName === 'Products') {
+        const sibling = moduleName === 'Inventory' ? 'Products' : 'Inventory'
+        const sibList = Array.isArray(base.records?.[sibling]) ? base.records[sibling] : []
+        if (sibList.some((r) => r.id === recordId)) {
+          nextRecords[sibling] = sibList.map((r) =>
+            r.id === recordId
+              ? { ...r, ...updatedFields, branchId: updatedFields?.branchId || r.branchId || activeBranchId || 'main' }
+              : r
+          )
+        }
+      }
+      const nextState = {
         ...prev,
         [targetArch]: {
           ...base,
-          records: {
-            ...base.records,
-            [moduleName]: updatedList
-          }
+          records: nextRecords
         }
       }
+      const activeScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+      if (activeScope) {
+        writeScopedOfflineCache(activeScope, nextState, transactions)
+      }
+      return nextState
     })
   }
 
@@ -2706,9 +2784,46 @@ export function ExbosProvider({ children }) {
   }
 
   const login = async (credentials) => {
+    const cleanEmail = (credentials.email || '').trim().toLowerCase()
+    const rawPassword = credentials.password || ''
+
+    const tryOfflineReturningLogin = async () => {
+      const cachedUser = await verifyOfflineCredential(cleanEmail, rawPassword)
+      if (!cachedUser) {
+        throw new Error(
+          'You are currently offline. Connect to the internet once to sign in on this device; after that, ExBOS works offline automatically.'
+        )
+      }
+      const loginScope = String(cachedUser?.ownerScopeKey || cachedUser?.email || cleanEmail).trim().toLowerCase()
+      try {
+        localStorage.setItem('exbos_user', JSON.stringify(cachedUser))
+        const loginArch = cachedUser?.architectureId || 'buy-and-sell'
+        localStorage.setItem('exbos_active_arch', loginArch)
+      } catch {}
+      const cachedSnap = readScopedOfflineCache(loginScope)
+      if (cachedSnap?.workspaces) {
+        isHydratedRef.current = true
+        setWorkspaces(sanitizeUserWorkspaces(cachedSnap.workspaces))
+      }
+      if (Array.isArray(cachedSnap?.transactions)) {
+        setTransactions(sanitizeUserTransactions(cachedSnap.transactions))
+      }
+      setUser(cachedUser)
+      addToast({
+        type: 'warning',
+        title: 'Signed In (Offline Mode)',
+        message: 'Using your cached business workspace on this device. All changes will sync automatically when you reconnect.'
+      })
+      return cachedUser
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return await tryOfflineReturningLogin()
+    }
+
     const res = await exbosApi.login({
-      email: (credentials.email || '').trim().toLowerCase(),
-      password: credentials.password || '',
+      email: cleanEmail,
+      password: rawPassword,
       architectureId: credentials.architectureId || undefined,
       otpCode: credentials.otpCode || undefined
     })
@@ -2723,11 +2838,16 @@ export function ExbosProvider({ children }) {
       }
     }
 
+    if (!res.ok && (res.offline || res.status === 0)) {
+      return await tryOfflineReturningLogin()
+    }
+
     if (!res.ok || !res.data?.data?.user) {
       throw new Error(res.error || 'Invalid email or password.')
     }
 
     const { access_token, user: backendUser, workspaces: backendWorkspaces } = res.data.data
+    saveOfflineCredentialVerifier(cleanEmail, rawPassword, backendUser).catch(() => {})
     try {
       if (access_token) {
         localStorage.setItem('exbos_access_token', access_token)
@@ -3044,6 +3164,7 @@ export function ExbosProvider({ children }) {
         failedOfflineActions,
         lastSyncedAt,
         flushOfflineQueue,
+        enqueueOfflineAction,
         retryFailedOfflineAction,
         dismissFailedOfflineAction,
         checkConnectionHealth,
