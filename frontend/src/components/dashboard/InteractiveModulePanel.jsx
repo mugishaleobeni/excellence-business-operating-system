@@ -43,6 +43,8 @@ import {
   Tag,
   ChevronDown,
   Search,
+  Upload,
+  ArrowUp,
   ArrowUpRight,
   BarChart3,
   MapPin,
@@ -2697,6 +2699,105 @@ export default function InteractiveModulePanel({
           )}
         </div>
       )}
+
+      {/* Floating Quick-Action Bar (Always accessible when scrolling long Product / Sales / Ledger lists) */}
+      {!modalOpen &&
+        !bulkImportOpen &&
+        !shiftModalOpen &&
+        !detailRow &&
+        ['Products', 'Inventory', 'Stock', 'Sales', 'Purchases', 'Expenses', 'Customers', 'Suppliers'].includes(activeModule) && (
+          <div className="fixed bottom-20 lg:bottom-6 right-3 sm:right-6 z-40 flex flex-wrap items-center justify-end gap-2 max-w-[calc(100vw-24px)]">
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              title="Back to Top"
+              className="w-10 h-10 rounded-full bg-[#06143D]/95 hover:bg-[#0B2261] border border-[#218DFF]/45 text-[#9EDCFF] hover:text-white shadow-xl backdrop-blur-xl flex items-center justify-center cursor-pointer transition-all active:scale-95"
+            >
+              <ArrowUp className="w-4 h-4" />
+            </button>
+
+            {(activeModule === 'Products' || activeModule === 'Inventory' || activeModule === 'Stock') && !blockAddProduct && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setBulkImportOpen(true)}
+                  title="Import Products from Excel / CSV"
+                  className="px-3.5 h-10 rounded-full bg-[#06143D]/95 hover:bg-[#0B2261] border border-[#218DFF]/50 text-[#9EDCFF] hover:text-white text-xs font-bold shadow-xl backdrop-blur-xl inline-flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Import CSV</span>
+                </button>
+                {activePage === 'Stock' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditRow(null)
+                      setForceProductModal(false)
+                      setReceiveStockMode(true)
+                      setModalOpen(true)
+                    }}
+                    title="Receive Supplier Stock"
+                    className="px-3.5 h-10 rounded-full bg-emerald-600/95 hover:bg-emerald-500 border border-emerald-300/40 text-white text-xs font-bold shadow-xl backdrop-blur-xl inline-flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Receive Stock</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditRow(null)
+                    setReceiveStockMode(false)
+                    setForceProductModal(true)
+                    setModalOpen(true)
+                  }}
+                  className="btn-sapphire-clean px-4 h-10 rounded-full text-xs font-bold shadow-[0_8px_28px_rgba(33,141,255,0.45)] inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                >
+                  <Plus className="w-4 h-4 text-[#9EDCFF]" />
+                  <span>Add Product</span>
+                </button>
+              </>
+            )}
+
+            {activeModule === 'Sales' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShiftModalOpen(true)}
+                  className="px-3.5 h-10 rounded-full bg-[#06143D]/95 hover:bg-[#0B2261] border border-emerald-400/45 text-emerald-300 hover:text-white text-xs font-bold shadow-xl backdrop-blur-xl inline-flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <Wallet className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Shift Z-Report</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditRow(null)
+                    setModalOpen(true)
+                  }}
+                  className="btn-sapphire-clean px-4 h-10 rounded-full text-xs font-bold shadow-[0_8px_28px_rgba(33,141,255,0.45)] inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+                >
+                  <Plus className="w-4 h-4 text-[#9EDCFF]" />
+                  <span>New Sale</span>
+                </button>
+              </>
+            )}
+
+            {['Purchases', 'Expenses', 'Customers', 'Suppliers'].includes(activeModule) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditRow(null)
+                  setModalOpen(true)
+                }}
+                className="btn-sapphire-clean px-4 h-10 rounded-full text-xs font-bold shadow-[0_8px_28px_rgba(33,141,255,0.45)] inline-flex items-center gap-1.5 cursor-pointer active:scale-95 transition-transform"
+              >
+                <Plus className="w-4 h-4 text-[#9EDCFF]" />
+                <span>New {resolvedEntityName}</span>
+              </button>
+            )}
+          </div>
+        )}
 
       <BulkProductImportModal
         isOpen={bulkImportOpen}
