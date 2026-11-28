@@ -1468,7 +1468,15 @@ export const KINYARWANDA_DICT = {
   'extend or renew plan by +30 days': 'Ongeraho Iminsi +30 ku Ifatabuguzi',
   'revoke paid plan due to corrupt or invalid payment proof': 'Hagarika ifatabuguzi kubera icyemezo cy\'ubwishyu kitari cyo',
   'permanently delete user and all workspace data': 'Siba burundu ukoresha n\'amakuru ye yose',
-  'send a live test verification email to recipient': 'Ohereza imeyili y\'igerageza ku wakira'
+  'send a live test verification email to recipient': 'Ohereza imeyili y\'igerageza ku wakira',
+  'comparison graph': 'Igishushanyo cy\'Igereranya',
+  'branch cards': 'Amakarita y\'Amashami',
+  'top products': 'Ibicuruzwa bikunzwe',
+  'branch stock': 'Ububiko bw\'Ishami',
+  'most bought': 'Ibyaguzwe Cyane',
+  'action history': 'Amateka y\'Ibikorwa',
+  'previous': 'Ibanziriza',
+  'next': 'Ibikurikira'
 }
 
 const DYNAMIC_PATTERNS = [
@@ -1611,6 +1619,23 @@ const DYNAMIC_PATTERNS = [
   {
     regex: /^Compare All Branches \((\d+)\)$/i,
     replace: (_, n) => `Gereranya Amashami Yose (${n})`
+  },
+  {
+    regex: /^Branch Cards \((\d+)\)$/i,
+    replace: (_, n) => `Amakarita y'Amashami (${n})`
+  },
+  {
+    regex: /^Branch Stock \((\d+)\)$/i,
+    replace: (_, n) => `Ububiko bw'Ishami (${n})`
+  },
+  {
+    regex: /^Action History \((\d+)\)$/i,
+    replace: (_, n) => `Amateka y'Ibikorwa (${n})`
+  },
+  {
+    regex: /^Page (\d+) of (\d+) \((\d+) (products|actions)\)$/i,
+    replace: (_, p, t, c, kind) =>
+      `Urupapuro ${p} kuri ${t} (${kind.toLowerCase() === 'products' ? 'ibicuruzwa' : 'ibikorwa'} ${c})`
   },
   {
     regex: /^(\d+)\s+Locations?\s+Tracked$/i,

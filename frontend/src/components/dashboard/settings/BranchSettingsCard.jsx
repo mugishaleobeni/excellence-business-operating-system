@@ -567,32 +567,32 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   }
 
   return (
-    <div className="rounded-2xl border border-[#218DFF]/30 bg-[#051238]/90 p-6 sm:p-7 space-y-5 shadow-xl">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
+    <div className="rounded-2xl border border-[#218DFF]/30 bg-[#051238]/90 p-4 sm:p-7 space-y-4 sm:space-y-5 shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-white/10 pb-3 sm:pb-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF]">
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#218DFF]/20 border border-[#9EDCFF]/30 flex items-center justify-center text-[#9EDCFF] shrink-0">
             <GitBranch className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="font-orbitron text-sm sm:text-base font-bold text-white">
+            <h3 className="font-orbitron text-xs sm:text-base font-bold text-white">
               Branches, Security &amp; Multi-Location Control
             </h3>
-            <p className="text-xs text-slate-300">
+            <p className="hidden sm:block text-xs text-slate-300">
               Create isolated branches (defaulting to <strong>{currentArch.name || activeArchId}</strong>), lock Main HQ access, configure permissions, and transfer stock from HQ.
             </p>
           </div>
         </div>
-        <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-[#218DFF]/20 border border-[#9EDCFF]/30 text-[#9EDCFF]">
+        <span className="text-[10px] sm:text-[11px] font-mono font-bold px-2.5 py-1 rounded-full bg-[#218DFF]/20 border border-[#9EDCFF]/30 text-[#9EDCFF]">
           {Math.max(1, branches.length)} Active Branch{branches.length === 1 ? '' : 'es'}
         </span>
       </div>
 
       {/* Sub-Navigation Tabs inside Branch Management */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[#040D29]/90 border border-white/10">
+      <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#040D29]/90 border border-white/10">
         <button
           type="button"
           onClick={() => setActiveManagementTab('manage')}
-          className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+          className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold cursor-pointer transition-all text-center ${
             activeManagementTab === 'manage'
               ? 'bg-[#218DFF] text-white shadow-md'
               : 'text-slate-300 hover:text-white hover:bg-white/5'
@@ -603,7 +603,7 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
         <button
           type="button"
           onClick={() => setActiveManagementTab('intelligence')}
-          className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+          className={`px-2.5 sm:px-4 py-2 rounded-xl text-[11px] sm:text-xs font-bold cursor-pointer transition-all text-center ${
             activeManagementTab === 'intelligence'
               ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-md'
               : 'text-[#9EDCFF] hover:text-white hover:bg-white/5'
