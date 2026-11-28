@@ -44,7 +44,6 @@ import {
   ChevronDown,
   Search,
   Upload,
-  ArrowUp,
   ArrowUpRight,
   BarChart3,
   MapPin,
@@ -2707,15 +2706,6 @@ export default function InteractiveModulePanel({
         !detailRow &&
         ['Products', 'Inventory', 'Stock', 'Sales', 'Purchases', 'Expenses', 'Customers', 'Suppliers'].includes(activeModule) && (
           <div className="fixed bottom-20 lg:bottom-6 right-3 sm:right-6 z-40 flex flex-wrap items-center justify-end gap-2 max-w-[calc(100vw-24px)]">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              title="Back to Top"
-              className="w-10 h-10 rounded-full bg-[#06143D]/95 hover:bg-[#0B2261] border border-[#218DFF]/45 text-[#9EDCFF] hover:text-white shadow-xl backdrop-blur-xl flex items-center justify-center cursor-pointer transition-all active:scale-95"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
-
             {(activeModule === 'Products' || activeModule === 'Inventory' || activeModule === 'Stock') && !blockAddProduct && (
               <>
                 <button
