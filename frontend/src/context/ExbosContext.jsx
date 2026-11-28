@@ -1024,6 +1024,8 @@ export function ExbosProvider({ children }) {
   const isFlushingRef = useRef(false)
   const lastPostedHashRef = useRef('')
   const lastMutationTsRef = useRef(0)
+  const inFlightMutationCountRef = useRef(0)
+  const pendingLocalRecordIdsRef = useRef(new Map()) // recordId -> addedAt timestamp
   const recentlyDeletedIdsRef = useRef(new Set())
   const activeScopeRef = useRef('')
   activeScopeRef.current = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
@@ -1065,6 +1067,14 @@ export function ExbosProvider({ children }) {
     const cleanBase = createCleanWorkspaces()
     const mergedOut = { ...cleanBase, ...(localWsMap || {}) }
     const deletedIds = recentlyDeletedIdsRef.current
+    const pendingMap = pendingLocalRecordIdsRef.current
+    const nowTs = Date.now()
+    const queuedAddIds = new Set(
+      getOfflineQueue()
+        .filter((q) => q && (q.type === 'add' || q.type === 'update'))
+        .map((q) => String(q.entry?.id || q.recordId || ''))
+        .filter(Boolean)
+    )
 
     Object.keys(serverWsMap || {}).forEach((archKey) => {
       const sWs = serverWsMap[archKey]
@@ -1087,16 +1097,35 @@ export function ExbosProvider({ children }) {
             : []
         const seen = new Set()
         const combined = []
-        // Server (MongoDB Atlas) is the single source of truth so updates & deletes from WhatsApp
-        // or other devices reflect immediately without requiring a page refresh.
+        // Server (MongoDB Atlas) is the source of truth for confirmed records
         for (const item of [...serverArr, ...extraProductArr]) {
           if (!item || typeof item !== 'object') continue
           const idStr = String(item.id || '')
           if (!idStr || seen.has(idStr) || deletedIds.has(idStr)) continue
           seen.add(idStr)
+          // Server has confirmed this item; clear any pending optimistic hold
+          if (pendingMap.has(idStr) && !queuedAddIds.has(idStr)) {
+            pendingMap.delete(idStr)
+          }
           combined.push(item)
         }
-        nextRecords[bName] = combined
+
+        // Preserve any locally added / unsynced / in-flight optimistic records that have not
+        // yet appeared in the server snapshot so newly added products NEVER flash and disappear!
+        const localArr = Array.isArray(lRecs[bName]) ? lRecs[bName] : []
+        const preservedLocal = []
+        for (const lItem of localArr) {
+          if (!lItem || typeof lItem !== 'object') continue
+          const idStr = String(lItem.id || '')
+          if (!idStr || seen.has(idStr) || deletedIds.has(idStr)) continue
+          const pendingTs = pendingMap.get(idStr)
+          const isRecentOptimistic = Boolean(pendingTs && nowTs - pendingTs < 45000)
+          if (lItem._pendingSync || queuedAddIds.has(idStr) || isRecentOptimistic) {
+            seen.add(idStr)
+            preservedLocal.push(lItem)
+          }
+        }
+        nextRecords[bName] = [...preservedLocal, ...combined]
       })
 
       mergedOut[archKey] = {
@@ -1160,6 +1189,8 @@ export function ExbosProvider({ children }) {
       if (effectiveScope) {
         idbGet(getScopedCacheKey(effectiveScope)).then((idbSnap) => {
           if (!isMounted || !idbSnap) return
+          // Never overwrite in-memory mutations that happened after mount with an older IndexedDB snapshot
+          if (lastMutationTsRef.current > 0) return
           const stillNeedsOffline =
             !isHydratedRef.current ||
             getOfflineQueue(effectiveScope).length > 0 ||
@@ -1200,11 +1231,12 @@ export function ExbosProvider({ children }) {
         return
       }
       if (isInitial && isMounted && !cachedSnapshot) setIsInitialCloudLoading(true)
-      // Avoid racing right in the middle of a local mutation (within 2.5s)
-      if (!isInitial && Date.now() - lastMutationTsRef.current < 2500) return
+      // Avoid racing right in the middle of an active or very recent local mutation
+      if (!isInitial && (inFlightMutationCountRef.current > 0 || Date.now() - lastMutationTsRef.current < 4000)) return
 
+      const fetchStartedAt = Date.now()
       const sep = scopeParam ? '&' : '?'
-      fetch(`${resolveStorageUrl(scopeParam)}${sep}_t=${Date.now()}`, {
+      fetch(`${resolveStorageUrl(scopeParam)}${sep}_t=${fetchStartedAt}`, {
         headers: getAuthHeaders(),
         cache: 'no-store'
       })
@@ -1228,12 +1260,24 @@ export function ExbosProvider({ children }) {
         })
         .then((serverData) => {
           if (!isMounted || !serverData) return
+          // Critical Stale-Snapshot Guard: if the user added/edited/deleted ANY record while this GET
+          // was in-flight (or queued an offline mutation), discard this stale server snapshot so newly
+          // added products/sales NEVER appear and then disappear!
+          if (
+            !isInitial &&
+            (inFlightMutationCountRef.current > 0 ||
+              lastMutationTsRef.current >= fetchStartedAt ||
+              getOfflineQueue(effectiveScope).length > 0 ||
+              isFlushingRef.current)
+          ) {
+            return
+          }
           isFetchingCloudRef.current = true
           if (serverData.workspaces && typeof serverData.workspaces === 'object') {
             const sanitized = sanitizeUserWorkspaces(serverData.workspaces)
             setWorkspaces((prev) => {
               // Always normalize & merge Products/FinishedGoods/Stock into Inventory even on initial load
-              const nextWs = mergeServerWorkspacesWithLocal(sanitized, isInitial ? createCleanWorkspaces() : prev)
+              const nextWs = mergeServerWorkspacesWithLocal(sanitized, isInitial && lastMutationTsRef.current === 0 ? createCleanWorkspaces() : prev)
               if (JSON.stringify(prev) === JSON.stringify(nextWs)) return prev
               return nextWs
             })
@@ -1931,7 +1975,8 @@ export function ExbosProvider({ children }) {
     isHydratedRef.current = true
     lastMutationTsRef.current = Date.now()
     const recordId =
-      newItem?.id || `${normalizedModule.slice(0, 3).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
+      newItem?.id || `${normalizedModule.slice(0, 3).toUpperCase()}-${Date.now().toString(36).slice(-5).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`
+    pendingLocalRecordIdsRef.current.set(String(recordId), Date.now())
     const todayStr = new Date().toISOString().slice(0, 10)
     const isProductBucket = normalizedModule === 'Inventory'
     const prodQty = Number(newItem?.quantity ?? newItem?.currentStock ?? newItem?.stock ?? 0)
@@ -2097,9 +2142,38 @@ export function ExbosProvider({ children }) {
         return
       }
 
-      const res = await exbosApi.addModuleRecord(targetArch, moduleName, entry)
+      inFlightMutationCountRef.current += 1
+      let res
+      try {
+        res = await exbosApi.addModuleRecord(targetArch, moduleName, entry)
+      } finally {
+        inFlightMutationCountRef.current = Math.max(0, inFlightMutationCountRef.current - 1)
+      }
       if (res?.ok) {
         setDbConnected(true)
+        lastMutationTsRef.current = Date.now()
+        // Clear _pendingSync flag now that server confirmed persistence
+        setWorkspaces((prev) => {
+          const base = prev[targetArch]
+          if (!base) return prev
+          const cleanBucket = (arr) =>
+            Array.isArray(arr)
+              ? arr.map((r) => (r.id === entry.id ? { ...r, _pendingSync: false } : r))
+              : arr
+          const nextRecords = {
+            ...base.records,
+            [moduleName]: cleanBucket(base.records?.[moduleName])
+          }
+          if (isProductBucket && Array.isArray(base.records?.Products)) {
+            nextRecords.Products = cleanBucket(base.records.Products)
+          }
+          const nextState = { ...prev, [targetArch]: { ...base, records: nextRecords } }
+          const activeScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+          if (activeScope) {
+            writeScopedOfflineCache(activeScope, nextState, transactions)
+          }
+          return nextState
+        })
         return
       }
 
@@ -2489,7 +2563,16 @@ export function ExbosProvider({ children }) {
         })
         return
       }
-      const res = await exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
+      inFlightMutationCountRef.current += 1
+      let res
+      try {
+        res = await exbosApi.updateModuleRecord(targetArch, moduleName, recordId, updatedFields)
+      } finally {
+        inFlightMutationCountRef.current = Math.max(0, inFlightMutationCountRef.current - 1)
+      }
+      if (res?.ok) {
+        lastMutationTsRef.current = Date.now()
+      }
       if (!res?.ok && res?.status >= 400 && res?.status < 500) {
         addToast({
           type: 'error',
