@@ -54,13 +54,6 @@ def _normalize_branch_doc(b: dict) -> dict:
     base_perms = _default_branch_permissions(is_main)
     existing_perms = out.get("permissions") if isinstance(out.get("permissions"), dict) else {}
     merged_perms = {**base_perms, **existing_perms}
-    if is_main:
-        merged_perms["canDeleteRecords"] = True
-        merged_perms["canEditPrices"] = True
-        merged_perms["canViewProfitReports"] = True
-        merged_perms["canAddInventory"] = True
-        merged_perms["canEditProducts"] = True
-        merged_perms["canDeleteProducts"] = True
     out["permissions"] = merged_perms
     return out
 
@@ -352,13 +345,6 @@ def update_branch(branch_id: str):
                 cur_perms["maxExpenseLimitRWF"] = max(0.0, float(payload["permissions"]["maxExpenseLimitRWF"] or 0))
             except Exception:
                 pass
-        if is_main:
-            cur_perms["canDeleteRecords"] = True
-            cur_perms["canEditPrices"] = True
-            cur_perms["canViewProfitReports"] = True
-            cur_perms["canAddInventory"] = True
-            cur_perms["canEditProducts"] = True
-            cur_perms["canDeleteProducts"] = True
         updates["permissions"] = cur_perms
 
     db.branches.update_one({"scopeKey": scope_key, "id": branch_id}, {"$set": updates})
@@ -1754,5 +1740,509 @@ def branch_analytics():
             "totalNetProfitRWF": sum(b["netProfitRWF"] for b in perf_sorted),
         },
         message="Branch analytics calculated.",
+    )
+
+
+def _parse_record_datetime(rec: dict) -> tuple[str, str, str, str]:
+    """
+    Extract (date_iso 'YYYY-MM-DD', time_str 'HH:MM', day_name 'Monday', sort_iso) from a record.
+    """
+    raw_ts = str(
+        rec.get("timestamp")
+        or rec.get("createdAt")
+        or rec.get("updatedAt")
+        or rec.get("openedAt")
+        or rec.get("closedAt")
+        or rec.get("date")
+        or ""
+    ).strip()
+    raw_date = str(rec.get("date") or raw_ts[:10] or "").strip()[:10]
+    time_part = ""
+    if "T" in raw_ts and len(raw_ts) >= 16:
+        time_part = raw_ts[11:16]
+    elif " " in raw_ts and len(raw_ts) >= 16:
+        time_part = raw_ts[11:16]
+    elif rec.get("time"):
+        time_part = str(rec.get("time"))[:5]
+
+    day_name = ""
+    if len(raw_date) == 10:
+        try:
+            dt_obj = datetime.strptime(raw_date, "%Y-%m-%d").date()
+            day_name = dt_obj.strftime("%A")
+        except Exception:
+            day_name = ""
+    sort_iso = raw_ts if len(raw_ts) >= 10 else (f"{raw_date}T{time_part or '00:00'}:00" if raw_date else "")
+    return raw_date, (time_part or "—"), day_name, sort_iso
+
+
+def _matches_period_and_day(date_iso: str, day_name: str, period: str, day_of_week: str, today_date) -> bool:
+    if day_of_week and day_of_week != "all":
+        if not day_name or day_name.lower() != day_of_week.lower():
+            return False
+    if not period or period == "all":
+        return True
+    if len(date_iso) != 10:
+        return False
+    try:
+        d_obj = datetime.strptime(date_iso, "%Y-%m-%d").date()
+    except Exception:
+        return False
+    if period == "today":
+        return d_obj == today_date
+    if period == "7d":
+        diff = (today_date - d_obj).days
+        return 0 <= diff <= 7
+    if period == "month":
+        return d_obj.year == today_date.year and d_obj.month == today_date.month
+    return True
+
+
+@branches_bp.route("/intelligence", methods=["GET"])
+def branch_executive_intelligence():
+    """
+    Business Owner Executive Branch Inspector & Multi-Branch Comparison Engine.
+    Returns per-branch stock, quantity, cost/retail valuation, low-stock alerts,
+    most-bought products, chronological action audit history (with day, date, time),
+    and cross-branch profit/revenue comparison filtered by time period and day of week.
+    """
+    db = get_db()
+    scope_key, user_doc = _resolve_scope_and_user(db)
+    if _is_branch_manager(user_doc):
+        return error_response(
+            "Only the Business Owner can access the Multi-Branch Executive Intelligence Center.",
+            status_code=403,
+        )
+    main_branch = _ensure_main_branch(db, scope_key, user_doc)
+
+    raw_branches = list(db.branches.find({"scopeKey": scope_key}, {"_id": 0}))
+    branches = [_sync_branch_manager_status(db, scope_key, _normalize_branch_doc(b)) for b in raw_branches]
+    branches.sort(key=lambda b: (0 if b.get("isMain") or b.get("id") == "main" else 1, b.get("createdAt", "")))
+
+    arch_id = (request.args.get("archId") or main_branch.get("architectureId") or "buy-and-sell").strip()
+    period = (request.args.get("period") or "all").strip().lower()
+    if period not in ("today", "7d", "month", "all"):
+        period = "all"
+    day_of_week = (request.args.get("dayOfWeek") or "all").strip().lower()
+    valid_days = ("all", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    if day_of_week not in valid_days:
+        day_of_week = "all"
+
+    today_date = datetime.now(timezone.utc).date()
+    ws = db.workspaces.find_one({"scopeKey": scope_key, "architectureId": arch_id}, {"_id": 0}) or {}
+    records = ws.get("records") or {}
+
+    sales_list = (
+        list(records.get("Sales") or [])
+        + list(records.get("ServiceJobs") or [])
+        + list(records.get("KitchenOrders") or [])
+        + list(records.get("MixedSales") or [])
+    )
+    purchases_list = list(records.get("Purchases") or [])
+    expenses_list = list(records.get("Expenses") or [])
+    raw_catalog = list(records.get("Inventory") or []) + list(records.get("Products") or [])
+
+    branch_ids = {b["id"] for b in branches}
+
+    def _resolve_bid(rec: dict) -> str:
+        b = str(rec.get("branchId") or "main").strip()
+        return b if b in branch_ids else "main"
+
+    # 1. Build deduplicated product catalog per branch
+    catalog_by_branch: dict[str, dict[str, dict]] = {b["id"]: {} for b in branches}
+    for prod in raw_catalog:
+        if not isinstance(prod, dict):
+            continue
+        bid = _resolve_bid(prod)
+        title = str(prod.get("title") or prod.get("name") or "").strip()
+        if not title:
+            continue
+        dedup_key = title.lower()
+        if dedup_key in catalog_by_branch[bid]:
+            continue
+        qty = float(
+            prod.get("quantity")
+            if prod.get("quantity") is not None
+            else (prod.get("currentStock") if prod.get("currentStock") is not None else (prod.get("stock") or 0))
+        )
+        low_alert = float(prod.get("lowStockAlert") if prod.get("lowStockAlert") is not None else 5)
+        cost_p = float(prod.get("purchasePriceRWF") or prod.get("unitCostRWF") or prod.get("costPerUnitRWF") or 0)
+        sell_p = float(prod.get("sellingPriceRWF") or prod.get("unitPriceRWF") or prod.get("price") or 0)
+        cost_val = round(max(0.0, qty) * cost_p)
+        retail_val = round(max(0.0, qty) * (sell_p or cost_p))
+        exp_margin = round(max(0.0, qty) * max(0.0, sell_p - cost_p))
+        stock_status = "Out of Stock" if qty <= 0 else ("Low Stock" if qty <= low_alert else "In Stock")
+
+        catalog_by_branch[bid][dedup_key] = {
+            "id": str(prod.get("id") or ""),
+            "title": title,
+            "category": str(prod.get("category") or "General"),
+            "sku": str(prod.get("sku") or prod.get("barcode") or ""),
+            "unit": str(prod.get("unit") or "pcs"),
+            "branchId": bid,
+            "quantity": int(qty) if qty.is_integer() else qty,
+            "lowStockAlert": int(low_alert) if low_alert.is_integer() else low_alert,
+            "purchasePriceRWF": cost_p,
+            "sellingPriceRWF": sell_p,
+            "stockCostValuationRWF": cost_val,
+            "stockRetailValuationRWF": retail_val,
+            "expectedMarginRWF": exp_margin,
+            "stockStatus": stock_status,
+            "unitsSold": 0,
+            "salesCount": 0,
+            "salesRevenueRWF": 0.0,
+            "profitEarnedRWF": 0.0,
+        }
+
+    # 2. Initialize per-branch aggregators
+    intel_by_branch: dict[str, dict] = {}
+    actions_by_branch: dict[str, list] = {b["id"]: [] for b in branches}
+    sold_products_by_branch: dict[str, dict[str, dict]] = {b["id"]: {} for b in branches}
+    cross_product_Perf: dict[str, dict] = {}
+
+    for b in branches:
+        bid = b["id"]
+        prods = list(catalog_by_branch[bid].values())
+        total_units = sum(float(p["quantity"] or 0) for p in prods)
+        cost_val_sum = sum(float(p["stockCostValuationRWF"] or 0) for p in prods)
+        retail_val_sum = sum(float(p["stockRetailValuationRWF"] or 0) for p in prods)
+        margin_val_sum = sum(float(p["expectedMarginRWF"] or 0) for p in prods)
+        low_cnt = sum(1 for p in prods if p["stockStatus"] == "Low Stock")
+        oos_cnt = sum(1 for p in prods if p["stockStatus"] == "Out of Stock")
+
+        intel_by_branch[bid] = {
+            "id": bid,
+            "name": b.get("name") or bid,
+            "location": b.get("location") or "Rwanda",
+            "isMain": bool(b.get("isMain") or bid == "main"),
+            "status": b.get("status") or "Active",
+            "manager": b.get("manager"),
+            "permissions": b.get("permissions") or {},
+            "productsCount": len(prods),
+            "totalUnitsInStock": int(total_units) if float(total_units).is_integer() else round(total_units, 2),
+            "stockCostValuationRWF": cost_val_sum,
+            "stockRetailValuationRWF": retail_val_sum,
+            "expectedStockMarginRWF": margin_val_sum,
+            "lowStockCount": low_cnt,
+            "outOfStockCount": oos_cnt,
+            "salesCount": 0,
+            "unitsSoldTotal": 0,
+            "revenueRWF": 0.0,
+            "costOfGoodsRWF": 0.0,
+            "grossProfitRWF": 0.0,
+            "purchasesRWF": 0.0,
+            "expensesRWF": 0.0,
+            "netProfitRWF": 0.0,
+            "profitMarginPct": 0.0,
+        }
+
+    # 3. Process Sales (filtered by period & dayOfWeek)
+    for s in sales_list:
+        if not isinstance(s, dict):
+            continue
+        bid = _resolve_bid(s)
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(s)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+
+        amt = float(s.get("amountRWF") or s.get("totalAmount") or 0)
+        qty = float(s.get("quantity") or 1) or 1.0
+        p_title = str(s.get("productTitle") or s.get("title") or s.get("name") or "Sale Item").strip()
+        p_key = p_title.lower()
+        cat_entry = catalog_by_branch[bid].get(p_key)
+
+        unit_cost = float(
+            s.get("unitCostRWF")
+            or s.get("purchasePriceRWF")
+            or (cat_entry.get("purchasePriceRWF") if cat_entry else 0)
+            or 0
+        )
+        explicit_profit = s.get("profitRWF")
+        if explicit_profit is not None:
+            sale_profit = float(explicit_profit)
+            cogs = max(0.0, amt - sale_profit)
+        elif unit_cost > 0:
+            cogs = round(unit_cost * qty)
+            sale_profit = amt - cogs
+        else:
+            cogs = round(amt * 0.65)
+            sale_profit = amt - cogs
+
+        st = intel_by_branch[bid]
+        st["salesCount"] += 1
+        st["unitsSoldTotal"] += int(qty) if qty.is_integer() else round(qty, 2)
+        st["revenueRWF"] += amt
+        st["costOfGoodsRWF"] += cogs
+        st["grossProfitRWF"] += sale_profit
+
+        if cat_entry:
+            cat_entry["unitsSold"] += int(qty) if qty.is_integer() else round(qty, 2)
+            cat_entry["salesCount"] += 1
+            cat_entry["salesRevenueRWF"] += amt
+            cat_entry["profitEarnedRWF"] += sale_profit
+
+        sp = sold_products_by_branch[bid].setdefault(
+            p_key,
+            {
+                "title": p_title,
+                "category": (cat_entry or {}).get("category") or str(s.get("category") or "General"),
+                "unitsSold": 0,
+                "salesCount": 0,
+                "revenueRWF": 0.0,
+                "profitRWF": 0.0,
+                "stockLeft": (cat_entry or {}).get("quantity", 0),
+                "stockStatus": (cat_entry or {}).get("stockStatus", "In Stock"),
+            },
+        )
+        sp["unitsSold"] += int(qty) if qty.is_integer() else round(qty, 2)
+        sp["salesCount"] += 1
+        sp["revenueRWF"] += amt
+        sp["profitRWF"] += sale_profit
+
+        cp = cross_product_Perf.setdefault(
+            p_key,
+            {
+                "title": p_title,
+                "totalUnitsSold": 0,
+                "totalRevenueRWF": 0.0,
+                "totalProfitRWF": 0.0,
+                "byBranch": {},
+            },
+        )
+        cp["totalUnitsSold"] += int(qty) if qty.is_integer() else round(qty, 2)
+        cp["totalRevenueRWF"] += amt
+        cp["totalProfitRWF"] += sale_profit
+        b_perf = cp["byBranch"].setdefault(
+            bid,
+            {
+                "branchId": bid,
+                "branchName": st["name"],
+                "unitsSold": 0,
+                "revenueRWF": 0.0,
+                "profitRWF": 0.0,
+                "stockLeft": (cat_entry or {}).get("quantity", 0),
+            },
+        )
+        b_perf["unitsSold"] += int(qty) if qty.is_integer() else round(qty, 2)
+        b_perf["revenueRWF"] += amt
+        b_perf["profitRWF"] += sale_profit
+
+        actor = str(
+            s.get("recordedByName")
+            or s.get("createdBy")
+            or s.get("cashierName")
+            or (st["manager"] or {}).get("name")
+            or "Branch Staff"
+        )
+        actions_by_branch[bid].append(
+            {
+                "id": str(s.get("id") or f"SAL-{len(actions_by_branch[bid])}"),
+                "category": "sale",
+                "actionLabel": "Sale Recorded",
+                "title": f"{int(qty) if qty.is_integer() else qty}x {p_title}",
+                "details": f"Customer: {s.get('customerName') or s.get('customer') or 'Walk-in'} · {s.get('paymentMethod') or 'Cash'}",
+                "actorName": actor,
+                "amountRWF": amt,
+                "profitRWF": sale_profit,
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    # 4. Process Purchases & Expenses (filtered by period & dayOfWeek)
+    for p in purchases_list:
+        if not isinstance(p, dict):
+            continue
+        bid = _resolve_bid(p)
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(p)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+        amt = float(p.get("amountRWF") or 0)
+        intel_by_branch[bid]["purchasesRWF"] += amt
+        actor = str(p.get("recordedByName") or p.get("createdBy") or (intel_by_branch[bid]["manager"] or {}).get("name") or "Branch Staff")
+        actions_by_branch[bid].append(
+            {
+                "id": str(p.get("id") or f"PUR-{len(actions_by_branch[bid])}"),
+                "category": "purchase",
+                "actionLabel": "Purchase / Restock",
+                "title": str(p.get("title") or p.get("productTitle") or "Stock Purchase"),
+                "details": f"Supplier: {p.get('supplierName') or p.get('supplier') or 'Vendor'}",
+                "actorName": actor,
+                "amountRWF": amt,
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    for e in expenses_list:
+        if not isinstance(e, dict):
+            continue
+        bid = _resolve_bid(e)
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(e)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+        amt = float(e.get("amountRWF") or 0)
+        intel_by_branch[bid]["expensesRWF"] += amt
+        actor = str(e.get("recordedByName") or e.get("createdBy") or (intel_by_branch[bid]["manager"] or {}).get("name") or "Branch Staff")
+        actions_by_branch[bid].append(
+            {
+                "id": str(e.get("id") or f"EXP-{len(actions_by_branch[bid])}"),
+                "category": "expense",
+                "actionLabel": "Expense Logged",
+                "title": str(e.get("title") or e.get("category") or "Branch Expense"),
+                "details": str(e.get("category") or e.get("paymentMethod") or "Operating Cost"),
+                "actorName": actor,
+                "amountRWF": amt,
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    # 5. Include Stock Transfers, Cashier Shifts, and Branch Audit Logs in the Action History
+    for tr in db.branch_stock_transfers.find({"scopeKey": scope_key}, {"_id": 0}):
+        bid = str(tr.get("branchId") or "").strip()
+        if bid not in intel_by_branch:
+            continue
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(tr)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+        items_str = ", ".join(f"{i.get('productTitle')} ({i.get('quantity')})" for i in (tr.get("items") or []))
+        actions_by_branch[bid].append(
+            {
+                "id": str(tr.get("id") or "TRF"),
+                "category": "transfer",
+                "actionLabel": "HQ Stock Dispatched",
+                "title": f"{tr.get('totalUnits', 0)} units received from Main HQ",
+                "details": items_str + (f" · {tr.get('notes')}" if tr.get("notes") else ""),
+                "actorName": str(tr.get("dispatchedBy") or "Business Owner"),
+                "amountRWF": 0,
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    for sh in db.cashier_shifts.find({"scopeKey": scope_key}, {"_id": 0}):
+        bid = str(sh.get("branchId") or "main").strip()
+        if bid not in intel_by_branch:
+            continue
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(sh)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+        is_closed = str(sh.get("status") or "").lower() == "closed"
+        actions_by_branch[bid].append(
+            {
+                "id": str(sh.get("id") or "SHF"),
+                "category": "shift",
+                "actionLabel": "Cashier Shift Closed" if is_closed else "Cashier Shift Opened",
+                "title": f"Float: {float(sh.get('openingFloatRWF') or 0):,.0f} RWF"
+                + (f" · Variance: {float(sh.get('varianceRWF') or 0):+,.0f} RWF" if is_closed else ""),
+                "details": str(sh.get("closingNotes") or sh.get("notes") or "Drawer shift activity"),
+                "actorName": str(sh.get("cashierName") or "Cashier"),
+                "amountRWF": float(sh.get("countedCashRWF") or sh.get("openingFloatRWF") or 0),
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    for al in db.branch_audit_logs.find({"scopeKey": scope_key}, {"_id": 0}):
+        bid = str(al.get("branchId") or "main").strip()
+        if bid not in intel_by_branch:
+            continue
+        d_iso, t_str, d_name, sort_iso = _parse_record_datetime(al)
+        if not _matches_period_and_day(d_iso, d_name, period, day_of_week, today_date):
+            continue
+        act_label = str(al.get("actionType") or al.get("action") or "Branch Audit").replace("_", " ").title()
+        actions_by_branch[bid].append(
+            {
+                "id": f"AUD-{sort_iso}-{len(actions_by_branch[bid])}",
+                "category": "audit",
+                "actionLabel": act_label,
+                "title": str(al.get("productTitle") or al.get("targetName") or al.get("branchName") or act_label),
+                "details": str(al.get("summary") or al.get("reason") or al.get("targetEmail") or "Security & catalog audit"),
+                "actorName": str(al.get("managerName") or al.get("actorEmail") or "Staff"),
+                "amountRWF": 0,
+                "date": d_iso,
+                "time": t_str,
+                "dayName": d_name or "—",
+                "sortIso": sort_iso,
+            }
+        )
+
+    # 6. Finalize per-branch structures
+    branches_output = []
+    for b in branches:
+        bid = b["id"]
+        st = intel_by_branch[bid]
+        st["netProfitRWF"] = round(st["grossProfitRWF"] - st["expensesRWF"], 2)
+        st["profitMarginPct"] = round((st["netProfitRWF"] / st["revenueRWF"]) * 100, 1) if st["revenueRWF"] > 0 else 0.0
+
+        branch_prods = list(catalog_by_branch[bid].values())
+        branch_prods.sort(key=lambda p: (p["unitsSold"], p["profitEarnedRWF"], p["stockRetailValuationRWF"]), reverse=True)
+        st["products"] = branch_prods
+        st["lowStockItems"] = [p for p in branch_prods if p["stockStatus"] in ("Low Stock", "Out of Stock")]
+
+        top_sold = sorted(
+            sold_products_by_branch[bid].values(),
+            key=lambda x: (x["unitsSold"], x["profitRWF"], x["revenueRWF"]),
+            reverse=True,
+        )
+        st["mostBoughtProducts"] = top_sold[:10]
+        st["topProduct"] = top_sold[0] if top_sold else (branch_prods[0] if branch_prods else None)
+        st["restockRecommendations"] = [
+            p for p in branch_prods
+            if p["stockStatus"] in ("Low Stock", "Out of Stock") or (p["unitsSold"] > 0 and p["quantity"] <= p["unitsSold"])
+        ][:8]
+
+        acts = actions_by_branch[bid]
+        acts.sort(key=lambda a: str(a.get("sortIso") or ""), reverse=True)
+        st["actionsHistory"] = acts[:60]
+        st["actionsCount"] = len(acts)
+        branches_output.append(st)
+
+    by_profit = sorted(branches_output, key=lambda x: (x["netProfitRWF"], x["revenueRWF"]), reverse=True)
+    by_revenue = sorted(branches_output, key=lambda x: (x["revenueRWF"], x["salesCount"]), reverse=True)
+    by_stock = sorted(branches_output, key=lambda x: x["stockCostValuationRWF"], reverse=True)
+
+    cross_products_sorted = sorted(
+        (
+            {
+                **cp,
+                "byBranch": sorted(cp["byBranch"].values(), key=lambda x: (x["unitsSold"], x["profitRWF"]), reverse=True),
+            }
+            for cp in cross_product_Perf.values()
+        ),
+        key=lambda x: (x["totalUnitsSold"], x["totalProfitRWF"]),
+        reverse=True,
+    )[:12]
+
+    return success_response(
+        data={
+            "period": period,
+            "dayOfWeek": day_of_week,
+            "architectureId": arch_id,
+            "branches": branches_output,
+            "comparison": {
+                "mostProfitableBranch": by_profit[0] if by_profit else None,
+                "topSellingBranch": by_revenue[0] if by_revenue else None,
+                "highestStockBranch": by_stock[0] if by_stock else None,
+                "totalCompanyRevenueRWF": sum(b["revenueRWF"] for b in branches_output),
+                "totalCompanyNetProfitRWF": sum(b["netProfitRWF"] for b in branches_output),
+                "totalCompanyStockCostRWF": sum(b["stockCostValuationRWF"] for b in branches_output),
+                "totalCompanyStockRetailRWF": sum(b["stockRetailValuationRWF"] for b in branches_output),
+                "totalCompanyLowStockCount": sum(b["lowStockCount"] + b["outOfStockCount"] for b in branches_output),
+                "crossBranchTopProducts": cross_products_sorted,
+            },
+        },
+        message="Executive branch intelligence loaded.",
     )
 

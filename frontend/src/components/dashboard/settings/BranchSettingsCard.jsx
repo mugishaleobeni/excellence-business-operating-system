@@ -21,6 +21,7 @@ import {
 import { useExbos } from '../../../context/ExbosContext'
 import { exbosApi } from '../../../utils/apiClient'
 import CustomSelect from '../../common/CustomSelect'
+import BranchIntelligenceInspectorPanel from './BranchIntelligenceInspectorPanel'
 
 export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', currentArch = {} }) {
   const {
@@ -45,6 +46,7 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
   const [branchName, setBranchName] = useState('')
   const [branchLocation, setBranchLocation] = useState('')
   const [creating, setCreating] = useState(false)
+  const [activeManagementTab, setActiveManagementTab] = useState('manage') // 'manage' | 'intelligence'
 
   // Edit branch state
   const [editingBranchId, setEditingBranchId] = useState(null)
@@ -585,6 +587,42 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
         </span>
       </div>
 
+      {/* Sub-Navigation Tabs inside Branch Management */}
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[#040D29]/90 border border-white/10">
+        <button
+          type="button"
+          onClick={() => setActiveManagementTab('manage')}
+          className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+            activeManagementTab === 'manage'
+              ? 'bg-[#218DFF] text-white shadow-md'
+              : 'text-slate-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          1. Manage Branches, Managers &amp; Stock Dispatch
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveManagementTab('intelligence')}
+          className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all ${
+            activeManagementTab === 'intelligence'
+              ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-md'
+              : 'text-[#9EDCFF] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          2. Branch Stock, Profit &amp; Activity Inspector
+        </button>
+      </div>
+
+      {activeManagementTab === 'intelligence' ? (
+        <BranchIntelligenceInspectorPanel
+          activeArchId={activeArchId}
+          onQuickDispatchToBranch={(branchObj) => {
+            setActiveManagementTab('manage')
+            openTransferPanel(branchObj)
+          }}
+        />
+      ) : (
+        <>
       {/* Create New Branch Form */}
       <form onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
         <div>
@@ -831,16 +869,14 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
                       <span>{isCurrent ? 'Active' : 'Switch'}</span>
                       {!isCurrent && <ArrowUpRight className="w-3.5 h-3.5" />}
                     </button>
-                    {!b.isMain && (
-                      <button
-                        type="button"
-                        onClick={() => openSecurityPanel(b)}
-                        title="Branch Security, HQ Lock & Permissions"
-                        className="p-1.5 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 text-[#9EDCFF] cursor-pointer"
-                      >
-                        <Shield className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => openSecurityPanel(b)}
+                      title="Branch Security, HQ Lock & Manager Action Permissions"
+                      className="p-1.5 rounded-lg bg-[#218DFF]/20 hover:bg-[#218DFF]/35 text-[#9EDCFF] cursor-pointer"
+                    >
+                      <Shield className="w-3.5 h-3.5" />
+                    </button>
                     {!b.isMain && (
                       <button
                         type="button"
@@ -1447,6 +1483,8 @@ export default function BranchSettingsCard({ activeArchId = 'buy-and-sell', curr
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   )

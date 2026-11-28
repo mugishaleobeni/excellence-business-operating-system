@@ -1450,6 +1450,169 @@ class FullSystemRegressionTestCase(unittest.TestCase):
         self.assertFalse(any(p.get("id") == sugar_branch_id for p in ws_after_stale["records"].get("Inventory", [])))
         self.assertFalse(any(p.get("id") == sugar_branch_id for p in ws_after_stale["records"].get("Products", [])))
 
+    # ------------------------------------------------------------------
+    # 15. EXECUTIVE BRANCH INTELLIGENCE, DAY-OF-WEEK FILTER & MAIN HQ MANAGER
+    # ------------------------------------------------------------------
+    def test_15_branch_deep_intelligence_day_filter_and_main_hq_manager(self):
+        owner_email = "owner-intel@exbos.rw"
+        hq_mgr_email = "hq-cashier@exbos.rw"
+        br_mgr_email = "remera-cashier@exbos.rw"
+        self.db.users.insert_one(
+            {
+                "email": owner_email,
+                "name": "Executive Owner",
+                "businessName": "Empire Retail Ltd",
+                "phone": "+250788500100",
+                "plan": "Gold",
+                "accountStatus": "Active",
+            }
+        )
+        owner_h = self._auth_header(owner_email)
+
+        # 1. Create a sub-branch ("Remera Branch") and configure Main HQ in Sales-Only Cashier mode for its manager
+        r_br = self.client.post(
+            "/api/v1/branches",
+            json={"name": "Remera Branch", "location": "Kigali"},
+            headers=owner_h,
+        )
+        self.assertEqual(r_br.status_code, 201)
+        remera_id = r_br.get_json()["data"]["branch"]["id"]
+
+        r_hq_perm = self.client.patch(
+            "/api/v1/branches/main",
+            json={
+                "permissions": {
+                    "canAddInventory": False,
+                    "canEditProducts": False,
+                    "canDeleteProducts": False,
+                    "canEditPrices": False,
+                    "canDeleteRecords": False,
+                }
+            },
+            headers=owner_h,
+        )
+        self.assertEqual(r_hq_perm.status_code, 200)
+
+        with patch("app.routes.branches.send_gmail_email", return_value=True):
+            self.assertEqual(
+                self.client.post(
+                    "/api/v1/branches/main/assign-manager",
+                    json={"name": "HQ Cashier", "email": hq_mgr_email, "phone": "+250788500200", "password": "Password123"},
+                    headers=owner_h,
+                ).status_code,
+                200,
+            )
+            self.assertEqual(
+                self.client.post(
+                    f"/api/v1/branches/{remera_id}/assign-manager",
+                    json={"name": "Remera Manager", "email": br_mgr_email, "phone": "+250788500300", "password": "Password123"},
+                    headers=owner_h,
+                ).status_code,
+                200,
+            )
+
+        hq_mgr_h = self._auth_header(hq_mgr_email)
+
+        # Main HQ Manager in Sales-Only mode is blocked from adding products (403), while Owner succeeds (201)
+        self.assertEqual(
+            self.client.post(
+                "/api/v1/workspaces/buy-and-sell/records/Inventory",
+                json={"id": "HQ-BLOCK", "title": "Blocked HQ Item", "quantity": 5, "sellingPriceRWF": 2000, "branchId": "main"},
+                headers=hq_mgr_h,
+            ).status_code,
+            403,
+        )
+
+        # 2. Owner adds stock to Main HQ and Remera Branch
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Inventory",
+            json={
+                "id": "PRD-HQ-1",
+                "title": "Inyange Milk 1L",
+                "quantity": 20,
+                "lowStockAlert": 5,
+                "purchasePriceRWF": 1000,
+                "sellingPriceRWF": 1500,
+                "branchId": "main",
+            },
+            headers=owner_h,
+        )
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Inventory",
+            json={
+                "id": "PRD-REM-1",
+                "title": "Azam Flour 2kg",
+                "quantity": 4,
+                "lowStockAlert": 5,
+                "purchasePriceRWF": 2200,
+                "sellingPriceRWF": 3000,
+                "branchId": remera_id,
+            },
+            headers=owner_h,
+        )
+
+        # 3. Record a Monday sale (2026-11-23 is a Monday) in Main HQ and a Tuesday sale (2026-11-24 is a Tuesday) in Remera
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={
+                "id": "SAL-MON-HQ",
+                "productId": "PRD-HQ-1",
+                "title": "Inyange Milk 1L",
+                "quantity": 4,
+                "unitPriceRWF": 1500,
+                "unitCostRWF": 1000,
+                "amountRWF": 6000,
+                "profitRWF": 2000,
+                "date": "2026-11-23",
+                "branchId": "main",
+            },
+            headers=owner_h,
+        )
+        self.client.post(
+            "/api/v1/workspaces/buy-and-sell/records/Sales",
+            json={
+                "id": "SAL-TUE-REM",
+                "productId": "PRD-REM-1",
+                "title": "Azam Flour 2kg",
+                "quantity": 3,
+                "unitPriceRWF": 3000,
+                "unitCostRWF": 2200,
+                "amountRWF": 9000,
+                "profitRWF": 2400,
+                "date": "2026-11-24",
+                "branchId": remera_id,
+            },
+            headers=owner_h,
+        )
+
+        # Branch Managers are blocked (403) from Executive Branch Intelligence endpoint
+        self.assertEqual(
+            self.client.get("/api/v1/branches/intelligence?archId=buy-and-sell", headers=hq_mgr_h).status_code,
+            403,
+        )
+
+        # 4. Owner fetches all-time intelligence across all branches
+        r_all = self.client.get("/api/v1/branches/intelligence?archId=buy-and-sell&period=all&dayOfWeek=all", headers=owner_h)
+        self.assertEqual(r_all.status_code, 200, r_all.get_data(as_text=True))
+        d_all = r_all.get_json()["data"]
+        self.assertEqual(d_all["comparison"]["totalCompanyRevenueRWF"], 15000)
+        self.assertEqual(d_all["comparison"]["totalCompanyNetProfitRWF"], 4400)
+        self.assertEqual(d_all["comparison"]["mostProfitableBranch"]["id"], remera_id)
+
+        rem_branch = next(b for b in d_all["branches"] if b["id"] == remera_id)
+        self.assertEqual(rem_branch["lowStockCount"], 1)
+        self.assertEqual(rem_branch["mostBoughtProducts"][0]["title"], "Azam Flour 2kg")
+        self.assertGreaterEqual(len(rem_branch["actionsHistory"]), 1)
+        self.assertEqual(rem_branch["actionsHistory"][0]["dayName"], "Tuesday")
+
+        # 5. Owner filters by dayOfWeek=monday -> only Main HQ's Monday sale (6,000 RWF revenue, 2,000 RWF profit) matches!
+        r_mon = self.client.get("/api/v1/branches/intelligence?archId=buy-and-sell&period=all&dayOfWeek=monday", headers=owner_h)
+        self.assertEqual(r_mon.status_code, 200)
+        d_mon = r_mon.get_json()["data"]
+        self.assertEqual(d_mon["comparison"]["totalCompanyRevenueRWF"], 6000)
+        self.assertEqual(d_mon["comparison"]["totalCompanyNetProfitRWF"], 2000)
+        self.assertEqual(d_mon["comparison"]["mostProfitableBranch"]["id"], "main")
+
 
 if __name__ == "__main__":
     unittest.main()

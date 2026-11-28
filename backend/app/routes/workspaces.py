@@ -494,7 +494,7 @@ def create_module_record(
     else:
         raw_dump["branchId"] = effective_branch_id
 
-    if branch_doc and effective_branch_id != "main":
+    if branch_doc and (is_manager or effective_branch_id != "main"):
         if str(branch_doc.get("status") or "Active") == "Frozen":
             return error_response(
                 f"Branch '{branch_doc.get('name', effective_branch_id)}' is currently Frozen (Read-Only) by Main HQ.",
@@ -1097,7 +1097,7 @@ def update_module_record(
             "Access Denied: You cannot edit records belonging to Main HQ or another branch.",
             status_code=403,
         )
-    if upd_is_manager and upd_branch_doc and upd_eff_branch_id != "main":
+    if upd_is_manager and upd_branch_doc:
         if str(upd_branch_doc.get("status") or "Active") == "Frozen":
             return error_response(
                 f"Branch '{upd_branch_doc.get('name', upd_eff_branch_id)}' is Frozen (Read-Only) by Main HQ.",
@@ -1406,7 +1406,7 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
                 "Access Denied: You cannot delete records belonging to Main HQ or another branch.",
                 status_code=403,
             )
-        if del_is_manager and del_branch_doc and item_branch_id != "main":
+        if del_is_manager and del_branch_doc:
             if str(del_branch_doc.get("status") or "Active") == "Frozen":
                 return error_response(
                     f"Branch '{del_branch_doc.get('name', item_branch_id)}' is Frozen (Read-Only) by Main HQ.",
@@ -1971,7 +1971,7 @@ def bulk_import_inventory_records(arch_id: str):
 
     req_branch_id = str(payload.get("branchId") or "main").strip()
     _, is_manager, effective_branch_id, branch_doc = _resolve_actor_and_branch(db, scope_key, req_branch_id)
-    if branch_doc and effective_branch_id != "main":
+    if branch_doc and (is_manager or effective_branch_id != "main"):
         if str(branch_doc.get("status") or "Active") == "Frozen":
             return error_response(
                 f"Branch '{branch_doc.get('name', effective_branch_id)}' is Frozen (Read-Only) by Main HQ.",

@@ -368,6 +368,12 @@ export const exbosApi = {
     apiRequest(withScope(`/branches/${encodeURIComponent(branchId)}/transfers`)),
   getBranchAnalytics: (archId) =>
     apiRequest(withScope(`/branches/analytics?archId=${encodeURIComponent(archId || 'buy-and-sell')}`)),
+  getBranchIntelligence: ({ archId = 'buy-and-sell', period = 'all', dayOfWeek = 'all' } = {}) =>
+    apiRequest(
+      withScope(
+        `/branches/intelligence?archId=${encodeURIComponent(archId)}&period=${encodeURIComponent(period)}&dayOfWeek=${encodeURIComponent(dayOfWeek)}`
+      )
+    ),
   superAdminGetAnalytics: () => apiRequest('/super-admin/analytics'),
   superAdminGetUsers: (params = {}) => {
     const qs = new URLSearchParams()
