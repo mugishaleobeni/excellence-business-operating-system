@@ -1476,7 +1476,11 @@ export const KINYARWANDA_DICT = {
   'most bought': 'Ibyaguzwe Cyane',
   'action history': 'Amateka y\'Ibikorwa',
   'previous': 'Ibanziriza',
-  'next': 'Ibikurikira'
+  'next': 'Ibikurikira',
+  'day of week': 'Umunsi w\'Icyumweru',
+  'top 5': '5 bya Mbere',
+  'top 10': '10 bya Mbere',
+  'all sold': 'Ibyagurishijwe Byose'
 }
 
 const DYNAMIC_PATTERNS = [
@@ -1631,6 +1635,14 @@ const DYNAMIC_PATTERNS = [
   {
     regex: /^Action History \((\d+)\)$/i,
     replace: (_, n) => `Amateka y'Ibikorwa (${n})`
+  },
+  {
+    regex: /^View Top (\d+) Sold Products$/i,
+    replace: (_, n) => `Reba Ibicuruzwa ${n} Byagurishijwe Cyane`
+  },
+  {
+    regex: /^Hide Top Sold Products \((\d+)\)$/i,
+    replace: (_, n) => `Hisha Ibicuruzwa Byagurishijwe Cyane (${n})`
   },
   {
     regex: /^Page (\d+) of (\d+) \((\d+) (products|actions)\)$/i,

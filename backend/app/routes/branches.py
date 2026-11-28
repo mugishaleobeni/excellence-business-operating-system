@@ -1746,6 +1746,7 @@ def branch_analytics():
 def _parse_record_datetime(rec: dict) -> tuple[str, str, str, str]:
     """
     Extract (date_iso 'YYYY-MM-DD', time_str 'HH:MM', day_name 'Monday', sort_iso) from a record.
+    Handles ISO YYYY-MM-DD, DD/MM/YYYY, and full ISO timestamps.
     """
     raw_ts = str(
         rec.get("timestamp")
@@ -1756,7 +1757,25 @@ def _parse_record_datetime(rec: dict) -> tuple[str, str, str, str]:
         or rec.get("date")
         or ""
     ).strip()
-    raw_date = str(rec.get("date") or raw_ts[:10] or "").strip()[:10]
+    raw_date_candidate = str(rec.get("date") or raw_ts or "").strip()
+    date_iso = ""
+    dt_obj = None
+    if len(raw_date_candidate) >= 10:
+        head10 = raw_date_candidate[:10]
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d"):
+            try:
+                dt_obj = datetime.strptime(head10, fmt).date()
+                date_iso = dt_obj.isoformat()
+                break
+            except Exception:
+                continue
+    if not dt_obj and raw_ts:
+        try:
+            dt_obj = datetime.fromisoformat(raw_ts.replace("Z", "+00:00")).date()
+            date_iso = dt_obj.isoformat()
+        except Exception:
+            dt_obj = None
+
     time_part = ""
     if "T" in raw_ts and len(raw_ts) >= 16:
         time_part = raw_ts[11:16]
@@ -1765,15 +1784,9 @@ def _parse_record_datetime(rec: dict) -> tuple[str, str, str, str]:
     elif rec.get("time"):
         time_part = str(rec.get("time"))[:5]
 
-    day_name = ""
-    if len(raw_date) == 10:
-        try:
-            dt_obj = datetime.strptime(raw_date, "%Y-%m-%d").date()
-            day_name = dt_obj.strftime("%A")
-        except Exception:
-            day_name = ""
-    sort_iso = raw_ts if len(raw_ts) >= 10 else (f"{raw_date}T{time_part or '00:00'}:00" if raw_date else "")
-    return raw_date, (time_part or "—"), day_name, sort_iso
+    day_name = dt_obj.strftime("%A") if dt_obj else ""
+    sort_iso = raw_ts if len(raw_ts) >= 10 else (f"{date_iso}T{time_part or '00:00'}:00" if date_iso else "")
+    return date_iso, (time_part or "—"), day_name, sort_iso
 
 
 def _matches_period_and_day(date_iso: str, day_name: str, period: str, day_of_week: str, today_date) -> bool:
@@ -2196,8 +2209,8 @@ def branch_executive_intelligence():
             key=lambda x: (x["unitsSold"], x["profitRWF"], x["revenueRWF"]),
             reverse=True,
         )
-        st["mostBoughtProducts"] = top_sold[:10]
-        st["topProduct"] = top_sold[0] if top_sold else (branch_prods[0] if branch_prods else None)
+        st["mostBoughtProducts"] = top_sold[:50]
+        st["topProduct"] = top_sold[0] if top_sold else None
         st["restockRecommendations"] = [
             p for p in branch_prods
             if p["stockStatus"] in ("Low Stock", "Out of Stock") or (p["unitsSold"] > 0 and p["quantity"] <= p["unitsSold"])

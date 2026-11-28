@@ -3,6 +3,7 @@ import {
   BarChart3,
   Boxes,
   Calendar,
+  ChevronDown,
   Clock,
   Eye,
   GitBranch,
@@ -38,11 +39,38 @@ const DAY_OPTIONS = [
 
 const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
+function getLocalTodayIso() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function normalizeToDateIso(rawStr) {
+  const s = String(rawStr || '').trim()
+  if (!s) return ''
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+  const dmyMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+  if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`
+  const ymdSlash = s.match(/^(\d{4})\/(\d{2})\/(\d{2})/)
+  if (ymdSlash) return `${ymdSlash[1]}-${ymdSlash[2]}-${ymdSlash[3]}`
+  const parsed = new Date(s)
+  if (!Number.isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear()
+    const m = String(parsed.getMonth() + 1).padStart(2, '0')
+    const d = String(parsed.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+  return ''
+}
+
 function parseRecordDateInfo(rec) {
   const rawTs = String(
     rec?.timestamp || rec?.createdAt || rec?.updatedAt || rec?.openedAt || rec?.closedAt || rec?.date || ''
   ).trim()
-  const dateIso = String(rec?.date || rawTs.slice(0, 10) || '').trim().slice(0, 10)
+  const dateIso = normalizeToDateIso(rec?.date || rawTs)
   let timeStr = '—'
   if (rawTs.includes('T') && rawTs.length >= 16) {
     timeStr = rawTs.slice(11, 16)
@@ -55,9 +83,9 @@ function parseRecordDateInfo(rec) {
   if (dateIso.length === 10) {
     const [y, m, d] = dateIso.split('-').map(Number)
     if (y && m && d) {
-      const dt = new Date(Date.UTC(y, m - 1, d))
+      const dt = new Date(y, m - 1, d)
       if (!Number.isNaN(dt.getTime())) {
-        dayName = WEEKDAY_NAMES[dt.getUTCDay()] || ''
+        dayName = WEEKDAY_NAMES[dt.getDay()] || ''
       }
     }
   }
@@ -74,8 +102,10 @@ function matchesPeriodAndDay(dateIso, dayName, period, dayOfWeek, todayIso) {
   if (period === 'today') return dateIso === todayIso
   if (period === 'month') return dateIso.slice(0, 7) === todayIso.slice(0, 7)
   if (period === '7d') {
-    const t1 = new Date(`${todayIso}T00:00:00Z`).getTime()
-    const t2 = new Date(`${dateIso}T00:00:00Z`).getTime()
+    const [ty, tm, td] = todayIso.split('-').map(Number)
+    const [dy, dm, dd] = dateIso.split('-').map(Number)
+    const t1 = new Date(ty, tm - 1, td).getTime()
+    const t2 = new Date(dy, dm - 1, dd).getTime()
     const diffDays = Math.floor((t1 - t2) / (1000 * 60 * 60 * 24))
     return diffDays >= 0 && diffDays <= 7
   }
@@ -99,7 +129,13 @@ export default function BranchIntelligenceInspectorPanel({
   const [actionFilter, setActionFilter] = useState('all') // 'all' | 'sale' | 'expense' | 'purchase' | 'transfer' | 'audit'
   const [actionPage, setActionPage] = useState(1)
   const [graphMetric, setGraphMetric] = useState('netProfitRWF') // 'netProfitRWF' | 'revenueRWF' | 'stockCostValuationRWF' | 'unitsSoldTotal'
+  const [topProductsLimit, setTopProductsLimit] = useState(5) // 5 | 10 | 50
+  const [expandedTopBranchIds, setExpandedTopBranchIds] = useState({})
   const [serverData, setServerData] = useState(null)
+
+  const toggleBranchTopProducts = (bid) => {
+    setExpandedTopBranchIds((prev) => ({ ...prev, [bid]: !prev[bid] }))
+  }
 
   const STOCK_PAGE_SIZE = 8
   const ACTION_PAGE_SIZE = 8
@@ -158,7 +194,7 @@ export default function BranchIntelligenceInspectorPanel({
     const purchasesList = records.Purchases || []
     const expensesList = records.Expenses || []
     const rawCatalog = [...(records.Inventory || []), ...(records.Products || [])]
-    const todayIso = new Date().toISOString().slice(0, 10)
+    const todayIso = getLocalTodayIso()
 
     const catalogByBranch = {}
     branchList.forEach((b) => {
@@ -383,8 +419,8 @@ export default function BranchIntelligenceInspectorPanel({
       const topSold = Object.values(soldMap[bid]).sort(
         (x, y) => y.unitsSold - x.unitsSold || y.profitRWF - x.profitRWF
       )
-      st.mostBoughtProducts = topSold.slice(0, 10)
-      st.topProduct = topSold[0] || prods[0] || null
+      st.mostBoughtProducts = topSold.slice(0, 50)
+      st.topProduct = topSold[0] || null
       st.restockRecommendations = prods
         .filter((p) => p.stockStatus !== 'In Stock' || (p.unitsSold > 0 && p.quantity <= p.unitsSold))
         .slice(0, 8)
@@ -422,7 +458,14 @@ export default function BranchIntelligenceInspectorPanel({
 
   // Prefer live local product counts/stock combined with server audit/transfer/shift history
   const activeIntel = useMemo(() => {
-    if (!serverData || !Array.isArray(serverData.branches) || serverData.branches.length === 0) {
+    const serverMatchesFilter =
+      serverData &&
+      Array.isArray(serverData.branches) &&
+      serverData.branches.length > 0 &&
+      (!serverData.period || serverData.period === period) &&
+      (!serverData.dayOfWeek || serverData.dayOfWeek === dayOfWeek)
+
+    if (!serverMatchesFilter) {
       return localIntelligence
     }
     const serverByBranch = {}
@@ -438,9 +481,22 @@ export default function BranchIntelligenceInspectorPanel({
       const combinedActions = [...lb.actionsHistory, ...extraServerActions].sort((a, b) =>
         String(b.sortIso || '').localeCompare(String(a.sortIso || ''))
       )
+      const useServerSales = lb.salesCount === 0 && (sb.salesCount || 0) > 0
       return {
         ...sb,
         ...lb,
+        salesCount: useServerSales ? sb.salesCount : lb.salesCount,
+        unitsSoldTotal: useServerSales ? sb.unitsSoldTotal : lb.unitsSoldTotal,
+        revenueRWF: useServerSales ? sb.revenueRWF : lb.revenueRWF,
+        costOfGoodsRWF: useServerSales ? sb.costOfGoodsRWF : lb.costOfGoodsRWF,
+        grossProfitRWF: useServerSales ? sb.grossProfitRWF : lb.grossProfitRWF,
+        expensesRWF: lb.expensesRWF || sb.expensesRWF || 0,
+        netProfitRWF: useServerSales ? sb.netProfitRWF : lb.netProfitRWF,
+        mostBoughtProducts:
+          lb.mostBoughtProducts && lb.mostBoughtProducts.length > 0
+            ? lb.mostBoughtProducts
+            : sb.mostBoughtProducts || [],
+        topProduct: lb.topProduct || sb.topProduct || null,
         productsCount: lb.productsCount || sb.productsCount,
         totalUnitsInStock: lb.productsCount > 0 ? lb.totalUnitsInStock : sb.totalUnitsInStock,
         stockCostValuationRWF: lb.productsCount > 0 ? lb.stockCostValuationRWF : sb.stockCostValuationRWF,
@@ -452,11 +508,32 @@ export default function BranchIntelligenceInspectorPanel({
         actionsCount: combinedActions.length
       }
     })
+    const byProfit = [...mergedBranches].sort((a, b) => b.netProfitRWF - a.netProfitRWF || b.revenueRWF - a.revenueRWF)
+    const byRev = [...mergedBranches].sort((a, b) => b.revenueRWF - a.revenueRWF)
+    const byStock = [...mergedBranches].sort((a, b) => b.stockCostValuationRWF - a.stockCostValuationRWF)
     return {
       ...localIntelligence,
-      branches: mergedBranches
+      branches: mergedBranches,
+      comparison: {
+        ...localIntelligence.comparison,
+        mostProfitableBranch: byProfit[0] || null,
+        topSellingBranch: byRev[0] || null,
+        highestStockBranch: byStock[0] || null,
+        totalCompanyRevenueRWF: mergedBranches.reduce((s, b) => s + (b.revenueRWF || 0), 0),
+        totalCompanyNetProfitRWF: mergedBranches.reduce((s, b) => s + (b.netProfitRWF || 0), 0),
+        totalCompanyStockCostRWF: mergedBranches.reduce((s, b) => s + (b.stockCostValuationRWF || 0), 0),
+        totalCompanyStockRetailRWF: mergedBranches.reduce((s, b) => s + (b.stockRetailValuationRWF || 0), 0),
+        totalCompanyLowStockCount: mergedBranches.reduce(
+          (s, b) => s + (b.lowStockCount || 0) + (b.outOfStockCount || 0),
+          0
+        ),
+        crossBranchTopProducts:
+          localIntelligence.comparison.crossBranchTopProducts?.length > 0
+            ? localIntelligence.comparison.crossBranchTopProducts
+            : serverData.comparison?.crossBranchTopProducts || []
+      }
     }
-  }, [localIntelligence, serverData])
+  }, [localIntelligence, serverData, period, dayOfWeek])
 
   const branchRows = activeIntel.branches || []
   const comparison = activeIntel.comparison || {}
@@ -529,19 +606,21 @@ export default function BranchIntelligenceInspectorPanel({
           </span>
         </div>
 
-        {/* Single-Row Horizontal Swipeable Branch Selector Pills */}
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto whitespace-nowrap pb-1 -mx-1 px-1">
+        {/* Zero-Scroll Responsive Branch Selector Grid (2 columns on mobile, wrap on desktop) */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-stretch sm:items-center gap-2">
           <button
             type="button"
             onClick={() => setSelectedBranchId('ALL_COMPARE')}
-            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
+            className={`px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-between sm:justify-start gap-1.5 cursor-pointer transition-all ${
               isCompareMode
                 ? 'bg-[#218DFF] text-white shadow-[0_0_16px_rgba(33,141,255,0.45)]'
-                : 'bg-white/10 hover:bg-white/20 text-[#9EDCFF]'
+                : 'bg-white/10 hover:bg-white/20 text-[#9EDCFF] border border-white/10'
             }`}
           >
-            <BarChart3 className="w-3.5 h-3.5 shrink-0" />
-            <span>Compare All Branches ({branchRows.length})</span>
+            <span className="flex items-center gap-1.5 min-w-0">
+              <BarChart3 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Compare All Branches ({branchRows.length})</span>
+            </span>
           </button>
 
           {branchRows.map((b) => {
@@ -552,17 +631,19 @@ export default function BranchIntelligenceInspectorPanel({
                 key={b.id}
                 type="button"
                 onClick={() => setSelectedBranchId(b.id)}
-                className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 ${
+                className={`px-3 py-2 rounded-xl text-[11px] sm:text-xs font-bold flex items-center justify-between sm:justify-start gap-1.5 cursor-pointer transition-all min-w-0 ${
                   active
                     ? 'bg-emerald-500 text-slate-950 font-extrabold shadow-[0_0_14px_rgba(16,185,129,0.4)]'
                     : 'bg-white/[0.06] hover:bg-white/15 border border-white/10 text-slate-200'
                 }`}
               >
-                <GitBranch className="w-3.5 h-3.5 shrink-0" />
-                <span>{b.name}</span>
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <GitBranch className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{b.name}</span>
+                </span>
                 {alertCnt > 0 && (
                   <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-mono shrink-0 ${
                       active ? 'bg-slate-950/20 text-slate-950' : 'bg-amber-500/25 text-amber-200'
                     }`}
                   >
@@ -574,38 +655,50 @@ export default function BranchIntelligenceInspectorPanel({
           })}
         </div>
 
-        {/* Mobile Compact 2-Column Dropdown Filters (< md) */}
-        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10 md:hidden">
-          <div className="flex items-center gap-1.5 bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1.5">
-            <Clock className="w-3.5 h-3.5 text-[#218DFF] shrink-0" />
-            <select
-              aria-label="Filter by Period"
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full bg-transparent text-[11px] font-bold text-white focus:outline-none"
-            >
-              {PERIOD_OPTIONS.map((p) => (
-                <option key={p.id} value={p.id} className="bg-[#040D29] text-white">
-                  {p.label}
-                </option>
-              ))}
-            </select>
+        {/* Mobile Clear Labeled 2-Column Dropdown Filters (< md) */}
+        <div className="grid grid-cols-2 gap-2.5 pt-2.5 border-t border-white/10 md:hidden">
+          <div className="space-y-1">
+            <label className="text-[10px] font-orbitron uppercase tracking-wider text-[#9EDCFF] font-bold flex items-center gap-1">
+              <Clock className="w-3 h-3 text-[#218DFF]" />
+              <span>Period</span>
+            </label>
+            <div className="relative">
+              <select
+                aria-label="Filter by Period"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                className="w-full appearance-none bg-[#06143D] border border-[#218DFF]/45 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-white focus:outline-none focus:border-[#218DFF] shadow-inner cursor-pointer"
+              >
+                {PERIOD_OPTIONS.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-[#040D29] text-white">
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-[#9EDCFF] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-white/[0.05] border border-white/10 rounded-xl px-2.5 py-1.5">
-            <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <select
-              aria-label="Filter by Day"
-              value={dayOfWeek}
-              onChange={(e) => setDayOfWeek(e.target.value)}
-              className="w-full bg-transparent text-[11px] font-bold text-white focus:outline-none"
-            >
-              {DAY_OPTIONS.map((d) => (
-                <option key={d.id} value={d.id} className="bg-[#040D29] text-white">
-                  {d.label}
-                </option>
-              ))}
-            </select>
+          <div className="space-y-1">
+            <label className="text-[10px] font-orbitron uppercase tracking-wider text-emerald-300 font-bold flex items-center gap-1">
+              <Calendar className="w-3 h-3 text-emerald-400" />
+              <span>Day of Week</span>
+            </label>
+            <div className="relative">
+              <select
+                aria-label="Filter by Day"
+                value={dayOfWeek}
+                onChange={(e) => setDayOfWeek(e.target.value)}
+                className="w-full appearance-none bg-[#06143D] border border-emerald-400/45 rounded-xl pl-3 pr-8 py-2 text-xs font-bold text-white focus:outline-none focus:border-emerald-400 shadow-inner cursor-pointer"
+              >
+                {DAY_OPTIONS.map((d) => (
+                  <option key={d.id} value={d.id} className="bg-[#040D29] text-white">
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-emerald-300 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
           </div>
         </div>
 
@@ -901,6 +994,78 @@ export default function BranchIntelligenceInspectorPanel({
                       </strong>
                     </div>
                   </div>
+
+                  {/* Top 5 / Top 10 Sold Products Per Branch Drawer */}
+                  {Array.isArray(b.mostBoughtProducts) && b.mostBoughtProducts.length > 0 && (
+                    <div className="pt-2 border-t border-white/10 space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleBranchTopProducts(b.id)}
+                          className="text-[11px] font-bold text-[#9EDCFF] hover:text-white flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trophy className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>
+                            {expandedTopBranchIds[b.id]
+                              ? `Hide Top Sold Products (${b.mostBoughtProducts.length})`
+                              : `View Top ${Math.min(topProductsLimit, b.mostBoughtProducts.length)} Sold Products`}
+                          </span>
+                          <ChevronDown
+                            className={`w-3.5 h-3.5 transition-transform ${expandedTopBranchIds[b.id] ? 'rotate-180' : ''}`}
+                          />
+                        </button>
+
+                        {expandedTopBranchIds[b.id] && (
+                          <div className="flex items-center gap-1">
+                            {[
+                              { limit: 5, label: 'Top 5' },
+                              { limit: 10, label: 'Top 10' },
+                              { limit: 50, label: 'All Sold' }
+                            ].map((opt) => (
+                              <button
+                                key={opt.limit}
+                                type="button"
+                                onClick={() => setTopProductsLimit(opt.limit)}
+                                className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer ${
+                                  topProductsLimit === opt.limit
+                                    ? 'bg-emerald-500 text-slate-950 font-extrabold'
+                                    : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {expandedTopBranchIds[b.id] && (
+                        <div className="space-y-1.5">
+                          {b.mostBoughtProducts.slice(0, topProductsLimit).map((mp, idx) => (
+                            <div
+                              key={mp.title}
+                              className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-2 text-[11px]"
+                            >
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-mono text-[10px] font-bold text-emerald-400 shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <span className="text-white font-semibold truncate">{mp.title}</span>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 font-mono text-[10px]">
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">
+                                  {mp.unitsSold} sold
+                                </span>
+                                <span className="text-[#9EDCFF]">
+                                  {formatRWF(mp.profitRWF, hideFinancials)}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -909,13 +1074,35 @@ export default function BranchIntelligenceInspectorPanel({
           {/* SUB-TAB 3: Cross-Branch Best-Selling Products Matrix */}
           {compareSubTab === 'products' && (
             <div className="p-3.5 sm:p-5 rounded-2xl bg-[#040D29]/95 border border-white/10 space-y-3">
-              <div>
-                <h5 className="font-orbitron text-xs sm:text-sm font-bold text-white">
-                  Top-Performing Products Across Branches
-                </h5>
-                <p className="hidden sm:block text-[11px] text-slate-300">
-                  See which products customers buy the most and how each branch performs on that product.
-                </p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h5 className="font-orbitron text-xs sm:text-sm font-bold text-white">
+                    Top-Performing Products Across Branches
+                  </h5>
+                  <p className="hidden sm:block text-[11px] text-slate-300">
+                    See which products customers buy the most and how each branch performs on that product.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {[
+                    { limit: 5, label: 'Top 5' },
+                    { limit: 10, label: 'Top 10' },
+                    { limit: 50, label: 'All Sold' }
+                  ].map((opt) => (
+                    <button
+                      key={opt.limit}
+                      type="button"
+                      onClick={() => setTopProductsLimit(opt.limit)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold cursor-pointer ${
+                        topProductsLimit === opt.limit
+                          ? 'bg-emerald-500 text-slate-950 font-extrabold'
+                          : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               {(!Array.isArray(comparison.crossBranchTopProducts) || comparison.crossBranchTopProducts.length === 0) ? (
                 <div className="p-4 rounded-xl bg-white/[0.03] border border-white/10 text-xs text-slate-400 text-center">
@@ -923,7 +1110,7 @@ export default function BranchIntelligenceInspectorPanel({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  {comparison.crossBranchTopProducts.slice(0, 8).map((cp, idx) => (
+                  {comparison.crossBranchTopProducts.slice(0, topProductsLimit).map((cp, idx) => (
                     <div key={cp.title} className="p-3 rounded-xl bg-white/[0.04] border border-white/10 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <strong className="text-xs text-white truncate">
@@ -1238,16 +1425,36 @@ export default function BranchIntelligenceInspectorPanel({
                       Ranked by units bought and profit earned in this branch during the selected period &amp; day.
                     </p>
                   </div>
-                  {!currentBranch.isMain && onQuickDispatchToBranch && (
-                    <button
-                      type="button"
-                      onClick={() => onQuickDispatchToBranch(currentBranch)}
-                      className="px-3 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Package className="w-3.5 h-3.5" />
-                      <span>Dispatch Stock to {currentBranch.name}</span>
-                    </button>
-                  )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { limit: 5, label: 'Top 5' },
+                      { limit: 10, label: 'Top 10' },
+                      { limit: 50, label: 'All Sold' }
+                    ].map((opt) => (
+                      <button
+                        key={opt.limit}
+                        type="button"
+                        onClick={() => setTopProductsLimit(opt.limit)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold cursor-pointer ${
+                          topProductsLimit === opt.limit
+                            ? 'bg-emerald-500 text-slate-950 font-extrabold'
+                            : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    {!currentBranch.isMain && onQuickDispatchToBranch && (
+                      <button
+                        type="button"
+                        onClick={() => onQuickDispatchToBranch(currentBranch)}
+                        className="px-3 py-1.5 rounded-xl bg-indigo-500 hover:bg-indigo-600 text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        <span>Dispatch Stock to {currentBranch.name}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {(!currentBranch.mostBoughtProducts || currentBranch.mostBoughtProducts.length === 0) ? (
@@ -1256,7 +1463,7 @@ export default function BranchIntelligenceInspectorPanel({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                    {currentBranch.mostBoughtProducts.slice(0, 9).map((mp, idx) => (
+                    {currentBranch.mostBoughtProducts.slice(0, topProductsLimit).map((mp, idx) => (
                       <div
                         key={mp.title}
                         className="p-3 rounded-xl bg-white/[0.04] border border-white/10 flex flex-col justify-between gap-2"

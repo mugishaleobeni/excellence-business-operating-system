@@ -261,9 +261,10 @@ export default function TeamPermissionsView({ user = {}, addToast }) {
         </div>
       </div>
 
-      {/* Team Members Table */}
+      {/* Team Members Table (Desktop md+) & Mobile Zero-Scroll Cards (< md) */}
       <div className="exbos-glass-card rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-white/5 text-slate-400 border-b border-white/10 font-bold uppercase tracking-wider text-[11px]">
               <tr>
@@ -333,6 +334,68 @@ export default function TeamPermissionsView({ user = {}, addToast }) {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile Zero-Scroll Cards (< md) */}
+        <div className="block md:hidden divide-y divide-white/10">
+          {teamMembers.map((member) => {
+            const tags = formatPermissionTags(member.permissions)
+            return (
+              <div key={member.id || member.email} className="p-3.5 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-bold text-white text-xs truncate">
+                      {member.fullName || member.name}
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                      <Mail className="w-3 h-3 text-slate-500 shrink-0" />
+                      <span className="truncate">{member.email}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      {member.status || 'Active'}
+                    </span>
+                    {member.isOwner || !isOwner ? (
+                      <span className="px-2 py-0.5 rounded-lg bg-white/5 text-[10px] text-slate-400 font-mono">
+                        {member.isOwner ? 'Owner' : 'Protected'}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMember(member.email)}
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 transition cursor-pointer"
+                        title="Revoke Access"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-white/5 text-[11px]">
+                  <span className="font-semibold text-white">{member.role}</span>
+                  {!member.isOwner && (
+                    <span className="text-[10px] text-[#9EDCFF] flex items-center gap-1">
+                      <Building2 className="w-3 h-3 shrink-0" />
+                      <span>{getBranchName(member.assignedBranchId)}</span>
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {tags.map((perm) => (
+                    <span
+                      key={perm}
+                      className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-slate-300"
+                    >
+                      {perm}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
