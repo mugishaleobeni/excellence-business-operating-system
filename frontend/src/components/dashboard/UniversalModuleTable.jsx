@@ -532,6 +532,14 @@ export default function UniversalModuleTable({
           </div>
         ) : (
           paginatedRows.map((row, idx) => {
+            const isProductRow =
+              row.sellingPriceRWF !== undefined ||
+              row.purchasePriceRWF !== undefined ||
+              row.currentStock !== undefined ||
+              row.stock !== undefined
+            const prodQty = Number(row.quantity ?? row.currentStock ?? row.stock ?? 0)
+            const prodSell = Number(row.sellingPriceRWF ?? row.unitPriceRWF ?? 0)
+            const prodCost = Number(row.purchasePriceRWF ?? row.unitCostRWF ?? 0)
             const num = Number(row.amountRWF || row.balanceOwedRWF) || 0
             const isNegative = row.type === 'out' || num < 0
             return (
@@ -542,7 +550,7 @@ export default function UniversalModuleTable({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-400 font-mono text-[11px]">
-                    {row.date || '—'}
+                    {row.sku || row.date || '—'}
                   </span>
                   <span className="text-[11px] font-semibold text-slate-300 truncate max-w-[150px]">
                     {row.category || '—'}
@@ -550,18 +558,44 @@ export default function UniversalModuleTable({
                 </div>
 
                 <div className="text-sm font-bold text-white leading-snug">
-                  {row.title}
+                  {row.title || row.name}
                 </div>
 
-                <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                {isProductRow && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="p-2 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[9px] text-slate-400 block uppercase font-bold">Stock</span>
+                      <strong className="font-orbitron text-xs font-extrabold text-white">
+                        {prodQty} {row.unit || 'pcs'}
+                      </strong>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[9px] text-slate-400 block uppercase font-bold">Selling</span>
+                      <strong className="font-orbitron text-xs font-extrabold text-emerald-400">
+                        {formatRWF(prodSell, hideFinancials)}
+                      </strong>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[9px] text-slate-400 block uppercase font-bold">Cost</span>
+                      <strong className="font-orbitron text-xs font-bold text-slate-200">
+                        {formatRWF(prodCost, hideFinancials)}
+                      </strong>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1.5 border-t border-white/5">
                   <div>
-                    <span className="text-[10px] text-slate-400 block uppercase">Amount</span>
+                    <span className="text-[10px] text-slate-400 block uppercase">
+                      {isProductRow ? 'Stock Value' : 'Amount'}
+                    </span>
                     <strong
-                      className={`font-orbitron text-sm font-extrabold ${isNegative ? 'text-rose-400' : 'text-emerald-400'
-                        }`}
+                      className={`font-orbitron text-sm font-extrabold ${
+                        isProductRow ? 'text-[#9EDCFF]' : isNegative ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
                     >
-                      {isNegative ? '-' : '+'}
-                      {formatRWF(Math.abs(num), hideFinancials)}
+                      {!isProductRow && (isNegative ? '-' : '+')}
+                      {formatRWF(Math.abs(isProductRow ? prodQty * (prodCost || prodSell) : num), hideFinancials)}
                     </strong>
                   </div>
 

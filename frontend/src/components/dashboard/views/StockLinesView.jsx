@@ -421,131 +421,258 @@ function StockLinesView({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-white/10 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
-                  <th className="py-3 px-3">Product Name</th>
-                  <th className="py-3 px-3 text-center">Quantity Left</th>
-                  <th className="py-3 px-3 text-right">Purchase Price</th>
-                  <th className="py-3 px-3">Expiry Date</th>
-                  <th className="py-3 px-3 text-right">Selling Price</th>
-                  <th className="py-3 px-3 text-right">Stock Value</th>
-                  <th className="py-3 px-3">Supplier</th>
-                  <th className="py-3 px-3">Date Received</th>
-                  <th className="py-3 px-3 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-slate-200">
-                {filteredLines.map((item, idx) => (
-                  <tr key={item.id || idx} className="hover:bg-white/5 transition-colors group">
-                    {/* 1. Product Name */}
-                    <td className="py-3 px-3">
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors flex items-center gap-1.5">
-                          <span>{item.title}</span>
-                          {item.isLowStock && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                              Low Stock
-                            </span>
+          <>
+            {/* Desktop Table View (md+) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-white/10 text-slate-400 font-bold uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-3">Product Name</th>
+                    <th className="py-3 px-3 text-center">Quantity Left</th>
+                    <th className="py-3 px-3 text-right">Purchase Price</th>
+                    <th className="py-3 px-3">Expiry Date</th>
+                    <th className="py-3 px-3 text-right">Selling Price</th>
+                    <th className="py-3 px-3 text-right">Stock Value</th>
+                    <th className="py-3 px-3">Supplier</th>
+                    <th className="py-3 px-3">Date Received</th>
+                    <th className="py-3 px-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-200">
+                  {filteredLines.map((item, idx) => (
+                    <tr key={item.id || idx} className="hover:bg-white/5 transition-colors group">
+                      {/* 1. Product Name */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-white group-hover:text-[#9EDCFF] transition-colors flex items-center gap-1.5">
+                            <span>{item.title}</span>
+                            {item.isLowStock && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                Low Stock
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                            {item.category && (
+                              <span className="px-1.5 py-0.2 rounded bg-white/5 text-slate-300">
+                                {item.category}
+                              </span>
+                            )}
+                            {(item.barcode || item.sku) && (
+                              <span className="font-mono text-slate-500">
+                                {item.barcode || item.sku}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* 2. Quantity Left */}
+                      <td className="py-3 px-3 text-center">
+                        <span className="font-orbitron font-bold text-sm text-white">
+                          {item.qty}
+                        </span>{' '}
+                        <span className="text-[10px] text-[#9EDCFF] font-semibold uppercase">
+                          {item.unitLabel}
+                        </span>
+                      </td>
+
+                      {/* 3. Purchase Price (per unit) */}
+                      <td className="py-3 px-3 text-right font-orbitron font-semibold text-slate-300">
+                        {formatRWF(item.purchasePrice, hideFinancials)}
+                      </td>
+
+                      {/* 4. Expiry Date (blank if none) */}
+                      <td className="py-3 px-3">
+                        {item.expiry.status === 'none' ? (
+                          <span className="text-slate-400 text-[11px]">—</span>
+                        ) : (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border ${item.expiry.badgeClass}`}>
+                            <Calendar className="w-2.5 h-2.5 shrink-0" />
+                            <span>{item.expiry.label}</span>
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 5. Selling Price */}
+                      <td className="py-3 px-3 text-right font-orbitron font-bold text-white">
+                        {formatRWF(item.sellingPrice, hideFinancials)}
+                      </td>
+
+                      {/* 6. Stock Value (quantity × purchase price) */}
+                      <td className="py-3 px-3 text-right font-orbitron font-extrabold text-[#9EDCFF]">
+                        {formatRWF(item.stockValue, hideFinancials)}
+                      </td>
+
+                      {/* 7. Supplier */}
+                      <td className="py-3 px-3 text-slate-300 truncate max-w-[150px]" title={item.supplierLabel}>
+                        {item.supplierLabel}
+                      </td>
+
+                      {/* 8. Date Received */}
+                      <td className="py-3 px-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
+                        {item.receivedDate}
+                      </td>
+
+                      {/* 9. Actions */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onViewStockLine && onViewStockLine(item)}
+                            title="View Batch Details"
+                            className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#9EDCFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-[#9EDCFF] group-hover:scale-110 transition-transform" />
+                          </button>
+                          {onEditStockLine && (
+                            <button
+                              type="button"
+                              onClick={() => onEditStockLine(item)}
+                              title="Edit Stock Line"
+                              className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#218DFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-[#218DFF] group-hover:scale-110 transition-transform" />
+                            </button>
+                          )}
+                          {onDeleteStockLine && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmItem(item)}
+                              title="Delete Stock Line"
+                              className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all cursor-pointer shadow-sm group"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                            </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400">
-                          {item.category && (
-                            <span className="px-1.5 py-0.2 rounded bg-white/5 text-slate-300">
-                              {item.category}
-                            </span>
-                          )}
-                          {(item.barcode || item.sku) && (
-                            <span className="font-mono text-slate-500">
-                              {item.barcode || item.sku}
-                            </span>
-                          )}
-                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Responsive Product Cards View (< md screens, zero horizontal scroll) */}
+            <div className="block md:hidden space-y-3">
+              {filteredLines.map((item, idx) => (
+                <div
+                  key={item.id || idx}
+                  onClick={() => onViewStockLine && onViewStockLine(item)}
+                  className="p-4 rounded-2xl bg-[#040C26]/95 border border-white/10 hover:border-[#218DFF]/40 space-y-3 transition-all cursor-pointer shadow-md"
+                >
+                  {/* Card Top: Product Title + Badges */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-bold text-sm text-white leading-snug break-words">
+                        {item.title}
                       </div>
-                    </td>
-
-                    {/* 2. Quantity Left */}
-                    <td className="py-3 px-3 text-center">
-                      <span className="font-orbitron font-bold text-sm text-white">
-                        {item.qty}
-                      </span>{' '}
-                      <span className="text-[10px] text-[#9EDCFF] font-semibold uppercase">
-                        {item.unitLabel}
-                      </span>
-                    </td>
-
-                    {/* 3. Purchase Price (per unit) */}
-                    <td className="py-3 px-3 text-right font-orbitron font-semibold text-slate-300">
-                      {formatRWF(item.purchasePrice, hideFinancials)}
-                    </td>
-
-                    {/* 4. Expiry Date (blank if none) */}
-                    <td className="py-3 px-3">
-                      {item.expiry.status === 'none' ? (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        {item.category && (
+                          <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] font-semibold text-slate-200">
+                            {item.category}
+                          </span>
+                        )}
+                        {(item.barcode || item.sku) && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            {item.barcode || item.sku}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {item.qty <= 0 ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          Out of Stock
+                        </span>
+                      ) : item.isLowStock ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          Low Stock
+                        </span>
                       ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35">
+                          In Stock
+                        </span>
+                      )}
+                      {item.expiry.status !== 'none' && (
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border ${item.expiry.badgeClass}`}>
                           <Calendar className="w-2.5 h-2.5 shrink-0" />
                           <span>{item.expiry.label}</span>
                         </span>
                       )}
-                    </td>
+                    </div>
+                  </div>
 
-                    {/* 5. Selling Price */}
-                    <td className="py-3 px-3 text-right font-orbitron font-bold text-white">
-                      {formatRWF(item.sellingPrice, hideFinancials)}
-                    </td>
+                  {/* Card Metrics 2x2 Grid */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+                    <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Quantity Left</span>
+                      <div className="mt-0.5">
+                        <span className="font-orbitron font-extrabold text-sm text-white">{item.qty}</span>{' '}
+                        <span className="text-[10px] text-[#9EDCFF] font-semibold uppercase">{item.unitLabel}</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Selling Price</span>
+                      <div className="font-orbitron font-extrabold text-sm text-emerald-400 mt-0.5">
+                        {formatRWF(item.sellingPrice, hideFinancials)}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Purchase Price</span>
+                      <div className="font-orbitron font-bold text-xs text-slate-200 mt-0.5">
+                        {formatRWF(item.purchasePrice, hideFinancials)}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Stock Value</span>
+                      <div className="font-orbitron font-extrabold text-xs text-[#9EDCFF] mt-0.5">
+                        {formatRWF(item.stockValue, hideFinancials)}
+                      </div>
+                    </div>
+                  </div>
 
-                    {/* 6. Stock Value (quantity × purchase price) */}
-                    <td className="py-3 px-3 text-right font-orbitron font-extrabold text-[#9EDCFF]">
-                      {formatRWF(item.stockValue, hideFinancials)}
-                    </td>
-
-                    {/* 7. Supplier */}
-                    <td className="py-3 px-3 text-slate-300 truncate max-w-[150px]" title={item.supplierLabel}>
-                      {item.supplierLabel}
-                    </td>
-
-                    {/* 8. Date Received */}
-                    <td className="py-3 px-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
-                      {item.receivedDate}
-                    </td>
-
-                    {/* 9. Actions */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onViewStockLine(item)}
-                          title="View Batch Details"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#9EDCFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-[#9EDCFF] group-hover:scale-110 transition-transform" />
-                        </button>
+                  {/* Card Footer: Supplier / Date + Action Buttons */}
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/10">
+                    <div className="min-w-0 text-[11px] text-slate-400 truncate">
+                      <span className="text-slate-300 font-medium">{item.supplierLabel}</span>
+                      {item.receivedDate ? <span> · {item.receivedDate}</span> : null}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => onViewStockLine && onViewStockLine(item)}
+                        title="View Details"
+                        className="p-2 rounded-xl bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 text-[#9EDCFF] cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      {onEditStockLine && (
                         <button
                           type="button"
                           onClick={() => onEditStockLine(item)}
-                          title="Edit Stock Line"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 hover:border-[#218DFF]/60 text-slate-300 hover:text-white transition-all cursor-pointer shadow-sm group"
+                          title="Edit Product"
+                          className="p-2 rounded-xl bg-white/10 hover:bg-[#218DFF]/25 border border-white/15 text-[#218DFF] cursor-pointer"
                         >
-                          <Edit2 className="w-3.5 h-3.5 text-[#218DFF] group-hover:scale-110 transition-transform" />
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
+                      )}
+                      {onDeleteStockLine && (
                         <button
                           type="button"
                           onClick={() => setDeleteConfirmItem(item)}
-                          title="Delete Stock Line"
-                          className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500/25 border border-white/15 hover:border-rose-400/60 text-slate-300 hover:text-rose-300 transition-all cursor-pointer shadow-sm group"
+                          title="Delete Product"
+                          className="p-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/30 border border-rose-400/30 text-rose-400 cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
 
