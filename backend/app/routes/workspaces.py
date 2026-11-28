@@ -1420,6 +1420,44 @@ def delete_module_record(arch_id: str, module_name: str, record_id: str):
 
     ws_updates: dict = {f"records.{module_name}": new_list, "updated_at": now_iso}
 
+    # If deleting a product/catalog item, also purge any mirrored copy in sibling product buckets
+    # (Inventory <-> Products <-> FinishedGoods <-> Stock) so it never resurrects on refresh.
+    sibling_product_buckets = ("Inventory", "Products", "FinishedGoods", "Stock")
+    if module_name in sibling_product_buckets:
+        del_title_norm = (
+            str((deleted_item or {}).get("title") or (deleted_item or {}).get("name") or "").strip().lower()
+            if isinstance(deleted_item, dict)
+            else ""
+        )
+        del_branch_norm = (
+            str((deleted_item or {}).get("branchId") or "main").strip()
+            if isinstance(deleted_item, dict)
+            else ""
+        )
+        for sib_bucket in sibling_product_buckets:
+            if sib_bucket == module_name:
+                continue
+            sib_list = records_map.get(sib_bucket)
+            if not isinstance(sib_list, list) or not sib_list:
+                continue
+            cleaned_sib = []
+            removed_any = False
+            for sib_item in sib_list:
+                if not isinstance(sib_item, dict):
+                    cleaned_sib.append(sib_item)
+                    continue
+                same_id = str(sib_item.get("id") or "") == str(record_id)
+                sib_title = str(sib_item.get("title") or sib_item.get("name") or "").strip().lower()
+                sib_branch = str(sib_item.get("branchId") or "main").strip()
+                same_mirror = bool(del_title_norm and sib_title == del_title_norm and sib_branch == del_branch_norm)
+                if same_id or same_mirror:
+                    removed_any = True
+                    continue
+                cleaned_sib.append(sib_item)
+            if removed_any:
+                records_map[sib_bucket] = cleaned_sib
+                ws_updates[f"records.{sib_bucket}"] = cleaned_sib
+
     if isinstance(deleted_item, dict):
         del_qty = float(deleted_item.get("quantity") or 0)
         del_amt = _extract_record_amount(deleted_item)

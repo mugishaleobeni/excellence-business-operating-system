@@ -1415,6 +1415,19 @@ class FullSystemRegressionTestCase(unittest.TestCase):
             ).status_code,
             200,
         )
+        # Deleting from Inventory MUST purge mirrored copy in Products too (never resurrects on refresh!)
+        self.assertEqual(
+            self.client.delete(
+                f"/api/v1/workspaces/buy-and-sell/records/Inventory/{sugar_branch_id}",
+                headers=owner_h,
+            ).status_code,
+            200,
+        )
+        ws_after_del = self.db.workspaces.find_one({"scopeKey": owner_email, "architectureId": "buy-and-sell"})
+        inv_remaining = [p for p in ws_after_del["records"].get("Inventory", []) if p.get("branchId") == branch_id and (p.get("title") or "").lower() == "sugar 1kg"]
+        prod_remaining = [p for p in ws_after_del["records"].get("Products", []) if p.get("branchId") == branch_id and (p.get("title") or "").lower() == "sugar 1kg"]
+        self.assertEqual(inv_remaining, [])
+        self.assertEqual(prod_remaining, [])
 
 
 if __name__ == "__main__":

@@ -1260,6 +1260,13 @@ export function ExbosProvider({ children }) {
         })
         .then((serverData) => {
           if (!isMounted || !serverData) return
+          // Server responded cleanly — confirm online & connected status immediately
+          setIsOnline(true)
+          setDbConnected(true)
+          if (getOfflineQueue(effectiveScope).length === 0 && !isFlushingRef.current) {
+            setSyncStatus('synced')
+            setLastSyncedAt(new Date().toISOString())
+          }
           // Critical Stale-Snapshot Guard: if the user added/edited/deleted ANY record while this GET
           // was in-flight (or queued an offline mutation), discard this stale server snapshot so newly
           // added products/sales NEVER appear and then disappear!
@@ -1742,16 +1749,22 @@ export function ExbosProvider({ children }) {
   }
 
   const checkConnectionHealth = async () => {
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       setIsOnline(false)
       setSyncStatus('offline')
       return false
     }
+    // Browser reports active internet — never falsely display "Offline" while server is waking up
+    setIsOnline(true)
     try {
       const res = await exbosApi.health()
       if (res?.status === 0) {
-        setIsOnline(false)
-        setSyncStatus('offline')
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          setIsOnline(false)
+          setSyncStatus('offline')
+        } else {
+          setSyncStatus(getOfflineQueue().length > 0 ? 'pending' : 'synced')
+        }
         return false
       }
       setIsOnline(true)
@@ -1769,8 +1782,10 @@ export function ExbosProvider({ children }) {
       }
       return true
     } catch {
-      setIsOnline(false)
-      setSyncStatus('offline')
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        setIsOnline(false)
+        setSyncStatus('offline')
+      }
       return false
     }
   }
@@ -2150,7 +2165,9 @@ export function ExbosProvider({ children }) {
         inFlightMutationCountRef.current = Math.max(0, inFlightMutationCountRef.current - 1)
       }
       if (res?.ok) {
+        setIsOnline(true)
         setDbConnected(true)
+        if (getOfflineQueue().length === 0) setSyncStatus('synced')
         lastMutationTsRef.current = Date.now()
         // Clear _pendingSync flag now that server confirmed persistence
         setWorkspaces((prev) => {
@@ -2176,13 +2193,16 @@ export function ExbosProvider({ children }) {
         })
         return
       }
-
+      
       if (res?.status >= 500) {
         setDbConnected(false)
       }
 
       if (!res?.ok && (res?.status === 0 || (typeof navigator !== 'undefined' && !navigator.onLine))) {
-        setIsOnline(false)
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          setIsOnline(false)
+          setSyncStatus('offline')
+        }
         enqueueOfflineAction({
           type: 'add',
           archId: targetArch,
@@ -2298,7 +2318,18 @@ export function ExbosProvider({ children }) {
         })
         return
       }
-      const res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recIdStr)
+      inFlightMutationCountRef.current += 1
+      let res
+      try {
+        res = await exbosApi.deleteModuleRecord(targetArch, moduleName, recIdStr)
+      } finally {
+        inFlightMutationCountRef.current = Math.max(0, inFlightMutationCountRef.current - 1)
+      }
+      if (res?.ok) {
+        setIsOnline(true)
+        setDbConnected(true)
+        lastMutationTsRef.current = Date.now()
+      }
       // Also attempt backend transaction purge if it exists in ledger collection
       exbosApi.deleteTransaction(recIdStr).catch(() => {})
       linkedTxIds.forEach((txId) => {
@@ -2332,11 +2363,35 @@ export function ExbosProvider({ children }) {
       const base = prev[targetArch] || cleanMap[targetArch]
       if (!base) return prev
       const existingList = base.records?.[moduleName] || []
-      const deletedItem = existingList.find((r) => String(r.id) === recIdStr)
+      const deletedItem =
+        existingList.find((r) => String(r.id) === recIdStr) ||
+        (base.records?.Products || []).find((r) => String(r.id) === recIdStr) ||
+        (base.records?.Inventory || []).find((r) => String(r.id) === recIdStr)
       const filtered = existingList.filter((r) => String(r.id) !== recIdStr)
       const nextRecords = {
         ...base.records,
         [moduleName]: filtered
+      }
+      // Purge mirrored product copies across all sibling product buckets so deleted items
+      // NEVER reappear on refresh or live sync
+      if (['Inventory', 'Products', 'FinishedGoods', 'Stock'].includes(moduleName)) {
+        const delTitleNorm = String(deletedItem?.title || deletedItem?.name || '').trim().toLowerCase()
+        const delBranchNorm = String(deletedItem?.branchId || activeBranchId || 'main').trim()
+        ;['Inventory', 'Products', 'FinishedGoods', 'Stock'].forEach((sibBucket) => {
+          const sibArr = nextRecords[sibBucket]
+          if (!Array.isArray(sibArr)) return
+          nextRecords[sibBucket] = sibArr.filter((r) => {
+            if (!r) return false
+            if (String(r.id) === recIdStr) return false
+            const rTitle = String(r.title || r.name || '').trim().toLowerCase()
+            const rBranch = String(r.branchId || 'main').trim()
+            if (delTitleNorm && rTitle === delTitleNorm && rBranch === delBranchNorm) {
+              recentlyDeletedIdsRef.current.add(String(r.id))
+              return false
+            }
+            return true
+          })
+        })
       }
       const nextMetrics = { ...(base.metrics || {}) }
 
@@ -2478,7 +2533,7 @@ export function ExbosProvider({ children }) {
         }
       }
 
-      return {
+      const nextState = {
         ...prev,
         [targetArch]: {
           ...base,
@@ -2486,6 +2541,11 @@ export function ExbosProvider({ children }) {
           records: nextRecords
         }
       }
+      const activeScope = String(user?.ownerScopeKey || user?.email || '').trim().toLowerCase()
+      if (activeScope) {
+        writeScopedOfflineCache(activeScope, nextState, transactions)
+      }
+      return nextState
     })
   }
 
@@ -3348,4 +3408,3 @@ export function useExbos() {
   if (!ctx) throw new Error('useExbos must be used within ExbosProvider')
   return ctx
 }
-

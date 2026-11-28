@@ -204,7 +204,7 @@ function withScope(path) {
 }
 
 export const exbosApi = {
-  health: () => apiRequest('/health', { timeoutMs: 6000 }),
+  health: () => apiRequest('/health', { timeoutMs: 15000 }),
   sendVerification: (payload) =>
     apiRequest('/auth/send-verification', { method: 'POST', body: payload }),
   verifyEmail: (payload) =>
