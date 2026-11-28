@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useExbos } from '../../context/ExbosContext'
 import { translateToKinyarwanda } from '../../utils/kinyarwandaDict'
 
-const ATTRS_TO_TRANSLATE = ['placeholder', 'title', 'aria-label']
+const ATTRS_TO_TRANSLATE = ['placeholder', 'title', 'aria-label', 'value']
 
 /**
  * Global, reversible Kinyarwanda page translator.
@@ -65,7 +65,11 @@ export default function GlobalKinyarwandaTranslator() {
 
     const processElementAttrs = (el) => {
       if (!el || el.nodeType !== Node.ELEMENT_NODE) return
+      const tag = el.tagName
       ATTRS_TO_TRANSLATE.forEach((attr) => {
+        if (attr === 'value' && !(tag === 'INPUT' && ['button', 'submit', 'reset'].includes((el.getAttribute('type') || '').toLowerCase()))) {
+          return
+        }
         if (!el.hasAttribute(attr)) return
         const cur = el.getAttribute(attr) || ''
         if (!cur.trim()) return
@@ -159,8 +163,21 @@ export default function GlobalKinyarwandaTranslator() {
       attributeFilter: ATTRS_TO_TRANSLATE
     })
 
+    // Also run a lightweight post-interaction sweep on click/change so internal tab switches,
+    // dropdowns, and newly opened modals inside /dashboard translate immediately.
+    let clickTimer = null
+    const handleInteractionSweep = () => {
+      if (clickTimer) clearTimeout(clickTimer)
+      clickTimer = setTimeout(() => walkSubtree(document.body), 45)
+    }
+    window.addEventListener('click', handleInteractionSweep, true)
+    window.addEventListener('change', handleInteractionSweep, true)
+
     return () => {
       clearTimeout(delayedTimer)
+      if (clickTimer) clearTimeout(clickTimer)
+      window.removeEventListener('click', handleInteractionSweep, true)
+      window.removeEventListener('change', handleInteractionSweep, true)
       observer.disconnect()
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
